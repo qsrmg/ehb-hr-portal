@@ -39,6 +39,20 @@ async function noSideScroll(p, where) {
   if (scroll > inner + 1) throw new Error(`${where}: page scrolls sideways (${scroll}px wide in a ${inner}px window)`);
 }
 const shot = (p, name) => p.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true });
+/** Scrolls through the page so every scroll-in section has appeared, then back to the top. */
+async function revealAll(p) {
+  await p.evaluate(async () => {
+    const step = Math.max(200, window.innerHeight * 0.6);
+    for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+      window.scrollTo({ top: y, behavior: "instant" });
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+  await p.waitForTimeout(1600);
+  const hidden = await p.locator("[data-reveal]:not([data-visible])").count();
+  if (hidden) throw new Error(`${hidden} section(s) never appeared while scrolling`);
+}
 async function signIn(p, email) {
   await p.goto(`${BASE}/login`);
   await p.getByLabel("Work email").fill(email);
@@ -62,12 +76,27 @@ for (const vp of WIDTHS) {
       await p.getByText("Demo preview").first().waitFor();
       check("All sections present; HR email filled in; dashboard picture labelled Demo preview");
       await noSideScroll(p, "Landing");
-      await shot(p, `landing-${vp.name}`);
+      await p.waitForTimeout(1800); // hero entrance animation
       await p.screenshot({ path: path.join(OUT, `landing-${vp.name}-first-screen.png`) });
+      await revealAll(p);
+      check("Every section appears as it scrolls into view");
+      await shot(p, `landing-${vp.name}`);
+      if (vp.isMobile) {
+        await p.getByRole("button", { name: "Open menu" }).click();
+        const menu = p.locator("#landing-menu");
+        await menu.getByRole("link", { name: "Security" }).click();
+        await p.waitForFunction(() => location.hash === "#security");
+        if (await p.getByRole("button", { name: "Close menu" }).count()) throw new Error("The menu stays open after choosing a section");
+        check("Phone menu opens, jumps to Security and closes");
+      } else {
+        await p.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "How It Works" }).click();
+        await p.waitForFunction(() => document.querySelector('a[href="#how-it-works"][aria-current="true"]'), null, { timeout: 5000 });
+        check("Header link of the section in view is marked as current");
+      }
       await p.getByRole("link", { name: "Access HR Portal" }).first().click();
       await p.waitForURL(/\/login$/);
       await p.goto(`${BASE}/`);
-      await p.getByRole("link", { name: "Sign in", exact: true }).first().click();
+      await p.getByRole("link", { name: "Sign In", exact: true }).first().click();
       await p.waitForURL(/\/login$/);
       check("Access HR Portal and Sign in open /login");
     } finally {
@@ -81,7 +110,16 @@ for (const vp of WIDTHS) {
       await p.goto(`${BASE}/login`);
       await p.getByRole("heading", { name: "Sign in" }).waitFor();
       await noSideScroll(p, "Sign-in");
+      await p.waitForTimeout(1300); // entrance animation
       await shot(p, `login-${vp.name}`);
+      await p.getByRole("button", { name: "Sign in securely" }).click();
+      await p.getByText("Enter your work email.").waitFor();
+      await p.getByText("Enter your password.").waitFor();
+      if ((await p.getByLabel("Work email").getAttribute("aria-invalid")) !== "true") throw new Error("The empty email is not marked invalid");
+      await p.getByLabel("Work email").fill("not-an-email");
+      await p.getByRole("button", { name: "Sign in securely" }).click();
+      await p.getByText(/Enter a valid email address/).waitFor();
+      check("Empty and invalid fields show their own messages before anything is sent");
       await p.getByLabel("Work email").fill("employee@ehb.local");
       await p.getByLabel("Password").fill("wrong-password");
       await p.getByRole("button", { name: "Sign in securely" }).click();
@@ -117,6 +155,57 @@ for (const vp of WIDTHS) {
     }
   });
 }
+
+// ---------- Landing and sign-in at every target width; reduced motion ----------
+const EXTRA = [
+  { name: "1920", width: 1920, height: 1080 },
+  { name: "1440", width: 1440, height: 900 },
+  { name: "1024", width: 1024, height: 768 },
+  { name: "768", width: 768, height: 1024, isMobile: true, hasTouch: true },
+  { name: "390", width: 390, height: 844, isMobile: true, hasTouch: true },
+  { name: "360", width: 360, height: 780, isMobile: true, hasTouch: true },
+];
+await step("widths", "Landing and sign-in at 1920, 1440, 1024, 768, 390 and 360px: no sideways scroll, screenshots", async (check) => {
+  for (const vp of EXTRA) {
+    const { p, close } = await page(vp);
+    try {
+      await p.goto(`${BASE}/`);
+      await p.getByRole("heading", { name: /Your Entire HR Experience/ }).waitFor();
+      await p.waitForTimeout(1800);
+      await p.screenshot({ path: path.join(OUT, `landing-${vp.name}-first-screen.png`) });
+      await revealAll(p);
+      await noSideScroll(p, `Landing at ${vp.name}px`);
+      await shot(p, `landing-${vp.name}`);
+      await p.goto(`${BASE}/login`);
+      await p.getByRole("heading", { name: "Sign in" }).waitFor();
+      await p.waitForTimeout(1300);
+      await noSideScroll(p, `Sign-in at ${vp.name}px`);
+      await shot(p, `login-${vp.name}`);
+      check(`${vp.name}px: no sideways scroll`);
+    } finally {
+      await close();
+    }
+  }
+});
+
+await step("motion", "Reduced motion: every section is visible straight away, nothing animates", async (check) => {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 900 }, reducedMotion: "reduce" });
+  const p = await context.newPage();
+  try {
+    await p.goto(`${BASE}/`);
+    await p.getByRole("heading", { name: /Your Entire HR Experience/ }).waitFor();
+    const state = await p.evaluate(() => {
+      const last = [...document.querySelectorAll("[data-reveal]")].pop();
+      const animated = [...document.querySelectorAll("*")].filter((el) => getComputedStyle(el).animationName !== "none").length;
+      return { opacity: last ? getComputedStyle(last).opacity : "1", animated };
+    });
+    if (state.opacity !== "1") throw new Error(`The last section is hidden (opacity ${state.opacity}) without scrolling`);
+    if (state.animated) throw new Error(`${state.animated} element(s) still animate`);
+    check("Sections visible without scrolling; no running animations");
+  } finally {
+    await context.close();
+  }
+});
 
 // ---------- The 10 most-used signed-in pages, dark theme, with a contrast check ----------
 const API = env.E2E_API_URL ?? "http://localhost:5000/api";

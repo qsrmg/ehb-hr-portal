@@ -12,16 +12,16 @@
   --font-display: var(--font-manrope), "Segoe UI", Arial, sans-serif;
 
   /* EHB HR Portal design */
-  --color-ink-950: #09182f; /* page background */
-  --color-ink-900: #0f1f39; /* sidebar and darker panels */
+  --color-ink-950: #0b1930; /* deep navy: page background */
+  --color-ink-900: #101f3a; /* midnight blue: sidebar and panels */
   --color-ink-800: #15284a; /* cards */
   --color-ink-700: #1c3259; /* raised tiles, inputs on dark */
   --color-line: #243a62; /* card borders on dark */
-  --color-mist: #f5f6fa; /* light card on the dark page */
+  --color-mist: #f5f7fb; /* soft background: light card on the dark page */
   --color-haze: #9fb0cc; /* muted blue-grey body text */
   --color-primary: #2563eb;
   --color-primary-hover: #4279f0;
-  --color-sun: #f7c632;
+  --color-sun: #f5b700; /* EHB yellow */
   --font-mono: var(--font-geist-mono);
 }
 
@@ -124,4 +124,109 @@ body {
 }
 .portal-dark ::placeholder {
   color: #7f93b5;
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion (landing and sign-in). Everything animates transform and opacity only,
+ * and all of it is switched off for people who prefer reduced motion.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Sections fade up as they enter the viewport. Only when JavaScript runs (html.js), so nothing is hidden without it. */
+  html.js [data-reveal] {
+    opacity: 0;
+    transform: translateY(18px);
+    /* Keeps the hover transitions of cards (lift, border, shadow); only the reveal itself is staggered. */
+    transition-property: opacity, transform, translate, border-color, box-shadow, background-color;
+    transition-duration: 0.7s, 0.7s, 0.3s, 0.3s, 0.3s, 0.3s;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: calc(var(--i, 0) * 70ms), calc(var(--i, 0) * 70ms), 0s, 0s, 0s, 0s;
+  }
+  html.js [data-reveal][data-visible] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Bars and connectors grow from the left once their section is visible. */
+  html.js [data-reveal] .grow-x {
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 1.1s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--d, 0) * 1ms + 250ms);
+  }
+  html.js [data-reveal][data-visible] .grow-x {
+    transform: scaleX(1);
+  }
+  html.js [data-reveal] .grow-y {
+    transform: scaleY(0);
+    transform-origin: center top;
+    transition: transform 1.1s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--d, 0) * 1ms + 250ms);
+  }
+  html.js [data-reveal][data-visible] .grow-y {
+    transform: scaleY(1);
+  }
+
+  .anim-fade-up {
+    animation: fade-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+  }
+  .anim-rise {
+    animation: rise 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.25s both;
+  }
+  .anim-float {
+    animation: float 7s ease-in-out 1.4s infinite;
+  }
+  .anim-pop {
+    animation: pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 80ms + 700ms);
+  }
+  .anim-drift {
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+  .anim-dash {
+    stroke-dasharray: 4 7;
+    animation: dash 18s linear infinite;
+  }
+  .anim-glint {
+    animation: glint 3.6s ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 1.1s);
+  }
+  .anim-shake {
+    animation: shake 0.4s ease-in-out;
+  }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(40px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes drift {
+  from { transform: translate3d(-4%, -2%, 0) scale(1); }
+  to { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+@keyframes dash {
+  to { stroke-dashoffset: -220; }
+}
+@keyframes glint {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@keyframes shake {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
 }

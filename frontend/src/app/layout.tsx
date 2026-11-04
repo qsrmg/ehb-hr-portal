@@ -29,7 +29,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} h-full antialiased`}
+      // The script below adds the "js" class before React hydrates.
+      suppressHydrationWarning
     >
+      <head>
+        {/* Scroll reveals only hide content when JavaScript runs, so nothing stays invisible without it. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
+      </head>
       <body className="min-h-full flex flex-col font-sans">
         <AuthProvider>{children}</AuthProvider>
       </body>
