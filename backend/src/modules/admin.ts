@@ -2,10 +2,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
-import { getSettings, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
+import { FINANCE_SETTING_PREFIXES, getSettings, isOptionalSetting, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
 import { toDate, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
-import { currentUser, requireAuth, requireRole } from "../middleware/auth.js";
+import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
 
 // Holidays, settings, notifications and the audit log
 export const adminRouter = Router();
@@ -35,21 +35,33 @@ adminRouter.delete("/holidays/:id", requireRole("HR"), async (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.get("/settings", requireRole("HR"), async (_req, res) => {
+/** HR edits every setting; Finance edits the expense settings only. */
+const editableBy = (user: AuthUser, key: string) =>
+  hasRole(user, "HR") || (hasRole(user, "FINANCE") && FINANCE_SETTING_PREFIXES.some((p) => key.startsWith(p)));
+
+adminRouter.get("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
+  const user = currentUser(req);
   const values = await getSettings();
-  res.json(Object.entries(SETTING_DEFAULTS).map(([key, def]) => ({ key, label: def.label, value: values[key as SettingKey], default: def.value })));
+  res.json(
+    Object.entries(SETTING_DEFAULTS)
+      .filter(([key]) => editableBy(user, key))
+      .map(([key, def]) => ({ key, label: def.label, value: values[key as SettingKey], default: def.value, optional: isOptionalSetting(key as SettingKey) })),
+  );
 });
 
-adminRouter.put("/settings", requireRole("HR"), async (req, res) => {
+adminRouter.put("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
+  const user = currentUser(req);
   const body = z.record(z.string(), z.string()).safeParse(req.body);
   if (!body.success) throw new HttpError(400, "Invalid settings");
   const before = await getSettings();
   const changes: Record<string, { from: string; to: string }> = {};
   for (const [key, raw] of Object.entries(body.data)) {
     if (!(key in SETTING_DEFAULTS)) throw new HttpError(400, `Unknown setting ${key}`);
+    if (!editableBy(user, key)) throw new HttpError(403, `You cannot change ${SETTING_DEFAULTS[key as SettingKey].label}`);
     const value = raw.trim();
     const isTime = SETTING_DEFAULTS[key as SettingKey].value.includes(":");
-    if (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value)) {
+    const emptyAllowed = value === "" && isOptionalSetting(key as SettingKey);
+    if (!emptyAllowed && (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value))) {
       throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter ${isTime ? "a time as HH:MM" : "a number"}`);
     }
     if (before[key as SettingKey] !== value) changes[key] = { from: before[key as SettingKey], to: value };

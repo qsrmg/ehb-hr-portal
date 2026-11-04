@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Alert, Button, Card, Field, Info, PageHeader, Spinner, StatusBadge, Textarea } from "@/components/ui";
 import { AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES } from "@/components/RequestForms";
+import { ExpenseForm } from "@/components/ExpenseForm";
+import { ExpenseDetails, type ExpenseDetail } from "@/components/ExpenseDetails";
+import { TravelForm } from "@/components/TravelForm";
+import { SettlementForm } from "@/components/SettlementForm";
+import { TravelDetails, type TravelDetail, type TravelFlags } from "@/components/TravelDetails";
 import { download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -20,10 +25,19 @@ type Detail = {
   attendanceUpdate: { date: string; kind: string; checkIn: string | null; checkOut: string | null; reason: string } | null;
   currentStepLabel: string | null;
   canAct: boolean; canResubmit: boolean; canCancel: boolean; letterAvailable: boolean;
-};
+  expense: ExpenseDetail | null;
+  canAdjustLines: boolean;
+  canMarkPaid: boolean;
+  settlement: { travelRequestId: number; route: string; departDate: string; returnDate: string; advancePaid: number; toPay: number | null } | null;
+  travel: TravelDetail | null;
+} & Partial<TravelFlags>;
 
 const KIND_LABELS: Record<string, string> = { MISSED_PUNCH: "Missed punch", FIELD_VISIT: "Field visit", OTHER: "Other" };
-const ACTION_LABELS: Record<string, string> = { SUBMITTED: "Submitted", RESUBMITTED: "Resubmitted", APPROVED: "Approved", REJECTED: "Rejected", RETURNED: "Returned for changes", CANCELLED: "Cancelled" };
+const ACTION_LABELS: Record<string, string> = {
+  SUBMITTED: "Submitted", RESUBMITTED: "Resubmitted", APPROVED: "Approved", REJECTED: "Rejected", RETURNED: "Returned for changes", CANCELLED: "Cancelled",
+  LINE_REDUCE: "Line reduced", LINE_REJECT: "Line rejected", LINE_RESET: "Line change undone", PAID: "Paid",
+  ADVANCE_PAID: "Advance paid", ADVANCE_RETURNED: "Advance returned", CANCELLATION_FEE: "Cancellation fee recorded", FINANCE_NOTE: "Finance note",
+};
 
 export default function RequestDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -86,6 +100,16 @@ export default function RequestDetailPage() {
           {r.leave && <LeaveForm requestId={r.id} initial={r.leave} onDone={resubmitted} />}
           {r.attendanceUpdate && <AttendanceUpdateForm requestId={r.id} initial={r.attendanceUpdate} onDone={resubmitted} />}
           {r.type === "LETTER" && <LetterForm requestId={r.id} initial={{ letterType: r.data.letterType ?? "", addressedTo: r.data.addressedTo ?? "", purpose: r.data.purpose ?? "" }} onDone={resubmitted} />}
+          {r.type === "EXPENSE" && r.expense && <ExpenseForm requestId={r.id} initial={r.expense} onDone={resubmitted} />}
+          {r.type === "TRAVEL" && r.travel && <TravelForm requestId={r.id} initial={r.travel} onDone={resubmitted} />}
+          {r.type === "TRAVEL_SETTLEMENT" && r.settlement && r.expense && (
+            <SettlementForm
+              requestId={r.id}
+              travelRequestId={r.settlement.travelRequestId}
+              initial={{ travelRequestId: r.settlement.travelRequestId, lines: r.expense.lines.map((l) => ({ ...l, kind: l.kind ?? "STANDARD", quantity: l.quantity ?? null })) }}
+              onDone={resubmitted}
+            />
+          )}
           <div className="mt-3"><Button variant="ghost" onClick={() => setEditing(false)}>Close</Button></div>
         </Card>
       )}
@@ -124,7 +148,14 @@ export default function RequestDetailPage() {
                 </>
               )}
             </dl>
-            {(r.attachments.length > 0 || r.attachmentsHidden) && (
+            {r.expense && r.type === "EXPENSE" && (
+              <div className="mt-4 grid gap-4 border-t border-slate-100 pt-3 sm:grid-cols-2">
+                <div className="sm:col-span-2"><Info label="Purpose" value={r.expense.purpose} /></div>
+                <Info label="Total claimed" value={`PKR ${r.expense.totalClaimed.toLocaleString("en-PK")}`} />
+                <Info label="Total approved" value={`PKR ${r.expense.totalApproved.toLocaleString("en-PK")}`} />
+              </div>
+            )}
+            {!r.expense && !r.travel && (r.attachments.length > 0 || r.attachmentsHidden) && (
               <div className="mt-4 border-t border-slate-100 pt-3">
                 <div className="mb-1 text-xs text-slate-500">Attachments</div>
                 {r.attachmentsHidden ? (
@@ -143,6 +174,35 @@ export default function RequestDetailPage() {
               </div>
             )}
           </Card>
+
+          {r.settlement && (
+            <Alert kind="info">
+              Settlement for trip <a className="font-medium underline" href={`/requests/${r.settlement.travelRequestId}`}>#{r.settlement.travelRequestId}</a>: {r.settlement.route}, {fmtDate(r.settlement.departDate)} to {fmtDate(r.settlement.returnDate)}.
+              Advance paid PKR {r.settlement.advancePaid.toLocaleString("en-PK")}.
+              {r.settlement.toPay != null && (r.settlement.toPay >= 0 ? ` Finance pays the employee PKR ${r.settlement.toPay.toLocaleString("en-PK")}.` : ` The employee returns PKR ${(-r.settlement.toPay).toLocaleString("en-PK")} of the advance.`)}
+            </Alert>
+          )}
+          {r.expense && (
+            <ExpenseDetails
+              requestId={r.id}
+              expense={r.expense}
+              canAdjust={r.canAdjustLines}
+              canMarkPaid={r.canMarkPaid}
+              payAmount={r.settlement?.toPay ?? undefined}
+              onChanged={reload}
+            />
+          )}
+          {r.travel && (
+            <TravelDetails
+              requestId={r.id}
+              travel={r.travel}
+              flags={{
+                canCancelTrip: !!r.canCancelTrip, canBook: !!r.canBook, canPayAdvance: !!r.canPayAdvance, canRecordAdvanceReturn: !!r.canRecordAdvanceReturn,
+                canRecordCancellationFee: !!r.canRecordCancellationFee, canAddFinanceNote: !!r.canAddFinanceNote, canSettle: !!r.canSettle,
+              }}
+              onChanged={reload}
+            />
+          )}
 
           {r.canAct && (
             <Card title={`Your decision (${r.currentStepLabel})`}>

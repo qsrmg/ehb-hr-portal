@@ -85,18 +85,24 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  headOf         Department[]       @relation("DepartmentHod")
-  attendance     AttendanceRecord[]
-  leaveBalances  LeaveBalance[]
-  requests       Request[]          @relation("Requester")
-  stepsToApprove RequestStep[]      @relation("StepApprover")
-  stepsActed     RequestStep[]      @relation("StepActor")
-  actions        RequestAction[]
-  payslips       Payslip[]
-  lateWarnings   LateWarning[]
-  notifications  Notification[]
-  auditLogs      AuditLog[]
-  documents      Document[]
+  headOf                Department[]       @relation("DepartmentHod")
+  attendance            AttendanceRecord[]
+  leaveBalances         LeaveBalance[]
+  requests              Request[]          @relation("Requester")
+  stepsToApprove        RequestStep[]      @relation("StepApprover")
+  stepsActed            RequestStep[]      @relation("StepActor")
+  actions               RequestAction[]
+  payslips              Payslip[]
+  lateWarnings          LateWarning[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  documents             Document[]
+  expensesPaid          ExpenseClaim[]     @relation("ExpensePaidBy")
+  travelAdvancesPaid    TravelRequest[]    @relation("TravelAdvancePaidBy")
+  travelAdvanceReturns  TravelRequest[]    @relation("TravelAdvanceReturnedBy")
+  travelBooked          TravelRequest[]    @relation("TravelBookedBy")
+  travelCancelled       TravelRequest[]    @relation("TravelCancelledBy")
+  travelBookingsCreated TravelBooking[]
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
@@ -209,6 +215,9 @@ enum RequestType {
   LEAVE
   ATTENDANCE_UPDATE
   LETTER
+  EXPENSE
+  TRAVEL
+  TRAVEL_SETTLEMENT
 }
 
 enum RequestStatus {
@@ -246,26 +255,33 @@ model Request {
   attachments             RequestAttachment[]
   leaveRequest            LeaveRequest?
   attendanceUpdateRequest AttendanceUpdateRequest?
+  expenseClaim            ExpenseClaim?
+  travelRequest           TravelRequest?
 
   @@index([employeeId, status])
 }
 
 model RequestStep {
-  id             Int        @id @default(autoincrement())
-  requestId      Int
-  request        Request    @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  order          Int
-  label          String // "Line Manager", "HR"...
-  approverId     Int? // specific person (line manager / HOD)
-  approver       Employee?  @relation("StepApprover", fields: [approverId], references: [id])
-  approverRole   Role? // or anyone holding this role (HR, Finance)
-  status         StepStatus @default(WAITING)
-  actedById      Int?
-  actedBy        Employee?  @relation("StepActor", fields: [actedById], references: [id])
-  actedAt        DateTime?
-  comment        String?
-  pendingSince   DateTime?
-  lastReminderAt DateTime?
+  id                    Int        @id @default(autoincrement())
+  requestId             Int
+  request               Request    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  order                 Int
+  label                 String // "Line Manager", "HR"...
+  approverId            Int? // specific person (line manager / HOD)
+  approver              Employee?  @relation("StepApprover", fields: [approverId], references: [id])
+  approverRole          Role? // or anyone holding this role (HR, Finance)
+  status                StepStatus @default(WAITING)
+  actedById             Int?
+  actedBy               Employee?  @relation("StepActor", fields: [actedById], references: [id])
+  actedAt               DateTime?
+  comment               String?
+  pendingSince          DateTime?
+  lastReminderAt        DateTime?
+  // Role steps only: people who approved an earlier step of this request may not act on this one
+  // (e.g. the Finance step). If nobody is left, the step goes to fallbackRole instead (e.g. Management).
+  excludePriorApprovers Boolean    @default(false)
+  fallbackRole          Role?
+  fallbackLabel         String?
 
   @@unique([requestId, order])
   @@index([approverId, status])
@@ -292,6 +308,9 @@ model RequestAttachment {
   mimeType  String
   size      Int
   createdAt DateTime @default(now())
+
+  expenseLines   ExpenseLine[]
+  travelVouchers TravelBooking[]
 }
 
 model LeaveRequest {
@@ -412,4 +431,199 @@ model AuditLog {
   createdAt DateTime  @default(now())
 
   @@index([entity, entityId])
+}
+
+// ---------- Expense claims (Phase 2) ----------
+
+// Editable by HR / Finance. monthlyLimit is per employee per calendar month (null = no limit).
+model ExpenseCategory {
+  id               Int           @id @default(autoincrement())
+  name             String        @unique
+  accountingCode   String?
+  monthlyLimit     Decimal?      @db.Decimal(12, 2)
+  // Already paid as a salary allowance (fuel, mobile): claims show a warning and need a justification.
+  allowanceWarning Boolean       @default(false)
+  active           Boolean       @default(true)
+  sortOrder        Int           @default(0)
+  // LOCAL = Expense Claim, TRAVEL = trip settlement
+  scope            ExpenseScope  @default(LOCAL)
+  // Travel: not claimable when the daily allowance (per diem) is in use, e.g. meals
+  coveredByPerDiem Boolean       @default(false)
+  lines            ExpenseLine[]
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  WITH_SALARY
+  CASH
+}
+
+enum ExpenseLineStatus {
+  CLAIMED
+  REDUCED
+  REJECTED
+}
+
+model ExpenseClaim {
+  id               Int            @id @default(autoincrement())
+  requestId        Int            @unique
+  request          Request        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  purpose          String
+  totalClaimed     Decimal        @db.Decimal(12, 2)
+  paidOn           DateTime?      @db.Date
+  paymentMethod    PaymentMethod?
+  paymentReference String?
+  paidAt           DateTime?
+  paidById         Int?
+  paidBy           Employee?      @relation("ExpensePaidBy", fields: [paidById], references: [id])
+  // Set for a travel settlement: the trip it settles
+  travelId         Int?           @unique
+  travel           TravelRequest? @relation(fields: [travelId], references: [id])
+  lines            ExpenseLine[]
+}
+
+model ExpenseLine {
+  id                     Int                @id @default(autoincrement())
+  claimId                Int
+  claim                  ExpenseClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  order                  Int
+  date                   DateTime           @db.Date
+  // STANDARD lines have a category; HOTEL (nights), PER_DIEM (days) and MILEAGE (km) use quantity × rate
+  kind                   ExpenseLineKind    @default(STANDARD)
+  categoryId             Int?
+  category               ExpenseCategory?   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  quantity               Decimal?           @db.Decimal(10, 2)
+  rate                   Decimal?           @db.Decimal(12, 2)
+  description            String
+  amount                 Decimal            @db.Decimal(12, 2)
+  // Only Finance changes these: REDUCED sets approvedAmount, REJECTED sets it to 0; financeReason is required.
+  status                 ExpenseLineStatus  @default(CLAIMED)
+  approvedAmount         Decimal?           @db.Decimal(12, 2)
+  financeReason          String?
+  noReceiptExplanation   String?
+  allowanceJustification String?
+  receiptId              Int?
+  receipt                RequestAttachment? @relation(fields: [receiptId], references: [id])
+
+  @@index([claimId])
+  @@index([date])
+}
+
+// ---------- Travel (Phase 2) ----------
+
+enum ExpenseScope {
+  LOCAL
+  TRAVEL
+}
+
+enum ExpenseLineKind {
+  STANDARD
+  HOTEL
+  PER_DIEM
+  MILEAGE
+}
+
+enum TravelMode {
+  AIR
+  TRAIN
+  BUS
+  COMPANY_CAR
+  OWN_CAR
+  OTHER
+}
+
+enum BookingStatus {
+  NOT_NEEDED
+  PENDING
+  BOOKED
+}
+
+enum BookingKind {
+  AIR
+  TRAIN
+  BUS
+  HOTEL
+}
+
+enum BookingArranger {
+  ADMIN
+  EMPLOYEE
+}
+
+enum AdvanceReturnMethod {
+  CASH_OR_BANK
+  SALARY_DEDUCTION
+}
+
+// Pre-trip request. Amounts are PKR; country is kept so international travel can be added later.
+model TravelRequest {
+  id                Int        @id @default(autoincrement())
+  requestId         Int        @unique
+  request           Request    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  purpose           String
+  origin            String
+  destination       String
+  country           String     @default("PK")
+  departDate        DateTime   @db.Date
+  returnDate        DateTime   @db.Date
+  mode              TravelMode
+  needsHotel        Boolean    @default(false)
+  estimateTransport Decimal    @default(0) @db.Decimal(12, 2)
+  estimateHotel     Decimal    @default(0) @db.Decimal(12, 2)
+  estimateMeals     Decimal    @default(0) @db.Decimal(12, 2)
+  estimateOther     Decimal    @default(0) @db.Decimal(12, 2)
+  estimatedTotal    Decimal    @db.Decimal(12, 2)
+
+  advanceRequested       Decimal              @default(0) @db.Decimal(12, 2)
+  advancePaidOn          DateTime?            @db.Date
+  advanceMethod          PaymentMethod?
+  advanceReference       String?
+  advancePaidAt          DateTime?
+  advancePaidById        Int?
+  advancePaidBy          Employee?            @relation("TravelAdvancePaidBy", fields: [advancePaidById], references: [id])
+  advanceReturnedAmount  Decimal?             @db.Decimal(12, 2)
+  advanceReturnMethod    AdvanceReturnMethod?
+  advanceReturnedOn      DateTime?            @db.Date
+  advanceReturnReference String?
+  advanceReturnedById    Int?
+  advanceReturnedBy      Employee?            @relation("TravelAdvanceReturnedBy", fields: [advanceReturnedById], references: [id])
+
+  bookingStatus BookingStatus @default(NOT_NEEDED)
+  bookedAt      DateTime?
+  bookedById    Int?
+  bookedBy      Employee?     @relation("TravelBookedBy", fields: [bookedById], references: [id])
+
+  cancelledAt         DateTime?
+  cancelledById       Int?
+  cancelledBy         Employee? @relation("TravelCancelledBy", fields: [cancelledById], references: [id])
+  cancellationReason  String?
+  // Recorded by Admin; the company bears it. Finance can add a note.
+  cancellationFee     Decimal?  @db.Decimal(12, 2)
+  cancellationFeeNote String?
+  financeNote         String?
+
+  bookings   TravelBooking[]
+  settlement ExpenseClaim?
+
+  @@index([departDate, returnDate])
+}
+
+// One booked item. arrangedBy EMPLOYEE = "employee to arrange": they book it and claim it in the settlement.
+model TravelBooking {
+  id          Int                @id @default(autoincrement())
+  travelId    Int
+  travel      TravelRequest      @relation(fields: [travelId], references: [id], onDelete: Cascade)
+  kind        BookingKind
+  arrangedBy  BookingArranger
+  details     String
+  provider    String?
+  reference   String?
+  cost        Decimal?           @db.Decimal(12, 2)
+  voucherId   Int?
+  voucher     RequestAttachment? @relation(fields: [voucherId], references: [id])
+  createdById Int
+  createdBy   Employee           @relation(fields: [createdById], references: [id])
+  createdAt   DateTime           @default(now())
+
+  @@index([travelId])
 }

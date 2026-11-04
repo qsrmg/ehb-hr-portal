@@ -28,6 +28,23 @@ function diskUpload(folder: string, allowed: RegExp, maxFiles: number) {
 
 /** Supporting documents on requests (medical certificate etc.) */
 export const attachmentUpload = diskUpload("attachments", /\.(pdf|jpe?g|png)$/, 5);
+
+/**
+ * Request forms: "attachments" (up to 5, leave / attendance update) or one "receipt_<line>" per expense line.
+ */
+export const requestFilesUpload = multer({
+  storage: multer.diskStorage({
+    destination: path.join(uploadRoot, "attachments"),
+    filename: (_req, file, cb) =>
+      cb(null, `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 10 * MB, files: 30 },
+  fileFilter: (_req, file, cb) => {
+    if (file.fieldname !== "attachments" && !/^receipt_\d{1,2}$/.test(file.fieldname)) return cb(new HttpError(400, `Unexpected file field ${file.fieldname}`));
+    if (!/\.(pdf|jpe?g|png)$/.test(file.originalname.toLowerCase())) return cb(new HttpError(400, `File type not allowed: ${file.originalname} (PDF, JPG or PNG)`));
+    cb(null, true);
+  },
+});
 /** Policies and HR forms */
 export const documentUpload = diskUpload("documents", /\.pdf$/, 1);
 /** Generated letters */

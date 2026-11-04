@@ -6,7 +6,7 @@ import { getSettings } from "../lib/settings.js";
 import { isYmd, minutesToHm, monthRange, MONTHS, parseMonth, toDate, todayYmd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { canSeeWorkInfo, currentUser, hasRole, requireAuth, requireRole } from "../middleware/auth.js";
-import { importAttendance, monthlyAttendance, holidayMap, lastImportedDate } from "../services/attendance.js";
+import { approvedTripsWhere, importAttendance, monthlyAttendance, holidayMap, lastImportedDate } from "../services/attendance.js";
 
 export const attendanceRouter = Router();
 attendanceRouter.use(requireAuth);
@@ -51,7 +51,7 @@ attendanceRouter.get("/daily", async (req, res) => {
   });
   const d = toDate(date);
   const ids = employees.map((e) => e.id);
-  const [records, leaves, holidays, lastImported] = await Promise.all([
+  const [records, leaves, holidays, lastImported, trips] = await Promise.all([
     prisma.attendanceRecord.findMany({ where: { date: d, employeeId: { in: ids } } }),
     prisma.leaveRequest.findMany({
       where: { startDate: { lte: d }, endDate: { gte: d }, request: { status: "APPROVED", employeeId: { in: ids } } },
@@ -59,21 +59,27 @@ attendanceRouter.get("/daily", async (req, res) => {
     }),
     holidayMap(d, d),
     lastImportedDate(),
+    prisma.travelRequest.findMany({
+      where: { ...approvedTripsWhere(d, d), request: { status: "APPROVED", employeeId: { in: ids } } },
+      select: { destination: true, request: { select: { employeeId: true } } },
+    }),
   ]);
   const weekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
   const rows = employees.map((e) => {
     const r = records.find((x) => x.employeeId === e.id);
     const leave = leaves.find((l) => l.request.employeeId === e.id);
+    const trip = trips.find((t) => t.request.employeeId === e.id);
     const effective = r ? r.correctedStatus ?? r.status : null;
     let status: string;
     if (weekend) status = "WEEKEND";
     else if (holidays.size) status = "HOLIDAY";
     else if (leave && (!effective || effective === "ABSENT")) status = "LEAVE";
+    else if (trip && (!effective || effective === "ABSENT" || effective === "HALF_DAY")) status = "TRAVEL";
     else if (effective) status = effective;
     else status = lastImported && date <= lastImported ? "ABSENT" : "NO_DATA";
     return {
       employeeId: e.id, code: e.code, fullName: e.fullName, designation: e.designation, department: e.department?.name ?? null,
-      status, leaveType: leave?.leaveType.name ?? null,
+      status, leaveType: leave?.leaveType.name ?? (status === "TRAVEL" && trip ? `Travel: ${trip.destination}` : null),
       checkIn: minutesToHm(r?.correctedCheckIn ?? r?.checkIn), checkOut: minutesToHm(r?.correctedCheckOut ?? r?.checkOut),
     };
   });

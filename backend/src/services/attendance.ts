@@ -43,12 +43,20 @@ export async function lastImportedDate() {
   return row._max.date ? ymd(row._max.date) : null;
 }
 
-export type DayStatus = AttendanceStatus | "LEAVE" | "WEEKEND" | "HOLIDAY" | "NO_DATA" | "UPCOMING";
+export type DayStatus = AttendanceStatus | "LEAVE" | "TRAVEL" | "WEEKEND" | "HOLIDAY" | "NO_DATA" | "UPCOMING";
+
+/** Approved, not cancelled trips: those days are "On duty / Travel". */
+export const approvedTripsWhere = (from: Date, to: Date) => ({
+  cancelledAt: null,
+  departDate: { lte: to },
+  returnDate: { gte: from },
+  request: { status: "APPROVED" as const },
+});
 
 /** Day-by-day attendance for one employee and month, combining biometric records, approved leave and holidays. */
 export async function monthlyAttendance(employeeId: number, year: number, month: number) {
   const { start, end } = monthRange(year, month);
-  const [records, leaves, holidays, lastImported, employee] = await Promise.all([
+  const [records, leaves, holidays, lastImported, employee, trips] = await Promise.all([
     prisma.attendanceRecord.findMany({ where: { employeeId, date: { gte: start, lte: end } } }),
     prisma.leaveRequest.findMany({
       where: { request: { employeeId, status: "APPROVED" }, startDate: { lte: end }, endDate: { gte: start } },
@@ -57,16 +65,18 @@ export async function monthlyAttendance(employeeId: number, year: number, month:
     holidayMap(start, end),
     lastImportedDate(),
     prisma.employee.findUnique({ where: { id: employeeId }, select: { joiningDate: true } }),
+    prisma.travelRequest.findMany({ where: { ...approvedTripsWhere(start, end), request: { status: "APPROVED", employeeId } }, select: { departDate: true, returnDate: true, destination: true } }),
   ]);
   const byDate = new Map(records.map((r) => [ymd(r.date), r]));
   const today = todayYmd();
   const joined = employee ? ymd(employee.joiningDate) : null;
 
-  const summary = { onTime: 0, late: 0, halfDay: 0, absent: 0, leave: 0, workingDays: 0 };
+  const summary = { onTime: 0, late: 0, halfDay: 0, absent: 0, leave: 0, travel: 0, workingDays: 0 };
   const days = eachDay(start, end).map((d) => {
     const date = ymd(d);
     const record = byDate.get(date);
     const leave = leaves.find((l) => l.startDate <= d && l.endDate >= d);
+    const trip = trips.find((t) => t.departDate <= d && t.returnDate >= d);
     const holiday = holidays.get(date);
     let status: DayStatus;
     let note: string | null = null;
@@ -74,15 +84,18 @@ export async function monthlyAttendance(employeeId: number, year: number, month:
     if (isWeekend(d)) status = "WEEKEND";
     else if (holiday) { status = "HOLIDAY"; note = holiday; }
     else if (joined && date < joined) status = "NO_DATA";
-    else if (date > today) status = leave ? "LEAVE" : "UPCOMING";
+    else if (date > today) status = leave ? "LEAVE" : trip ? "TRAVEL" : "UPCOMING";
     else {
       const effective = record ? record.correctedStatus ?? record.status : null;
       if (leave && (!effective || effective === "ABSENT")) { status = "LEAVE"; note = leave.leaveType.name; }
+      // On a trip the biometric record is usually missing: the day counts as on duty.
+      else if (trip && (!effective || effective === "ABSENT" || effective === "HALF_DAY")) { status = "TRAVEL"; note = `Travel: ${trip.destination}`; }
       else if (effective) status = effective;
       else if (lastImported && date <= lastImported) status = "ABSENT";
       else status = "NO_DATA";
     }
     if (status === "LEAVE" && !note) note = leave?.leaveType.name ?? null;
+    if (status === "TRAVEL" && !note) note = trip ? `Travel: ${trip.destination}` : null;
 
     if (!["WEEKEND", "HOLIDAY", "NO_DATA", "UPCOMING"].includes(status)) summary.workingDays++;
     if (status === "ON_TIME") summary.onTime++;
@@ -90,6 +103,7 @@ export async function monthlyAttendance(employeeId: number, year: number, month:
     if (status === "HALF_DAY") summary.halfDay++;
     if (status === "ABSENT") summary.absent++;
     if (status === "LEAVE") summary.leave++;
+    if (status === "TRAVEL") summary.travel++;
 
     return {
       date,

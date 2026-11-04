@@ -9,7 +9,7 @@ export type MonthData = {
   month: number;
   monthName: string;
   lastImported: string | null;
-  summary: { onTime: number; late: number; halfDay: number; absent: number; leave: number; workingDays: number };
+  summary: { onTime: number; late: number; halfDay: number; absent: number; leave: number; travel: number; workingDays: number };
   days: {
     date: string;
     status: string;

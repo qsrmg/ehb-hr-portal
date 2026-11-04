@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { getSettings } from "../lib/settings.js";
-import { employeeIdsWithRole, notify } from "../lib/notify.js";
+import { notify } from "../lib/notify.js";
+import { currentApproverIds } from "../services/approvals.js";
 import { hmToMinutes, nowParts, toDate } from "../lib/dates.js";
 
 /** Office hours in the company timezone: Monday–Friday, start ≤ time < end, not a public holiday. */
@@ -30,11 +31,8 @@ export async function sendDueReminders(now = new Date()) {
     include: { request: { include: { employee: { select: { fullName: true } } } } },
   });
   for (const step of due) {
-    const recipients = step.approverId
-      ? [step.approverId]
-      : step.approverRole
-        ? (await employeeIdsWithRole(step.approverRole)).filter((id) => id !== step.request.employeeId)
-        : [];
+    // Same rule as who may act: not the requester, and not earlier approvers where the step excludes them.
+    const recipients = await currentApproverIds(step.requestId);
     await notify(
       recipients,
       `Reminder: ${step.request.title} is waiting for you`,

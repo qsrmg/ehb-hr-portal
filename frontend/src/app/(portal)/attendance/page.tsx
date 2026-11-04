@@ -27,12 +27,13 @@ export default function AttendancePage() {
       {error && <Alert>{error}</Alert>}
       {data && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
             <Stat label="On time" value={data.summary.onTime} tone="green" />
             <Stat label="Late" value={data.summary.late} tone="amber" />
             <Stat label="Half day" value={data.summary.halfDay} tone="orange" />
             <Stat label="Absent" value={data.summary.absent} tone="red" />
             <Stat label="Leave" value={data.summary.leave} tone="sky" />
+            <Stat label="On duty / Travel" value={data.summary.travel} tone="sky" />
           </div>
           <Alert kind="info">
             Attendance Update requests used this month: <strong>{data.updateRequests.used} of {data.updateRequests.max}</strong>. Requests must be made within {data.updateRequests.windowDays} days.

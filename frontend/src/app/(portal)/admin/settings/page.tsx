@@ -43,9 +43,11 @@ function SettingsForm({ settings, onSaved }: { settings: Setting[]; onSaved: () 
 }
 
 export default function SettingsPage() {
-  const { data, loading, error, reload } = useApi<Setting[]>("/settings");
+  const { data: all, loading, error, reload } = useApi<Setting[]>("/settings");
   if (loading) return <Spinner />;
-  if (error || !data) return <Alert>{error}</Alert>;
+  if (error || !all) return <Alert>{error}</Alert>;
+  // Expense limits live on their own page, shared with Finance.
+  const data = all.filter((s) => !s.key.startsWith("expense."));
   return (
     <div className="max-w-3xl space-y-6">
       <PageHeader title="Rules and settings" subtitle="HR can change these rules without new development. Changes are recorded in the audit log." />

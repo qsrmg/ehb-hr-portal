@@ -5,18 +5,24 @@ import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
 import { getSettings } from "../lib/settings.js";
 import {
-  attachmentUpload, absoluteUploadPath, relativeUploadPath, removeFiles,
+  requestFilesUpload, absoluteUploadPath, relativeUploadPath, removeFiles,
 } from "../lib/upload.js";
 import { hmToMinutes, isWeekend, minutesToHm, monthRange, toDate, todayYmd, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, type AuthUser } from "../middleware/auth.js";
 import {
-  actOnRequest, canActOnStep, cancelRequest, createSteps, notifySubmitted, pendingForUserWhere,
+  actOnRequest, canActOnStep, cancelRequest, createSteps, notifySubmitted, pendingForUserWhere, priorApproverIds,
   resolveSteps, restartChain, TYPE_LABELS, type OnApproved, type StepSpec,
 } from "../services/approvals.js";
 import { deductLeave, evaluateLeave } from "../services/leave.js";
 import { computeStatus, getAttendanceRules, holidayMap } from "../services/attendance.js";
 import { letterPdf } from "../services/pdf.js";
+import { evaluateExpense, expenseChain, expenseClaimSchema, lineApproved, pkr, round2 } from "../services/expenses.js";
+import {
+  advanceDue, approvedTotal, evaluateSettlement, evaluateTravel, KIND_LABELS, MODE_LABELS, SETTLEMENT_CHAIN, settlementLineSchema,
+  settlementWindow, travelChain, travelInclude, travelRules, travelSchema, tripDays,
+} from "../services/travel.js";
+import { travelApproved } from "./travel.js";
 import type { Prisma, RequestType } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
@@ -60,6 +66,8 @@ type Prepared = {
   data: Prisma.InputJsonValue;
   chain: StepSpec[];
   persist: (tx: Tx, requestId: number, isUpdate: boolean) => Promise<void>;
+  /** The form saves its own files (expense receipts are linked to their lines). */
+  ownsFiles?: boolean;
 };
 
 const parse = <T>(schema: z.ZodType<T>, body: unknown): T => {
@@ -69,7 +77,15 @@ const parse = <T>(schema: z.ZodType<T>, body: unknown): T => {
 };
 
 /** Validates the form for each request type and returns its approval chain and how to save it. */
-async function prepare(type: RequestType, user: AuthUser, body: unknown, attachmentCount: number, existingId?: number): Promise<Prepared> {
+async function prepare(
+  type: RequestType,
+  user: AuthUser,
+  body: unknown,
+  files: Express.Multer.File[],
+  existingAttachmentCount = 0,
+  existingId?: number,
+): Promise<Prepared> {
+  const attachmentCount = existingAttachmentCount + files.length;
   if (type === "LEAVE") {
     const input = parse(leaveSchema, body);
     const result = await evaluateLeave(user.id, input, existingId);
@@ -145,12 +161,161 @@ async function prepare(type: RequestType, user: AuthUser, body: unknown, attachm
     };
   }
 
+  if (type === "EXPENSE") return prepareExpense(user, body, files, existingId);
+  if (type === "TRAVEL") return prepareTravel(user, body, existingId);
+  if (type === "TRAVEL_SETTLEMENT") return prepareSettlement(user, body, files, existingId);
+
   const input = parse(letterSchema, body);
   return {
     title: LETTER_TYPES[input.letterType],
     data: input,
     chain: [{ label: "HR", approver: "HR" }],
     persist: async () => {},
+  };
+}
+
+/** Expense Claim: one line per expense, each with a receipt file field "receipt_<index>". */
+async function prepareExpense(user: AuthUser, body: unknown, files: Express.Multer.File[], existingId?: number): Promise<Prepared> {
+  const raw = body as { purpose?: string; lines?: string };
+  let lines: unknown;
+  try {
+    lines = JSON.parse(raw.lines ?? "[]");
+  } catch {
+    throw new HttpError(400, "The expense lines could not be read");
+  }
+  const input = parse(expenseClaimSchema, { purpose: raw.purpose, lines });
+  const receipts = new Map(files.filter((f) => f.fieldname.startsWith("receipt_")).map((f) => [Number(f.fieldname.slice(8)), f]));
+  if ([...receipts.keys()].some((i) => i >= input.lines.length)) throw new HttpError(400, "A receipt does not belong to any line");
+  if (files.some((f) => f.fieldname === "attachments")) throw new HttpError(400, "Attach receipts to their expense lines");
+  // A resubmitted claim may keep receipts it already has.
+  const keep = [...new Set(input.lines.map((l) => l.keepReceiptId).filter((v): v is number => v != null))];
+  if (keep.length && (await prisma.requestAttachment.count({ where: { id: { in: keep }, requestId: existingId ?? -1 } })) !== keep.length) {
+    throw new HttpError(400, "A kept receipt does not belong to this claim");
+  }
+  const checked = input.lines.map((l, i) => ({ ...l, hasReceipt: receipts.has(i) || l.keepReceiptId != null }));
+  const result = await evaluateExpense(user.id, checked, existingId);
+  if (result.errors.length) throw new HttpError(400, result.errors.join("; "));
+  const chain = await expenseChain(user.id, result.needsManagement);
+
+  return {
+    title: `Expense Claim · ${pkr(result.total)} (${checked.length} item${checked.length === 1 ? "" : "s"})`,
+    data: { purpose: input.purpose },
+    chain,
+    ownsFiles: true,
+    persist: async (tx, requestId, isUpdate) => {
+      let claimId: number;
+      if (isUpdate) {
+        const claim = await tx.expenseClaim.update({ where: { requestId }, data: { purpose: input.purpose, totalClaimed: result.total } });
+        await tx.expenseLine.deleteMany({ where: { claimId: claim.id } });
+        claimId = claim.id;
+      } else {
+        claimId = (await tx.expenseClaim.create({ data: { requestId, purpose: input.purpose, totalClaimed: result.total } })).id;
+      }
+      for (const [i, l] of checked.entries()) {
+        let receiptId = l.keepReceiptId ?? null;
+        const file = receipts.get(i);
+        if (file) {
+          receiptId = (await tx.requestAttachment.create({
+            data: { requestId, fileName: file.originalname, path: relativeUploadPath(file.path), mimeType: file.mimetype, size: file.size },
+          })).id;
+        }
+        await tx.expenseLine.create({
+          data: {
+            claimId, order: i, date: toDate(l.date), categoryId: l.categoryId, description: l.description, amount: l.amount, receiptId,
+            noReceiptExplanation: l.hasReceipt ? null : l.noReceiptExplanation || null,
+            allowanceJustification: l.allowanceJustification || null,
+          },
+        });
+      }
+    },
+  };
+}
+
+/** Pre-trip travel request: Line Manager → HOD (+ Management above the threshold, + Finance for an advance). */
+async function prepareTravel(user: AuthUser, body: unknown, existingId?: number): Promise<Prepared> {
+  const input = parse(travelSchema, body);
+  const result = await evaluateTravel(user.id, input, existingId);
+  if (result.errors.length) throw new HttpError(400, result.errors.join("; "));
+  const chain = await travelChain(user.id, result.needsManagement, result.needsFinance);
+  const fields = {
+    purpose: input.purpose, origin: input.origin, destination: input.destination, country: input.country,
+    departDate: toDate(input.departDate), returnDate: toDate(input.returnDate), mode: input.mode, needsHotel: input.needsHotel,
+    estimateTransport: input.estimateTransport, estimateHotel: input.estimateHotel, estimateMeals: input.estimateMeals, estimateOther: input.estimateOther,
+    estimatedTotal: result.estimatedTotal, advanceRequested: input.advanceRequested,
+    bookingStatus: result.bookingNeeded ? ("PENDING" as const) : ("NOT_NEEDED" as const),
+  };
+  return {
+    title: `Travel · ${input.origin} → ${input.destination} (${input.departDate} to ${input.returnDate})`,
+    data: { purpose: input.purpose },
+    chain,
+    persist: async (tx, requestId, isUpdate) => {
+      if (isUpdate) await tx.travelRequest.update({ where: { requestId }, data: fields });
+      else await tx.travelRequest.create({ data: { requestId, ...fields } });
+    },
+  };
+}
+
+/** Post-trip settlement: expense lines (hotel nights, daily allowance, mileage, receipts) against the trip; Line Manager → Finance. */
+async function prepareSettlement(user: AuthUser, body: unknown, files: Express.Multer.File[], existingId?: number): Promise<Prepared> {
+  const raw = body as { travelRequestId?: string; lines?: string };
+  let lines: unknown;
+  try {
+    lines = JSON.parse(raw.lines ?? "[]");
+  } catch {
+    throw new HttpError(400, "The settlement lines could not be read");
+  }
+  const input = parse(
+    z.object({ travelRequestId: z.coerce.number().int({ message: "Choose the trip" }), lines: z.array(settlementLineSchema).min(1, "Add at least one expense").max(40) }),
+    { travelRequestId: raw.travelRequestId, lines },
+  );
+  const receipts = new Map(files.filter((f) => f.fieldname.startsWith("receipt_")).map((f) => [Number(f.fieldname.slice(8)), f]));
+  if ([...receipts.keys()].some((i) => i >= input.lines.length)) throw new HttpError(400, "A receipt does not belong to any line");
+  if (files.some((f) => f.fieldname === "attachments")) throw new HttpError(400, "Attach receipts to their lines");
+  const keep = [...new Set(input.lines.map((l) => l.keepReceiptId).filter((v): v is number => v != null))];
+  if (keep.length && (await prisma.requestAttachment.count({ where: { id: { in: keep }, requestId: existingId ?? -1 } })) !== keep.length) {
+    throw new HttpError(400, "A kept receipt does not belong to this settlement");
+  }
+  const trip = await prisma.travelRequest.findUnique({ where: { requestId: input.travelRequestId }, include: travelInclude });
+  if (!trip) throw new HttpError(404, "Travel request not found");
+  if (existingId && trip.settlement?.requestId !== existingId) throw new HttpError(400, "This settlement belongs to another trip");
+  const checked = input.lines.map((l, i) => ({ ...l, hasReceipt: receipts.has(i) || l.keepReceiptId != null }));
+  const result = await evaluateSettlement(user.id, trip, checked, existingId);
+  if (result.errors.length) throw new HttpError(400, result.errors.join("; "));
+
+  return {
+    title: `Travel Settlement · ${trip.origin} → ${trip.destination} · ${pkr(result.total)}`,
+    data: { travelRequestId: trip.requestId },
+    chain: SETTLEMENT_CHAIN,
+    ownsFiles: true,
+    persist: async (tx, requestId, isUpdate) => {
+      let claimId: number;
+      const purpose = `Settlement for travel request #${trip.requestId}: ${trip.origin} → ${trip.destination}`;
+      if (isUpdate) {
+        const claim = await tx.expenseClaim.update({ where: { requestId }, data: { totalClaimed: result.total } });
+        await tx.expenseLine.deleteMany({ where: { claimId: claim.id } });
+        claimId = claim.id;
+      } else {
+        // A cancelled or rejected earlier settlement keeps its history but gives up the link to the trip.
+        await tx.expenseClaim.updateMany({ where: { travelId: trip.id }, data: { travelId: null } });
+        claimId = (await tx.expenseClaim.create({ data: { requestId, purpose, totalClaimed: result.total, travelId: trip.id } })).id;
+      }
+      for (const [i, l] of result.lines.entries()) {
+        let receiptId = l.keepReceiptId ?? null;
+        const file = receipts.get(i);
+        if (file) {
+          receiptId = (await tx.requestAttachment.create({
+            data: { requestId, fileName: file.originalname, path: relativeUploadPath(file.path), mimeType: file.mimetype, size: file.size },
+          })).id;
+        }
+        await tx.expenseLine.create({
+          data: {
+            claimId, order: i, kind: l.kind, date: toDate(l.date), categoryId: l.kind === "STANDARD" ? l.categoryId ?? null : null,
+            description: l.description, amount: l.amount, quantity: l.quantity ?? null, rate: l.rate, receiptId,
+            noReceiptExplanation: l.hasReceipt ? null : l.noReceiptExplanation || null,
+          },
+        });
+      }
+    },
   };
 }
 
@@ -179,13 +344,24 @@ const onApproved: OnApproved = async (tx, requestId) => {
     if (existing) await tx.attendanceRecord.update({ where: { id: existing.id }, data: correction });
     else await tx.attendanceRecord.create({ data: { employeeId: request.employeeId, date: u.date, status: "ABSENT", ...correction } });
   }
+  if (request.type === "EXPENSE" || request.type === "TRAVEL_SETTLEMENT") {
+    // Finance may have reduced or rejected lines; a claim with nothing left must be rejected instead.
+    const lines = await tx.expenseLine.findMany({ where: { claim: { requestId } } });
+    if (round2(lines.reduce((s, l) => s + lineApproved(l), 0)) <= 0) {
+      throw new HttpError(400, "Every line is rejected. Reject the claim instead of approving it.");
+    }
+  }
   // LETTER: the PDF is generated on download from the approved request.
+  // EXPENSE: Finance marks the claim as paid afterwards.
 };
 
 const TYPE_ROUTES: Record<string, RequestType> = {
   leave: "LEAVE",
   "attendance-update": "ATTENDANCE_UPDATE",
   letter: "LETTER",
+  expense: "EXPENSE",
+  travel: "TRAVEL",
+  settlement: "TRAVEL_SETTLEMENT",
 };
 
 async function saveAttachments(tx: Tx, requestId: number, files: Express.Multer.File[]) {
@@ -197,20 +373,28 @@ async function saveAttachments(tx: Tx, requestId: number, files: Express.Multer.
   });
 }
 
-// Submit a new request: POST /requests/leave | /requests/attendance-update | /requests/letter
-requestsRouter.post("/:type", attachmentUpload.array("attachments", 5), async (req, res) => {
+/** Leave / attendance update / letter accept up to 5 "attachments"; expense claims accept "receipt_<line>" files. */
+function checkFileFields(type: RequestType, files: Express.Multer.File[]) {
+  if (type === "EXPENSE" || type === "TRAVEL_SETTLEMENT") return;
+  if (files.some((f) => f.fieldname !== "attachments")) throw new HttpError(400, "Receipts are only for expense claims");
+  if (files.length > 5) throw new HttpError(400, "Attach at most 5 files");
+}
+
+// Submit a new request: POST /requests/leave | /requests/attendance-update | /requests/letter | /requests/expense
+requestsRouter.post("/:type", requestFilesUpload.any(), async (req, res) => {
   const user = currentUser(req);
   const type = TYPE_ROUTES[String(req.params.type)];
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
   if (!type) { removeFiles(files); throw new HttpError(404, "Unknown request type"); }
   try {
-    const prepared = await prepare(type, user, req.body, files.length);
+    checkFileFields(type, files);
+    const prepared = await prepare(type, user, req.body, files);
     const request = await prisma.$transaction(async (tx) => {
       const created = await tx.request.create({
         data: { type, employeeId: user.id, title: prepared.title, data: prepared.data },
       });
       await prepared.persist(tx, created.id, false);
-      await saveAttachments(tx, created.id, files);
+      if (!prepared.ownsFiles) await saveAttachments(tx, created.id, files);
       await createSteps(tx, created.id, await resolveSteps(tx, user.id, prepared.chain));
       await tx.requestAction.create({ data: { requestId: created.id, actorId: user.id, action: "SUBMITTED" } });
       return created;
@@ -224,7 +408,7 @@ requestsRouter.post("/:type", attachmentUpload.array("attachments", 5), async (r
 });
 
 // Resubmit a returned request with edits
-requestsRouter.put("/:id/resubmit", attachmentUpload.array("attachments", 5), async (req, res) => {
+requestsRouter.put("/:id/resubmit", requestFilesUpload.any(), async (req, res) => {
   const user = currentUser(req);
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
   try {
@@ -233,11 +417,12 @@ requestsRouter.put("/:id/resubmit", attachmentUpload.array("attachments", 5), as
     if (!existing) throw new HttpError(404, "Request not found");
     if (existing.employeeId !== user.id) throw new HttpError(403, "Only the person who submitted it can resubmit");
     if (existing.status !== "RETURNED") throw new HttpError(400, "Only returned requests can be edited and resubmitted");
-    const prepared = await prepare(existing.type, user, req.body, existing._count.attachments + files.length, id);
+    checkFileFields(existing.type, files);
+    const prepared = await prepare(existing.type, user, req.body, files, existing._count.attachments, id);
     await prisma.$transaction(async (tx) => {
       await tx.request.update({ where: { id }, data: { title: prepared.title, data: prepared.data } });
       await prepared.persist(tx, id, true);
-      await saveAttachments(tx, id, files);
+      if (!prepared.ownsFiles) await saveAttachments(tx, id, files);
       await restartChain(tx, id, user.id, prepared.chain, user.id);
     });
     await notifySubmitted(id, true);
@@ -253,12 +438,19 @@ const actionSchema = z.object({ comment: z.string().optional() });
 for (const action of ["approve", "reject", "return"] as const) {
   requestsRouter.post(`/:id/${action}`, async (req, res) => {
     const { comment } = actionSchema.parse(req.body ?? {});
-    await actOnRequest(Number(req.params.id), currentUser(req), action.toUpperCase() as "APPROVE", comment, onApproved);
+    const id = Number(req.params.id);
+    await actOnRequest(id, currentUser(req), action.toUpperCase() as "APPROVE", comment, onApproved);
+    if (action === "approve") {
+      const r = await prisma.request.findUnique({ where: { id }, select: { type: true, status: true } });
+      if (r?.type === "TRAVEL" && r.status === "APPROVED") await travelApproved(id);
+    }
     res.json({ ok: true });
   });
 }
 
 requestsRouter.post("/:id/cancel", async (req, res) => {
+  const r = await prisma.request.findUnique({ where: { id: Number(req.params.id) }, select: { type: true } });
+  if (r?.type === "TRAVEL") throw new HttpError(400, "Use \"Cancel trip\" to cancel a travel request");
   await cancelRequest(Number(req.params.id), currentUser(req));
   res.json({ ok: true });
 });
@@ -346,6 +538,28 @@ const detailInclude = {
   attachments: true,
   leaveRequest: { include: { leaveType: true } },
   attendanceUpdateRequest: true,
+  expenseClaim: {
+    include: {
+      lines: { orderBy: { order: "asc" }, include: { category: true, receipt: { select: { id: true, fileName: true, size: true } } } },
+      paidBy: { select: { fullName: true } },
+      travel: {
+        select: {
+          requestId: true, origin: true, destination: true, departDate: true, returnDate: true,
+          advanceRequested: true, advancePaidAt: true, advanceReturnedAmount: true, cancelledAt: true,
+        },
+      },
+    },
+  },
+  travelRequest: {
+    include: {
+      bookings: { orderBy: { createdAt: "asc" }, include: { voucher: { select: { id: true, fileName: true } } } },
+      advancePaidBy: { select: { fullName: true } },
+      advanceReturnedBy: { select: { fullName: true } },
+      bookedBy: { select: { fullName: true } },
+      cancelledBy: { select: { fullName: true } },
+      settlement: { include: { request: { select: { id: true, status: true } }, lines: true } },
+    },
+  },
 } satisfies Prisma.RequestInclude;
 
 type Detail = Prisma.RequestGetPayload<{ include: typeof detailInclude }>;
@@ -357,9 +571,65 @@ async function loadForUser(id: number, user: AuthUser): Promise<Detail> {
     r.employeeId === user.id ||
     hasRole(user, "HR", "MANAGEMENT") ||
     r.employee.managerId === user.id ||
-    r.steps.some((s) => s.approverId === user.id || s.actedById === user.id || (s.approverRole && hasRole(user, s.approverRole)));
+    r.steps.some((s) => s.approverId === user.id || s.actedById === user.id || (s.approverRole && hasRole(user, s.approverRole))) ||
+    // Admin books trips; Finance pays advances and settlements.
+    ((r.type === "TRAVEL" || r.type === "TRAVEL_SETTLEMENT") && hasRole(user, "ADMIN", "FINANCE"));
   if (!allowed) throw new HttpError(403, "You do not have access to this request");
   return r;
+}
+
+/** Settlement: approved total minus the advance already paid (negative = the employee returns the difference). */
+function settlementToPay(r: Detail) {
+  const travel = r.expenseClaim?.travel;
+  if (!r.expenseClaim || !travel) return null;
+  const advance = travel.advancePaidAt ? Number(travel.advanceRequested) : 0;
+  return round2(approvedTotal(r.expenseClaim.lines) - advance);
+}
+
+/** Trip details and what the viewer may do with it. */
+async function travelDetail(r: Detail, user: AuthUser) {
+  const t = r.travelRequest!;
+  const rules = await travelRules();
+  const window = settlementWindow(t, rules.settlementDays);
+  const activeSettlement = t.settlement && !["CANCELLED", "REJECTED"].includes(t.settlement.request.status) ? t.settlement : null;
+  const due = advanceDue({ ...t, settlement: t.settlement ? { request: t.settlement.request, lines: t.settlement.lines } : null });
+  const isTraveller = r.employeeId === user.id;
+  const finance = hasRole(user, "FINANCE") && !isTraveller;
+  const admin = hasRole(user, "ADMIN");
+  const approved = r.status === "APPROVED" && !t.cancelledAt;
+  const today = todayYmd();
+  const n = (v: { toString(): string } | null) => (v == null ? null : Number(v));
+  return {
+    travel: {
+      purpose: t.purpose, origin: t.origin, destination: t.destination, country: t.country,
+      departDate: ymd(t.departDate), returnDate: ymd(t.returnDate), days: tripDays(t.departDate, t.returnDate),
+      mode: t.mode, modeLabel: MODE_LABELS[t.mode], needsHotel: t.needsHotel,
+      estimates: { transport: Number(t.estimateTransport), hotel: Number(t.estimateHotel), meals: Number(t.estimateMeals), other: Number(t.estimateOther), total: Number(t.estimatedTotal) },
+      advance: {
+        requested: Number(t.advanceRequested),
+        paid: t.advancePaidAt ? { paidOn: t.advancePaidOn ? ymd(t.advancePaidOn) : null, method: t.advanceMethod, reference: t.advanceReference, paidBy: t.advancePaidBy?.fullName ?? null } : null,
+        due,
+        returned: t.advanceReturnedAmount != null
+          ? { amount: Number(t.advanceReturnedAmount), method: t.advanceReturnMethod, returnedOn: t.advanceReturnedOn ? ymd(t.advanceReturnedOn) : null, reference: t.advanceReturnReference, by: t.advanceReturnedBy?.fullName ?? null }
+          : null,
+      },
+      bookingStatus: t.bookingStatus,
+      booked: t.bookedAt ? { at: t.bookedAt, by: t.bookedBy?.fullName ?? null } : null,
+      bookings: t.bookings.map((b) => ({ id: b.id, kind: b.kind, arrangedBy: b.arrangedBy, details: b.details, provider: b.provider, reference: b.reference, cost: n(b.cost), voucher: b.voucher })),
+      cancellation: t.cancelledAt
+        ? { at: t.cancelledAt, by: t.cancelledBy?.fullName ?? null, reason: t.cancellationReason, fee: n(t.cancellationFee), feeNote: t.cancellationFeeNote, financeNote: t.financeNote }
+        : null,
+      settlement: activeSettlement ? { requestId: activeSettlement.request.id, status: activeSettlement.request.status } : null,
+      settlementWindow: window,
+    },
+    canCancelTrip: (isTraveller || r.employee.managerId === user.id) && !t.cancelledAt && ["PENDING", "RETURNED", "APPROVED"].includes(r.status) && !activeSettlement,
+    canBook: admin && approved,
+    canPayAdvance: finance && approved && Number(t.advanceRequested) > 0 && !t.advancePaidAt,
+    canRecordAdvanceReturn: finance && due > 0,
+    canRecordCancellationFee: admin && !!t.cancelledAt,
+    canAddFinanceNote: hasRole(user, "FINANCE") && !!t.cancelledAt,
+    canSettle: isTraveller && approved && !activeSettlement && today >= window.opens && today <= window.closes,
+  };
 }
 
 /** Medical documents are visible to HR only (and the employee who uploaded them). */
@@ -422,10 +692,63 @@ requestsRouter.get("/:id", async (req, res) => {
         }
       : null,
     currentStepLabel: current?.label ?? null,
-    canAct: current ? canActOnStep(user, r.employeeId, current) : false,
+    canAct: current ? canActOnStep(user, r.employeeId, current, priorApproverIds(r.steps, current.order)) : false,
     canResubmit: r.status === "RETURNED" && r.employeeId === user.id,
-    canCancel: ["PENDING", "RETURNED"].includes(r.status) && r.employeeId === user.id,
+    canCancel: r.type !== "TRAVEL" && ["PENDING", "RETURNED"].includes(r.status) && r.employeeId === user.id,
     letterAvailable: r.type === "LETTER" && r.status === "APPROVED" && (r.employeeId === user.id || hasRole(user, "HR")),
+    expense: r.expenseClaim
+      ? {
+          purpose: r.expenseClaim.purpose,
+          totalClaimed: Number(r.expenseClaim.totalClaimed),
+          totalApproved: round2(r.expenseClaim.lines.reduce((s, l) => s + lineApproved(l), 0)),
+          lines: r.expenseClaim.lines.map((l) => ({
+            id: l.id,
+            date: ymd(l.date),
+            kind: l.kind,
+            quantity: l.quantity == null ? null : Number(l.quantity),
+            rate: l.rate == null ? null : Number(l.rate),
+            categoryId: l.categoryId,
+            category: l.category?.name ?? KIND_LABELS[l.kind],
+            accountingCode: l.category?.accountingCode ?? null,
+            allowanceWarning: l.category?.allowanceWarning ?? false,
+            description: l.description,
+            amount: Number(l.amount),
+            status: l.status,
+            approvedAmount: lineApproved(l),
+            financeReason: l.financeReason,
+            noReceiptExplanation: l.noReceiptExplanation,
+            allowanceJustification: l.allowanceJustification,
+            receipt: l.receipt,
+          })),
+          paid: r.expenseClaim.paidAt
+            ? {
+                paidOn: r.expenseClaim.paidOn ? ymd(r.expenseClaim.paidOn) : null,
+                method: r.expenseClaim.paymentMethod,
+                reference: r.expenseClaim.paymentReference,
+                paidBy: r.expenseClaim.paidBy?.fullName ?? null,
+                paidAt: r.expenseClaim.paidAt,
+              }
+            : null,
+        }
+      : null,
+    // Only Finance, at its own approval step, may reduce or reject single lines.
+    canAdjustLines:
+      (r.type === "EXPENSE" || r.type === "TRAVEL_SETTLEMENT") && !!current && current.approverRole === "FINANCE" &&
+      canActOnStep(user, r.employeeId, current, priorApproverIds(r.steps, current.order)),
+    canMarkPaid:
+      (r.type === "EXPENSE" || r.type === "TRAVEL_SETTLEMENT") && r.status === "APPROVED" && !r.expenseClaim?.paidAt &&
+      hasRole(user, "FINANCE") && r.employeeId !== user.id && (r.type === "EXPENSE" || (settlementToPay(r) ?? 0) > 0),
+    settlement: r.expenseClaim?.travel
+      ? {
+          travelRequestId: r.expenseClaim.travel.requestId,
+          route: `${r.expenseClaim.travel.origin} → ${r.expenseClaim.travel.destination}`,
+          departDate: ymd(r.expenseClaim.travel.departDate),
+          returnDate: ymd(r.expenseClaim.travel.returnDate),
+          advancePaid: r.expenseClaim.travel.advancePaidAt ? Number(r.expenseClaim.travel.advanceRequested) : 0,
+          toPay: settlementToPay(r),
+        }
+      : null,
+    ...(r.travelRequest ? await travelDetail(r, user) : { travel: null }),
   });
 });
 

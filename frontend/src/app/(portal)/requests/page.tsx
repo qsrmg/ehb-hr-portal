@@ -18,6 +18,8 @@ export default function MyRequestsPage() {
             <LinkButton href="/requests/new/leave">Leave</LinkButton>
             <LinkButton href="/requests/new/attendance-update" variant="secondary">Attendance update</LinkButton>
             <LinkButton href="/requests/new/letter" variant="secondary">Letter</LinkButton>
+            <LinkButton href="/requests/new/expense" variant="secondary">Expense claim</LinkButton>
+            <LinkButton href="/requests/new/travel" variant="secondary">Travel</LinkButton>
           </>
         }
       />

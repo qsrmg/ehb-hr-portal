@@ -34,6 +34,8 @@ export default function DashboardPage() {
             <LinkButton href="/requests/new/leave">Apply for leave</LinkButton>
             <LinkButton href="/requests/new/attendance-update" variant="secondary">Fix attendance</LinkButton>
             <LinkButton href="/requests/new/letter" variant="secondary">Request a letter</LinkButton>
+            <LinkButton href="/requests/new/expense" variant="secondary">Claim expenses</LinkButton>
+            <LinkButton href="/requests/new/travel" variant="secondary">Request travel</LinkButton>
           </>
         }
       />

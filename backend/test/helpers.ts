@@ -116,5 +116,5 @@ export async function startServer() {
     return ((await res.json()) as { token: string }).token;
   }
 
-  return { call, login, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return { base, call, login, close: () => new Promise<void>((r) => server.close(() => r())) };
 }

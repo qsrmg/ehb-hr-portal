@@ -9,13 +9,15 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit && tsc -p test",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev && prisma generate",
+    "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
-    "db:deploy": "prisma migrate deploy && prisma generate",
+    "db:deploy": "prisma migrate deploy",
     "test": "node --import tsx --import ./test/setup.ts --test --test-isolation=none --test-concurrency=1 \"test/**/*.test.ts\"",
-    "mailpit": "..\\\\tools\\\\mailpit\\\\mailpit.exe --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025"
+    "mailpit": "..\\\\tools\\\\mailpit\\\\mailpit.exe --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025",
+    "postdb:migrate": "prisma generate",
+    "postdb:deploy": "prisma generate"
   },
   "keywords": [],
   "author": "",
