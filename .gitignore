@@ -8,3 +8,5 @@ uploads/
 # Local tools (Mailpit binary)
 tools/
 *.log
+# Browser test screenshots (frontend/e2e)
+test-screenshots/

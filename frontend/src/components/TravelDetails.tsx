@@ -123,7 +123,7 @@ export function TravelDetails({ requestId, travel, flags, onChanged }: { request
           <div className="sm:col-span-3"><Info label="Purpose" value={t.purpose} /></div>
           <Info label="Estimated cost" value={`PKR ${fmtMoney(t.estimates.total)}`} />
           <Info label="Breakdown" value={`Transport ${fmtMoney(t.estimates.transport)} · Hotel ${fmtMoney(t.estimates.hotel)} · Meals ${fmtMoney(t.estimates.meals)} · Other ${fmtMoney(t.estimates.other)}`} />
-          <Info label="Booking" value={<StatusBadge status={t.bookingStatus} />} />
+          <Info label="Booking" value={<StatusBadge status={t.cancellation ? "CANCELLED" : t.bookingStatus} />} />
         </dl>
       </Card>
 
