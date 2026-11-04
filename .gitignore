@@ -5,6 +5,7 @@ node_modules
 !.env.example
 # Uploaded and generated files (pay slips, attachments, policies)
 uploads/
+uploads-e2e/
 # Local tools (Mailpit binary)
 tools/
 *.log

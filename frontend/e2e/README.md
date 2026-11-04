@@ -1,43 +1,50 @@
 # Browser tests (Playwright)
 
-| Script | Command | What it covers | Screenshots |
-|---|---|---|---|
-| `travel.mjs` | `npm run e2e:travel` | Travel steps 0–8: request, approvals, Admin booking, advance, settlement, cancellation | `test-screenshots/travel/` |
-| `inventory.mjs` | `npm run e2e:inventory` | My Inventory steps 1–12: register, issue, confirm, report lost, HR recovery (with purchase cost), Management write-off, revoke, exit clearance, repairs, department items, asset request, Excel import, team view | `test-screenshots/inventory/` |
+| Script | What it covers | Screenshots |
+|---|---|---|
+| `travel.mjs` | Travel steps 0–8: request, approvals, Admin booking, advance, settlement, cancellation | `test-screenshots/travel/` |
+| `inventory.mjs` | My Inventory steps 1–12: register, issue, confirm, report lost, HR recovery (with purchase cost), Management write-off, revoke, exit clearance, repairs, department items, asset request, Excel import, team view | `test-screenshots/inventory/` |
 
-`travel.mjs` runs in a real browser as Finance, HR, the traveller, the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
+`travel.mjs` runs in a real browser as Finance, HR, the traveller (Sara), the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
 
-`inventory.mjs` uses Admin (Usman), Sara as the holder, Ali as the requester, his line manager (read from the approval chain), HR, Management and Finance. Every run uses its own item names and tags (a short run code), so it can be repeated on the same database; it leaves the items it creates in the register.
+`inventory.mjs` uses Admin (Usman), Sara as the holder, Ali as the requester, his line manager (read from the approval chain), HR, Management and Finance.
 
-## Before you run it
+## Run all tests (isolated)
 
-- The backend, the frontend and Mailpit are running (`npm run dev` in `backend/` and `frontend/`, `npm run mailpit` in `backend/`).
-- The database has the demo accounts (`npm run db:seed`), all with password `Password@123`.
-- Chromium for Playwright is installed once: `npx playwright install chromium` (in `frontend/`).
-
-## Run
+Once, install Chromium for Playwright: `npx playwright install chromium` (in `frontend/`). PostgreSQL must be running. Then:
 
 ```
 cd frontend
-npm run e2e:travel
+npm run e2e
 ```
 
-Screenshots and a `results.json` go to `test-screenshots/travel/` at the project root (ignored by git). The console prints PASS/FAIL per step, and the exit code is 1 if any step failed.
+That is all; you don't need to start any server. `e2e/run-all.mjs`:
 
-**It changes data.** It sets the travel rates (daily allowance 2,000, mileage 45, hotel limit 12,000), makes the traveller report to Ayesha Siddiqui, and creates two trips and a settlement. Use it on a development database only.
+1. starts its own Mailpit (web 8125, SMTP 1125) and Next.js dev server (port 3100, build folder `.next-e2e/`, API URL pointing at port 5100);
+2. for **each** test file:
+   1. drops and recreates the `hr_ms_e2e` database;
+   2. applies the migrations and runs the seed (demo accounts, password `Password@123`);
+   3. empties `backend/uploads-e2e/` and Mailpit;
+   4. starts a backend on port 5100 against `hr_ms_e2e`;
+   5. runs the test, then stops that backend;
+3. stops everything it started and prints a PASS/FAIL summary. The exit code is 1 if anything failed.
 
-## Re-running on the same day
+Because every test starts from the fresh seed, the tests don't depend on each other, and you can re-run them as often as you like on the same day.
 
-The test uses a same-day trip so the settlement can be submitted straight away. Trips may not overlap, so each traveller can do this once per day. Use another demo account for the next run:
+It never touches the development database `hr_ms`, its `uploads/` folder or the dev servers on 3000/5000/8025, which can keep running. The database credentials are taken from `backend/.env`; only the database name is replaced. As a safety check, the runner refuses to reset a database whose name doesn't end in `_e2e`.
 
-```
-# PowerShell
-$env:E2E_TRAVELLER_EMAIL="employee@ehb.local"; $env:E2E_TRAVELLER_NAME="Ali Raza"; npm run e2e:travel
-```
+The server logs go to `test-screenshots/e2e-logs/` (ignored by git, like the screenshots). If a port is already in use, the run stops before changing anything.
 
-The traveller must be in a department whose HOD is Hamza Malik (Engineering). In the current development database there is a dedicated test account for this, `e2e.traveller@ehb.local` / "E2E Traveller" (created by HR, not part of the seed data; create a similar one after a reset).
+| Variable | Default |
+|---|---|
+| `E2E_SPECS` | `travel,inventory` (e.g. `E2E_SPECS=inventory` to run one) |
+| `E2E_DB_NAME` | `hr_ms_e2e` (must end in `_e2e`) |
+| `E2E_API_PORT` / `E2E_WEB_PORT` | `5100` / `3100` |
+| `E2E_MAIL_PORT` / `E2E_SMTP_PORT` | `8125` / `1125` |
 
-## Settings
+## Running one script against your own servers
+
+`npm run e2e:travel` and `npm run e2e:inventory` run a single script against whatever is already running (by default your dev servers on 3000 and Mailpit on 8025, so **against `hr_ms`**). They change that data: Travel sets the travel rates, makes the traveller report to Ayesha and creates trips. Because trips may not overlap, each traveller can run Travel only once per day; choose another one with `E2E_TRAVELLER_EMAIL` / `E2E_TRAVELLER_NAME`. Prefer `npm run e2e`.
 
 | Variable | Default |
 |---|---|
@@ -45,9 +52,10 @@ The traveller must be in a department whose HOD is Hamza Malik (Engineering). In
 | `E2E_MAILPIT_URL` | `http://127.0.0.1:8025` |
 | `E2E_PASSWORD` | `Password@123` |
 | `E2E_TRAVELLER_EMAIL` / `E2E_TRAVELLER_NAME` | `employee2@ehb.local` / `Sara Javed` |
-| `ONLY` + `TRIP1` | Re-run some steps against an existing trip, e.g. `ONLY=3,5,6` `TRIP1=9` |
+| `ONLY` + `TRIP1` | Travel: re-run some steps against an existing trip, e.g. `ONLY=3,5,6` `TRIP1=9` |
 
 ## Notes for writing selectors
 
 - A dropdown sits inside its `<label>`, so the label's text also contains every option. Find dropdowns with the `dropdown(scope, "Label")` helper, which matches the start of the label, instead of `getByLabel(...)`.
 - Playwright's `isDisabled()` reports `false` for `<option>` elements; read `option.disabled` with `evaluate` instead.
+- Don't assume who someone's line manager is; read it from the approval chain (see `inventory.mjs` step 10).

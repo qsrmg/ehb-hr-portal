@@ -85,6 +85,15 @@ The tests use a separate `hr_ms_test` database (created automatically), so your 
 - pro-rata entitlement and Annual Leave carry forward, including the automatic run on 1 January;
 - recalculation of balances when HR changes a joining date or a quota.
 
+### Browser tests (e2e)
+
+```
+cd frontend
+npm run e2e
+```
+
+One command runs every browser test (Travel, then My Inventory). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+
 ## Leave year-end
 
 Carry forward runs automatically at 00:05 on 1 January (Pakistan time) through the job queue. If the server is off at that moment, it runs once when the server starts again. HR can also run it from *Leave Types & Quotas*; running it again gives the same result, so it is safe to re-run after correcting last year's leave.

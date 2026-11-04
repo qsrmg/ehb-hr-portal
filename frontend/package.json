@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "e2e": "node e2e/run-all.mjs",
     "e2e:travel": "node e2e/travel.mjs",
     "e2e:inventory": "node e2e/inventory.mjs"
   },
