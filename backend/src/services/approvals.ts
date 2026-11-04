@@ -24,6 +24,7 @@ export const TYPE_LABELS: Record<RequestType, string> = {
   EXPENSE: "Expense Claim",
   TRAVEL: "Travel Request",
   TRAVEL_SETTLEMENT: "Travel Settlement",
+  ASSET_REQUEST: "Asset Request",
 };
 
 type ResolvedStep = {

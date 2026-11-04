@@ -38,6 +38,8 @@ model Department {
   hod       Employee?  @relation("DepartmentHod", fields: [hodId], references: [id])
   employees Employee[] @relation("DepartmentMembers")
   createdAt DateTime   @default(now())
+
+  assetAssignments AssetAssignment[]
 }
 
 model Employee {
@@ -85,24 +87,33 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  headOf                Department[]       @relation("DepartmentHod")
-  attendance            AttendanceRecord[]
-  leaveBalances         LeaveBalance[]
-  requests              Request[]          @relation("Requester")
-  stepsToApprove        RequestStep[]      @relation("StepApprover")
-  stepsActed            RequestStep[]      @relation("StepActor")
-  actions               RequestAction[]
-  payslips              Payslip[]
-  lateWarnings          LateWarning[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  documents             Document[]
-  expensesPaid          ExpenseClaim[]     @relation("ExpensePaidBy")
-  travelAdvancesPaid    TravelRequest[]    @relation("TravelAdvancePaidBy")
-  travelAdvanceReturns  TravelRequest[]    @relation("TravelAdvanceReturnedBy")
-  travelBooked          TravelRequest[]    @relation("TravelBookedBy")
-  travelCancelled       TravelRequest[]    @relation("TravelCancelledBy")
-  travelBookingsCreated TravelBooking[]
+  headOf                 Department[]       @relation("DepartmentHod")
+  attendance             AttendanceRecord[]
+  leaveBalances          LeaveBalance[]
+  requests               Request[]          @relation("Requester")
+  stepsToApprove         RequestStep[]      @relation("StepApprover")
+  stepsActed             RequestStep[]      @relation("StepActor")
+  actions                RequestAction[]
+  payslips               Payslip[]
+  lateWarnings           LateWarning[]
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  documents              Document[]
+  expensesPaid           ExpenseClaim[]     @relation("ExpensePaidBy")
+  travelAdvancesPaid     TravelRequest[]    @relation("TravelAdvancePaidBy")
+  travelAdvanceReturns   TravelRequest[]    @relation("TravelAdvanceReturnedBy")
+  travelBooked           TravelRequest[]    @relation("TravelBookedBy")
+  travelCancelled        TravelRequest[]    @relation("TravelCancelledBy")
+  travelBookingsCreated  TravelBooking[]
+  assetsHeld             AssetAssignment[]  @relation("AssetHolder")
+  assetsIssued           AssetAssignment[]  @relation("AssetIssuer")
+  assetsReceived         AssetAssignment[]  @relation("AssetReceiver")
+  assetRepairsLogged     AssetRepair[]
+  assetIncidentsAbout    AssetIncident[]    @relation("IncidentEmployee")
+  assetIncidentsReported AssetIncident[]    @relation("IncidentReporter")
+  assetIncidentsRecorded AssetIncident[]    @relation("IncidentRecorder")
+  assetRecoveriesSet     AssetIncident[]    @relation("IncidentRecoverySetter")
+  assetWriteOffs         AssetIncident[]    @relation("IncidentWriteOff")
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
@@ -218,6 +229,7 @@ enum RequestType {
   EXPENSE
   TRAVEL
   TRAVEL_SETTLEMENT
+  ASSET_REQUEST
 }
 
 enum RequestStatus {
@@ -257,6 +269,7 @@ model Request {
   attendanceUpdateRequest AttendanceUpdateRequest?
   expenseClaim            ExpenseClaim?
   travelRequest           TravelRequest?
+  assetRequest            AssetRequest?
 
   @@index([employeeId, status])
 }
@@ -626,4 +639,175 @@ model TravelBooking {
   createdAt   DateTime           @default(now())
 
   @@index([travelId])
+}
+
+// ---------- My Inventory / company assets (Phase 2) ----------
+
+enum AssetKind {
+  PHYSICAL
+  ACCESS // email, software, system access: "returned" means revoked by IT / Admin
+}
+
+enum AssetStatus {
+  IN_STOCK
+  ISSUED
+  IN_REPAIR
+  LOST
+  RETIRED
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  DAMAGED
+}
+
+enum AssigneeType {
+  EMPLOYEE
+  DEPARTMENT
+  LOCATION
+}
+
+enum IncidentType {
+  NOT_WORKING
+  DAMAGED
+  LOST
+}
+
+// REPORTED (by the employee) -> RECORDED (Admin confirms) -> RECOVERY_SET (HR) or WRITTEN_OFF (Management); CLOSED = no damage
+enum IncidentStatus {
+  REPORTED
+  RECORDED
+  RECOVERY_SET
+  WRITTEN_OFF
+  CLOSED
+}
+
+model AssetCategory {
+  id               Int            @id @default(autoincrement())
+  name             String         @unique
+  kind             AssetKind      @default(PHYSICAL)
+  // Exit clearance waits for these items to be returned (or revoked), written off or charged.
+  mustReturnOnExit Boolean        @default(true)
+  active           Boolean        @default(true)
+  sortOrder        Int            @default(0)
+  assets           Asset[]
+  requests         AssetRequest[]
+}
+
+model Asset {
+  id              Int            @id @default(autoincrement())
+  tag             String         @unique // existing tag, or generated EHB-AST-0001
+  categoryId      Int
+  category        AssetCategory  @relation(fields: [categoryId], references: [id])
+  name            String // make / model, or the account / software name
+  serialNumber    String?
+  purchaseDate    DateTime?      @db.Date
+  cost            Decimal?       @db.Decimal(12, 2) // visible to Admin, Finance and Management only
+  warrantyUntil   DateTime?      @db.Date
+  condition       AssetCondition @default(GOOD)
+  status          AssetStatus    @default(IN_STOCK)
+  storageLocation String? // where it is kept when in stock
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  assignments AssetAssignment[]
+  repairs     AssetRepair[]
+  incidents   AssetIncident[]
+
+  @@index([status])
+  @@index([categoryId])
+}
+
+// Who had the item and when. Never overwritten: a return closes the row, a new issue adds one.
+model AssetAssignment {
+  id           Int             @id @default(autoincrement())
+  assetId      Int
+  asset        Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assigneeType AssigneeType
+  employeeId   Int?
+  employee     Employee?       @relation("AssetHolder", fields: [employeeId], references: [id])
+  departmentId Int?
+  department   Department?     @relation(fields: [departmentId], references: [id])
+  location     String?
+  issuedAt     DateTime        @default(now())
+  issuedById   Int
+  issuedBy     Employee        @relation("AssetIssuer", fields: [issuedById], references: [id])
+  conditionOut AssetCondition
+  issueNote    String?
+  confirmedAt  DateTime? // the employee confirms receipt (automatic for access, departments and locations)
+  returnedAt   DateTime?
+  receivedById Int?
+  receivedBy   Employee?       @relation("AssetReceiver", fields: [receivedById], references: [id])
+  conditionIn  AssetCondition?
+  returnNote   String?
+
+  incidents AssetIncident[]
+  request   AssetRequest?
+
+  @@index([employeeId, returnedAt])
+  @@index([assetId, returnedAt])
+}
+
+model AssetRepair {
+  id          Int       @id @default(autoincrement())
+  assetId     Int
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vendor      String
+  sentOn      DateTime  @db.Date
+  returnedOn  DateTime? @db.Date
+  cost        Decimal?  @db.Decimal(12, 2)
+  note        String?
+  createdById Int
+  createdBy   Employee  @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+// Damage or loss. Admin records it, HR sets a recovery amount (sent to Finance for the final settlement),
+// or Management writes it off.
+model AssetIncident {
+  id              Int              @id @default(autoincrement())
+  assetId         Int
+  asset           Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assignmentId    Int?
+  assignment      AssetAssignment? @relation(fields: [assignmentId], references: [id])
+  employeeId      Int? // the person responsible (the holder at the time)
+  employee        Employee?        @relation("IncidentEmployee", fields: [employeeId], references: [id])
+  type            IncidentType
+  status          IncidentStatus
+  description     String
+  reportedById    Int
+  reportedBy      Employee         @relation("IncidentReporter", fields: [reportedById], references: [id])
+  createdAt       DateTime         @default(now())
+  recordedById    Int?
+  recordedBy      Employee?        @relation("IncidentRecorder", fields: [recordedById], references: [id])
+  recordedAt      DateTime?
+  adminNote       String?
+  recoveryAmount  Decimal?         @db.Decimal(12, 2)
+  recoverySetById Int?
+  recoverySetBy   Employee?        @relation("IncidentRecoverySetter", fields: [recoverySetById], references: [id])
+  recoverySetAt   DateTime?
+  recoveryNote    String?
+  writtenOffById  Int?
+  writtenOffBy    Employee?        @relation("IncidentWriteOff", fields: [writtenOffById], references: [id])
+  writtenOffAt    DateTime?
+  writeOffNote    String?
+
+  @@index([status])
+  @@index([employeeId])
+}
+
+// Employee asks for an asset: Line Manager → Admin. Admin then issues an item (fulfilment).
+model AssetRequest {
+  id           Int              @id @default(autoincrement())
+  requestId    Int              @unique
+  request      Request          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  categoryId   Int
+  category     AssetCategory    @relation(fields: [categoryId], references: [id])
+  reason       String
+  neededBy     DateTime?        @db.Date
+  assignmentId Int?             @unique
+  assignment   AssetAssignment? @relation(fields: [assignmentId], references: [id])
 }

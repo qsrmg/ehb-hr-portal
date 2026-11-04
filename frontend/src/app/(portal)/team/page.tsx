@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Alert, Card, Input, PageHeader, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
 import { AttendanceTable, MonthPicker, type MonthData } from "@/components/AttendanceMonth";
+import { TeamAssets } from "@/components/AssetPanels";
 import { useApi } from "@/lib/useApi";
 import { currentMonth, fmtDate, todayYmd } from "@/lib/format";
 
@@ -11,7 +12,7 @@ type Daily = { date: string; lastImported: string | null; rows: { employeeId: nu
 type LeaveRow = { requestId: number; status: string; employee: { id: number; fullName: string; code: string }; leaveType: string; startDate: string; endDate: string; days: number };
 
 export default function TeamPage() {
-  const [tab, setTab] = useState<"today" | "leave" | "member">("today");
+  const [tab, setTab] = useState<"today" | "leave" | "member" | "assets">("today");
   const [date, setDate] = useState(todayYmd());
   const [month, setMonth] = useState(currentMonth());
   const [memberId, setMemberId] = useState<number | null>(null);
@@ -28,7 +29,7 @@ export default function TeamPage() {
         <Tabs
           value={tab}
           onChange={setTab}
-          options={[{ value: "today", label: "Attendance by day" }, { value: "leave", label: "Leave calendar" }, ...(memberId ? [{ value: "member" as const, label: member.data?.employee.fullName ?? "Employee" }] : [])]}
+          options={[{ value: "today", label: "Attendance by day" }, { value: "leave", label: "Leave calendar" }, { value: "assets", label: "Assets" }, ...(memberId ? [{ value: "member" as const, label: member.data?.employee.fullName ?? "Employee" }] : [])]}
         />
         {tab === "today" && (
           <div className="space-y-4">
@@ -72,6 +73,7 @@ export default function TeamPage() {
             )}
           </div>
         )}
+        {tab === "assets" && <TeamAssets />}
         {tab === "member" && memberId && (
           <div className="space-y-4">
             <MonthPicker month={month} onChange={setMonth} />

@@ -25,6 +25,7 @@ export default function AllRequestsPage() {
               <option value="EXPENSE">Expense Claim</option>
               <option value="TRAVEL">Travel Request</option>
               <option value="TRAVEL_SETTLEMENT">Travel Settlement</option>
+              <option value="ASSET_REQUEST">Asset Request</option>
             </Select>
             <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-36" aria-label="Status">
               <option value="">All statuses</option>

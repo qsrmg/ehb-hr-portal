@@ -8,6 +8,7 @@ import { patch, post } from "@/lib/api";
 import { hasRole, ROLE_LABELS, useAuth, type Role } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import type { Profile } from "@/lib/types";
+import { AssetClearanceCard } from "@/components/AssetPanels";
 import { fmtDate, fmtMoney } from "@/lib/format";
 
 type Option = { id: number; name?: string; fullName?: string; code?: string };
@@ -173,6 +174,8 @@ export default function EmployeeDetailPage() {
           </dl>
         </Card>
       )}
+
+      {hasRole(user, "HR", "ADMIN", "FINANCE", "MANAGEMENT") && <AssetClearanceCard employeeId={emp.id} />}
 
       {balances.data && (
         <Card title={`Leave balances ${new Date().getFullYear()}`}>

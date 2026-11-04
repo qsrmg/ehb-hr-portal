@@ -9,6 +9,8 @@ import { ExpenseDetails, type ExpenseDetail } from "@/components/ExpenseDetails"
 import { TravelForm } from "@/components/TravelForm";
 import { SettlementForm } from "@/components/SettlementForm";
 import { TravelDetails, type TravelDetail, type TravelFlags } from "@/components/TravelDetails";
+import { AssetRequestForm } from "@/components/AssetRequestForm";
+import { AssetRequestPanel, type AssetRequestDetail } from "@/components/AssetPanels";
 import { download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -30,6 +32,8 @@ type Detail = {
   canMarkPaid: boolean;
   settlement: { travelRequestId: number; route: string; departDate: string; returnDate: string; advancePaid: number; toPay: number | null } | null;
   travel: TravelDetail | null;
+  assetRequest: AssetRequestDetail | null;
+  canFulfil: boolean;
 } & Partial<TravelFlags>;
 
 const KIND_LABELS: Record<string, string> = { MISSED_PUNCH: "Missed punch", FIELD_VISIT: "Field visit", OTHER: "Other" };
@@ -102,6 +106,7 @@ export default function RequestDetailPage() {
           {r.type === "LETTER" && <LetterForm requestId={r.id} initial={{ letterType: r.data.letterType ?? "", addressedTo: r.data.addressedTo ?? "", purpose: r.data.purpose ?? "" }} onDone={resubmitted} />}
           {r.type === "EXPENSE" && r.expense && <ExpenseForm requestId={r.id} initial={r.expense} onDone={resubmitted} />}
           {r.type === "TRAVEL" && r.travel && <TravelForm requestId={r.id} initial={r.travel} onDone={resubmitted} />}
+          {r.type === "ASSET_REQUEST" && r.assetRequest && <AssetRequestForm requestId={r.id} initial={r.assetRequest} onDone={resubmitted} />}
           {r.type === "TRAVEL_SETTLEMENT" && r.settlement && r.expense && (
             <SettlementForm
               requestId={r.id}
@@ -192,6 +197,7 @@ export default function RequestDetailPage() {
               onChanged={reload}
             />
           )}
+          {r.assetRequest && <AssetRequestPanel requestId={r.id} detail={r.assetRequest} canFulfil={r.canFulfil} onChanged={reload} />}
           {r.travel && (
             <TravelDetails
               requestId={r.id}

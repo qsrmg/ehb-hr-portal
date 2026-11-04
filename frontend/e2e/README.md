@@ -1,6 +1,13 @@
 # Browser tests (Playwright)
 
-`travel.mjs` runs steps 0–8 of the Travel test script in a real browser as Finance, HR, the traveller, the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
+| Script | Command | What it covers | Screenshots |
+|---|---|---|---|
+| `travel.mjs` | `npm run e2e:travel` | Travel steps 0–8: request, approvals, Admin booking, advance, settlement, cancellation | `test-screenshots/travel/` |
+| `inventory.mjs` | `npm run e2e:inventory` | My Inventory steps 1–12: register, issue, confirm, report lost, HR recovery (with purchase cost), Management write-off, revoke, exit clearance, repairs, department items, asset request, Excel import, team view | `test-screenshots/inventory/` |
+
+`travel.mjs` runs in a real browser as Finance, HR, the traveller, the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
+
+`inventory.mjs` uses Admin (Usman), Sara as the holder, Ali as the requester, his line manager (read from the approval chain), HR, Management and Finance. Every run uses its own item names and tags (a short run code), so it can be repeated on the same database; it leaves the items it creates in the register.
 
 ## Before you run it
 
@@ -28,7 +35,7 @@ The test uses a same-day trip so the settlement can be submitted straight away. 
 $env:E2E_TRAVELLER_EMAIL="employee@ehb.local"; $env:E2E_TRAVELLER_NAME="Ali Raza"; npm run e2e:travel
 ```
 
-The traveller must be in a department whose HOD is Hamza Malik (Engineering).
+The traveller must be in a department whose HOD is Hamza Malik (Engineering). In the current development database there is a dedicated test account for this, `e2e.traveller@ehb.local` / "E2E Traveller" (created by HR, not part of the seed data; create a similar one after a reset).
 
 ## Settings
 

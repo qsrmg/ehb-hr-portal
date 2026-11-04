@@ -23,6 +23,7 @@ import {
   settlementWindow, travelChain, travelInclude, travelRules, travelSchema, tripDays,
 } from "../services/travel.js";
 import { travelApproved } from "./travel.js";
+import { assetRequestApproved } from "./assets.js";
 import type { Prisma, RequestType } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
@@ -164,6 +165,7 @@ async function prepare(
   if (type === "EXPENSE") return prepareExpense(user, body, files, existingId);
   if (type === "TRAVEL") return prepareTravel(user, body, existingId);
   if (type === "TRAVEL_SETTLEMENT") return prepareSettlement(user, body, files, existingId);
+  if (type === "ASSET_REQUEST") return prepareAssetRequest(body);
 
   const input = parse(letterSchema, body);
   return {
@@ -227,6 +229,30 @@ async function prepareExpense(user: AuthUser, body: unknown, files: Express.Mult
           },
         });
       }
+    },
+  };
+}
+
+const assetRequestSchema = z.object({
+  categoryId: z.coerce.number().int({ message: "Choose what you need" }),
+  reason: z.string().trim().min(5, "Say why you need it"),
+  neededBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("").transform(() => undefined)),
+});
+
+/** Asset request: Line Manager → Admin; Admin then issues an item from stock. */
+async function prepareAssetRequest(body: unknown): Promise<Prepared> {
+  const input = parse(assetRequestSchema, body);
+  const category = await prisma.assetCategory.findUnique({ where: { id: input.categoryId } });
+  if (!category || !category.active) throw new HttpError(400, "Choose what you need");
+  if (input.neededBy && input.neededBy < todayYmd()) throw new HttpError(400, "The needed-by date is in the past");
+  return {
+    title: `Asset Request · ${category.name}`,
+    data: { category: category.name },
+    chain: [{ label: "Line Manager", approver: "LINE_MANAGER" }, { label: "Admin", approver: "ADMIN" }],
+    persist: async (tx, requestId, isUpdate) => {
+      const fields = { categoryId: category.id, reason: input.reason, neededBy: input.neededBy ? toDate(input.neededBy) : null };
+      if (isUpdate) await tx.assetRequest.update({ where: { requestId }, data: fields });
+      else await tx.assetRequest.create({ data: { requestId, ...fields } });
     },
   };
 }
@@ -362,6 +388,7 @@ const TYPE_ROUTES: Record<string, RequestType> = {
   expense: "EXPENSE",
   travel: "TRAVEL",
   settlement: "TRAVEL_SETTLEMENT",
+  asset: "ASSET_REQUEST",
 };
 
 async function saveAttachments(tx: Tx, requestId: number, files: Express.Multer.File[]) {
@@ -443,6 +470,7 @@ for (const action of ["approve", "reject", "return"] as const) {
     if (action === "approve") {
       const r = await prisma.request.findUnique({ where: { id }, select: { type: true, status: true } });
       if (r?.type === "TRAVEL" && r.status === "APPROVED") await travelApproved(id);
+      if (r?.type === "ASSET_REQUEST" && r.status === "APPROVED") await assetRequestApproved(id);
     }
     res.json({ ok: true });
   });
@@ -548,6 +576,12 @@ const detailInclude = {
           advanceRequested: true, advancePaidAt: true, advanceReturnedAmount: true, cancelledAt: true,
         },
       },
+    },
+  },
+  assetRequest: {
+    include: {
+      category: true,
+      assignment: { include: { asset: { select: { id: true, tag: true, name: true, serialNumber: true } }, issuedBy: { select: { fullName: true } } } },
     },
   },
   travelRequest: {
@@ -749,6 +783,18 @@ requestsRouter.get("/:id", async (req, res) => {
         }
       : null,
     ...(r.travelRequest ? await travelDetail(r, user) : { travel: null }),
+    assetRequest: r.assetRequest
+      ? {
+          categoryId: r.assetRequest.categoryId,
+          category: r.assetRequest.category.name,
+          reason: r.assetRequest.reason,
+          neededBy: r.assetRequest.neededBy ? ymd(r.assetRequest.neededBy) : null,
+          fulfilled: r.assetRequest.assignment
+            ? { tag: r.assetRequest.assignment.asset.tag, name: r.assetRequest.assignment.asset.name, serialNumber: r.assetRequest.assignment.asset.serialNumber, issuedAt: r.assetRequest.assignment.issuedAt, issuedBy: r.assetRequest.assignment.issuedBy.fullName, assetId: r.assetRequest.assignment.asset.id }
+            : null,
+        }
+      : null,
+    canFulfil: r.type === "ASSET_REQUEST" && r.status === "APPROVED" && !r.assetRequest?.assignment && hasRole(user, "ADMIN"),
   });
 });
 

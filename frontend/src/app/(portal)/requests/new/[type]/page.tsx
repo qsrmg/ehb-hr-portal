@@ -6,6 +6,7 @@ import { AttendanceUpdateForm, LeaveForm, LetterForm } from "@/components/Reques
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { TravelForm } from "@/components/TravelForm";
 import { SettlementForm } from "@/components/SettlementForm";
+import { AssetRequestForm } from "@/components/AssetRequestForm";
 
 const TITLES: Record<string, { title: string; subtitle: string }> = {
   leave: { title: "Apply for leave", subtitle: "Goes to your Line Manager (and HR for leave without pay, maternity and paternity)." },
@@ -13,6 +14,7 @@ const TITLES: Record<string, { title: string; subtitle: string }> = {
   letter: { title: "Letter request", subtitle: "Experience letter, salary certificate, employment verification or NOC. Approved by HR." },
   travel: { title: "Travel request", subtitle: "Business trips within Pakistan. Goes to your Line Manager and Head of Department; Admin books tickets and hotel once approved." },
   settlement: { title: "Trip settlement", subtitle: "What the trip cost, after you return. Goes to your Line Manager and Finance; any advance is deducted." },
+  asset: { title: "Request an asset", subtitle: "Ask for a company item or account. Goes to your Line Manager, then Admin, who issues it from stock." },
   expense: { title: "Expense claim", subtitle: "Local expenses with receipts. Goes to your Line Manager, Head of Department and Finance; Finance pays it once approved." },
 };
 
@@ -33,6 +35,7 @@ export default function NewRequestPage() {
         {type === "letter" && <LetterForm onDone={done} />}
         {type === "expense" && <ExpenseForm onDone={done} />}
         {type === "travel" && <TravelForm onDone={done} />}
+        {type === "asset" && <AssetRequestForm onDone={done} />}
         {type === "settlement" && (search.get("travel") ? <SettlementForm travelRequestId={Number(search.get("travel"))} onDone={done} /> : <Alert>Open the trip and choose “Submit trip settlement”.</Alert>)}
       </Card>
     </div>

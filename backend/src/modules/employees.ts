@@ -10,6 +10,7 @@ import { toDate, todayYmd, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
 import { recalculateEntitlements } from "../services/leave.js";
+import { employeeDeactivated } from "./assets.js";
 import type { Employee, Prisma } from "../generated/prisma/client.js";
 
 export const employeesRouter = Router();
@@ -238,6 +239,8 @@ employeesRouter.patch("/:id", requireRole("HR"), async (req, res) => {
   const joiningChanged = input.joiningDate !== undefined && input.joiningDate !== ymd(before.joiningDate);
   const leaveRecalculated = joiningChanged ? await recalculateEntitlements({ employeeId: id }) : null;
   await audit(user.id, "UPDATE", "Employee", id, { changes: diff(before, data), leaveRecalculated } as Prisma.InputJsonValue);
+  // Leaving while still holding company items: Admin is asked to collect them.
+  if (before.status === "ACTIVE" && input.status === "INACTIVE") await employeeDeactivated(id);
   res.json({ ...present(updated, user), leaveRecalculated });
 });
 
