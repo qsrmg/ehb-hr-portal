@@ -1,0 +1,10 @@
+node_modules
+# Secrets: never commit real env files (the .env.example templates are committed)
+.env
+.env.*
+!.env.example
+# Uploaded and generated files (pay slips, attachments, policies)
+uploads/
+# Local tools (Mailpit binary)
+tools/
+*.log

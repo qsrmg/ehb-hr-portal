@@ -1,0 +1,415 @@
+// EHB HR Self-Service Portal — Phase 1 schema
+// (profiles, attendance, attendance update, leave, approvals, letters, pay slips, documents)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  EMPLOYEE
+  LINE_MANAGER
+  HOD
+  HR
+  FINANCE
+  ADMIN
+  MANAGEMENT
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+model Department {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  hodId     Int?
+  hod       Employee?  @relation("DepartmentHod", fields: [hodId], references: [id])
+  employees Employee[] @relation("DepartmentMembers")
+  createdAt DateTime   @default(now())
+}
+
+model Employee {
+  id                 Int            @id @default(autoincrement())
+  code               String         @unique // EHB-2026-001
+  email              String         @unique // work email, used to log in
+  passwordHash       String
+  mustChangePassword Boolean        @default(true)
+  roles              Role[]         @default([EMPLOYEE])
+  status             EmployeeStatus @default(ACTIVE)
+
+  fullName    String
+  fatherName  String?
+  gender      Gender?
+  dateOfBirth DateTime? @db.Date
+  designation String?
+  joiningDate DateTime  @db.Date
+
+  departmentId Int?
+  department   Department? @relation("DepartmentMembers", fields: [departmentId], references: [id])
+  managerId    Int?
+  manager      Employee?   @relation("LineManager", fields: [managerId], references: [id])
+  reports      Employee[]  @relation("LineManager")
+
+  machineId String? @unique // biometric machine ID
+
+  // Contact details: editable by the employee
+  phone                 String?
+  personalEmail         String?
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  // Sensitive: HR only (CNIC / family) and HR + payroll (bank)
+  cnic          String?
+  maritalStatus String?
+  familyDetails String?
+  bankName      String?
+  bankAccount   String?
+
+  // Salary: visible to the employee, HR, Finance, Management
+  basicSalary Decimal? @db.Decimal(12, 2)
+  grossSalary Decimal? @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  headOf         Department[]       @relation("DepartmentHod")
+  attendance     AttendanceRecord[]
+  leaveBalances  LeaveBalance[]
+  requests       Request[]          @relation("Requester")
+  stepsToApprove RequestStep[]      @relation("StepApprover")
+  stepsActed     RequestStep[]      @relation("StepActor")
+  actions        RequestAction[]
+  payslips       Payslip[]
+  lateWarnings   LateWarning[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  documents      Document[]
+}
+
+// HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
+model Setting {
+  key       String   @id
+  value     String
+  label     String?
+  updatedAt DateTime @updatedAt
+}
+
+model Holiday {
+  id   Int      @id @default(autoincrement())
+  date DateTime @unique @db.Date
+  name String
+}
+
+enum AttendanceStatus {
+  ON_TIME
+  LATE
+  HALF_DAY
+  ABSENT
+}
+
+model AttendanceImport {
+  id           Int                @id @default(autoincrement())
+  fileName     String
+  importedById Int
+  rowsRead     Int
+  rowsImported Int
+  unmatchedIds String[]
+  fromDate     DateTime?          @db.Date
+  toDate       DateTime?          @db.Date
+  createdAt    DateTime           @default(now())
+  records      AttendanceRecord[]
+}
+
+// One row per employee per day from the biometric import. The original machine values are never
+// overwritten; an approved Attendance Update fills the corrected* fields instead.
+model AttendanceRecord {
+  id         Int               @id @default(autoincrement())
+  employeeId Int
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+  date       DateTime          @db.Date
+  checkIn    Int? // minutes from midnight
+  checkOut   Int?
+  status     AttendanceStatus
+  importId   Int?
+  import     AttendanceImport? @relation(fields: [importId], references: [id])
+
+  correctedCheckIn    Int?
+  correctedCheckOut   Int?
+  correctedStatus     AttendanceStatus?
+  correctionRequestId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+model LateWarning {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  year       Int
+  month      Int
+  lateCount  Int
+  createdAt  DateTime @default(now())
+
+  @@unique([employeeId, year, month])
+}
+
+model LeaveType {
+  id                Int            @id @default(autoincrement())
+  code              String         @unique // AL, CL, SL, LWP, ML, PL
+  name              String
+  annualQuota       Decimal?       @db.Decimal(5, 1) // null = no fixed quota (e.g. LWP)
+  paid              Boolean        @default(true)
+  needsHrApproval   Boolean        @default(false)
+  noticeDays        Int            @default(0)
+  documentAfterDays Int? // e.g. SL: certificate needed above 2 days
+  carryForwardMax   Decimal?       @db.Decimal(5, 1)
+  proRata           Boolean        @default(true)
+  gender            Gender?
+  active            Boolean        @default(true)
+  balances          LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+}
+
+model LeaveBalance {
+  id             Int       @id @default(autoincrement())
+  employeeId     Int
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  leaveTypeId    Int
+  leaveType      LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year           Int
+  entitled       Decimal   @db.Decimal(5, 1)
+  carriedForward Decimal   @default(0) @db.Decimal(5, 1)
+  used           Decimal   @default(0) @db.Decimal(5, 1)
+  // Set when HR adjusts the entitlement by hand; automatic recalculation then leaves it alone.
+  entitledManual Boolean   @default(false)
+
+  @@unique([employeeId, leaveTypeId, year])
+}
+
+// ---------- Approval engine ----------
+
+enum RequestType {
+  LEAVE
+  ATTENDANCE_UPDATE
+  LETTER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+  CANCELLED
+}
+
+enum StepStatus {
+  WAITING
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+  SKIPPED
+}
+
+model Request {
+  id          Int           @id @default(autoincrement())
+  type        RequestType
+  employeeId  Int
+  employee    Employee      @relation("Requester", fields: [employeeId], references: [id])
+  status      RequestStatus @default(PENDING)
+  currentStep Int           @default(0)
+  title       String
+  data        Json          @default("{}")
+  outputPath  String? // generated letter PDF
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  steps                   RequestStep[]
+  actions                 RequestAction[]
+  attachments             RequestAttachment[]
+  leaveRequest            LeaveRequest?
+  attendanceUpdateRequest AttendanceUpdateRequest?
+
+  @@index([employeeId, status])
+}
+
+model RequestStep {
+  id             Int        @id @default(autoincrement())
+  requestId      Int
+  request        Request    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  order          Int
+  label          String // "Line Manager", "HR"...
+  approverId     Int? // specific person (line manager / HOD)
+  approver       Employee?  @relation("StepApprover", fields: [approverId], references: [id])
+  approverRole   Role? // or anyone holding this role (HR, Finance)
+  status         StepStatus @default(WAITING)
+  actedById      Int?
+  actedBy        Employee?  @relation("StepActor", fields: [actedById], references: [id])
+  actedAt        DateTime?
+  comment        String?
+  pendingSince   DateTime?
+  lastReminderAt DateTime?
+
+  @@unique([requestId, order])
+  @@index([approverId, status])
+}
+
+model RequestAction {
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actorId   Int
+  actor     Employee @relation(fields: [actorId], references: [id])
+  action    String // SUBMITTED, APPROVED, REJECTED, RETURNED, RESUBMITTED, CANCELLED
+  stepOrder Int?
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model RequestAttachment {
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fileName  String
+  path      String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+}
+
+model LeaveRequest {
+  id          Int       @id @default(autoincrement())
+  requestId   Int       @unique
+  request     Request   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  leaveTypeId Int
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  startDate   DateTime  @db.Date
+  endDate     DateTime  @db.Date
+  days        Decimal   @db.Decimal(5, 1)
+  reason      String
+}
+
+enum AttendanceUpdateKind {
+  MISSED_PUNCH
+  FIELD_VISIT
+  OTHER
+}
+
+model AttendanceUpdateRequest {
+  id        Int                  @id @default(autoincrement())
+  requestId Int                  @unique
+  request   Request              @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  date      DateTime             @db.Date
+  kind      AttendanceUpdateKind
+  checkIn   Int?
+  checkOut  Int?
+  reason    String
+}
+
+// ---------- Pay slips ----------
+
+model PayrollUpload {
+  id           Int       @id @default(autoincrement())
+  year         Int
+  month        Int
+  fileName     String
+  uploadedById Int
+  rowsImported Int
+  unmatched    String[]
+  createdAt    DateTime  @default(now())
+  payslips     Payslip[]
+}
+
+model Payslip {
+  id         Int           @id @default(autoincrement())
+  employeeId Int
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+  uploadId   Int
+  upload     PayrollUpload @relation(fields: [uploadId], references: [id])
+  year       Int
+  month      Int
+
+  basic      Decimal @default(0) @db.Decimal(12, 2)
+  houseRent  Decimal @default(0) @db.Decimal(12, 2)
+  medical    Decimal @default(0) @db.Decimal(12, 2)
+  conveyance Decimal @default(0) @db.Decimal(12, 2)
+  fuel       Decimal @default(0) @db.Decimal(12, 2)
+  mobile     Decimal @default(0) @db.Decimal(12, 2)
+  gross      Decimal @default(0) @db.Decimal(12, 2)
+
+  incomeTax       Decimal @default(0) @db.Decimal(12, 2)
+  eobi            Decimal @default(0) @db.Decimal(12, 2)
+  providentFund   Decimal @default(0) @db.Decimal(12, 2)
+  totalDeductions Decimal @default(0) @db.Decimal(12, 2)
+  netPay          Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([employeeId, year, month])
+}
+
+// ---------- Policies and HR documents ----------
+
+enum DocumentCategory {
+  POLICY
+  HR_FORM
+}
+
+model Document {
+  id           Int              @id @default(autoincrement())
+  title        String
+  description  String?
+  category     DocumentCategory
+  fileName     String
+  path         String
+  mimeType     String
+  size         Int
+  uploadedById Int
+  uploadedBy   Employee         @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime         @default(now())
+}
+
+// ---------- Notifications and audit ----------
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  title      String
+  body       String
+  link       String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, read])
+}
+
+model AuditLog {
+  id        Int       @id @default(autoincrement())
+  actorId   Int?
+  actor     Employee? @relation(fields: [actorId], references: [id])
+  action    String // CREATE, UPDATE, VIEW_SENSITIVE, IMPORT, LOGIN...
+  entity    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime  @default(now())
+
+  @@index([entity, entityId])
+}

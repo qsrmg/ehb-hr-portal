@@ -1,0 +1,96 @@
+# EHB HR Self-Service Portal
+
+Phase 1 of the portal described in `EHB_HR_Portal_Project_Overview11.pdf`: login and dashboard, employee profiles, attendance import, Attendance Update, leave, pay slips and tax statement, policies and HR documents. It also includes the shared approval engine and the Letter Request form.
+
+| Part      | Stack                                              | Folder      | Port |
+|-----------|----------------------------------------------------|-------------|------|
+| Frontend  | Next.js 16 (App Router, TypeScript, Tailwind v4)   | `frontend/` | 3000 |
+| Backend   | Node.js + Express 5 + TypeScript + Prisma 7        | `backend/`  | 5000 |
+| Database  | PostgreSQL 18 (local, port 5433)                   | —           | —    |
+
+## Setup
+
+1. In `backend/.env`, set `DATABASE_URL` to your Postgres user and password (see `backend/.env.example`).
+2. Backend:
+   ```
+   cd backend
+   npm install
+   npm run db:migrate      # creates the hr_ms database and tables
+   npm run db:seed         # demo data (only runs on an empty database)
+   npm run dev             # http://localhost:5000/api/health
+   ```
+3. Frontend (second terminal):
+   ```
+   cd frontend
+   npm install
+   npm run dev             # http://localhost:3000
+   ```
+
+`npm run db:reset` in `backend/` drops all data, re-applies migrations and re-seeds.
+
+## Demo accounts
+
+Password for all accounts: `Password@123`
+
+| Email                 | Name            | Roles                    | Use it to test |
+|-----------------------|-----------------|--------------------------|----------------|
+| `employee@ehb.local`  | Ali Raza        | Employee                 | Has late arrivals, a half day, an absence and a missed punch this month |
+| `employee2@ehb.local` | Sara Javed      | Employee                 | Joined April 2026 (pro-rated leave); has approved Annual Leave |
+| `manager@ehb.local`   | Hamza Malik     | Line Manager, HOD        | Approves Ali's and Sara's leave and attendance updates; Team page |
+| `hr@ehb.local`        | Ayesha Siddiqui | HR, HOD                  | Employee records, imports, holidays, leave quotas, letters, settings, audit |
+| `finance@ehb.local`   | Bilal Ahmed     | Finance, HOD             | Payroll upload |
+| `admin@ehb.local`     | Usman Tariq     | Admin                    | Read-only employee list |
+| `ceo@ehb.local`       | Imran Qureshi   | Management               | All requests, audit log, salary data |
+
+## Test script
+
+1. **Dashboard**: log in as Ali. You should see this month's On Time / Late / Half Day / Absent counts, leave balances, open requests and the latest pay slip.
+2. **Attendance Update**: on *Attendance*, click **Fix** on the last day (missed punch). Enter a check-out time and submit. Log in as Hamza; it appears under *Approvals*. Approve it. Back as Ali, the day shows the corrected status, with the machine values struck through. The original record is kept.
+3. **Leave**: as Ali, apply for Annual Leave over a range that includes a weekend. The form counts working days only and checks the balance and the 3-day notice period. Try Sick Leave for 3+ days without an attachment; it asks for a medical certificate. Hamza approves; the balance drops.
+4. **Return and resubmit**: Hamza returns a request with a comment. Ali sees *Returned*, edits it and resubmits, and the chain restarts.
+5. **Leave Without Pay**: needs Line Manager **and** HR approval (two-step chain).
+6. **Letter Request**: Ali requests a Salary Certificate. Ayesha (HR) approves. Ali downloads the PDF letter.
+7. **Attendance import**: as Ayesha, open *Attendance Import* and upload `backend/samples/attendance-daily.csv` or `attendance-punch-log.csv`. Machine ID 999 is reported as unmatched. Ali already has 3 late arrivals, so a late warning appears under *Late Warnings*.
+8. **Payroll**: as Bilal, open *Payroll Upload* and upload `backend/samples/payroll-october-2026.csv` for October 2026. Employees get pay slips (PDF) and a July–June tax statement.
+9. **Employee import**: as Ayesha, open *Employees* and import `backend/samples/employees-google-form.csv`. Codes such as EHB-2026-008 are generated, and the new employees must change the initial password `Welcome@123`.
+10. **Privacy**: as Hamza, open Ali's profile from *Team*. Only work information is shown. As Ayesha, the CNIC, bank and family fields are visible, and the view is logged in *Audit Log*.
+11. **Settings**: as Ayesha, change the late cutoff, Attendance Update limit or reminder interval under *Rules & Settings*.
+
+## Emails
+
+Every approval step sends an email to the employee and to the next approver: submitted, approved at a step, final approval, returned, rejected, resubmitted, and cancelled (the approver is told). While a request waits, the current approver gets a reminder every 3 hours, Monday to Friday 09:00–18:00 Pakistan time, skipping public holidays. The interval and office hours are HR settings. The same messages appear under the bell icon.
+
+Emails go through a background job queue ([pg-boss](https://github.com/timgit/pg-boss)), which keeps its jobs in the same PostgreSQL database (schema `pgboss`). Failed emails are retried up to 5 times with increasing delays, and the reminder check runs every 10 minutes on a schedule.
+
+**Seeing emails locally (Mailpit).** Nothing reaches real inboxes in development:
+
+```
+cd backend
+npm run mailpit          # third terminal; keep it running
+```
+
+Open http://localhost:8025 to read every email the portal sends. Mailpit is in `tools/mailpit/` and listens on this computer only. To skip Mailpit, set `SMTP_HOST=` (empty) in `backend/.env` and emails are printed in the backend console instead. In production, put your real SMTP server in `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM`.
+
+## Tests
+
+```
+cd backend
+npm test
+```
+
+The tests use a separate `hr_ms_test` database (created automatically), so your demo data is never touched. They cover:
+
+- the emails at every approval step, and retries when the mail server fails;
+- the 3-hour reminders: office hours, weekends, holidays and the interval;
+- pro-rata entitlement and Annual Leave carry forward, including the automatic run on 1 January;
+- recalculation of balances when HR changes a joining date or a quota.
+
+## Leave year-end
+
+Carry forward runs automatically at 00:05 on 1 January (Pakistan time) through the job queue. If the server is off at that moment, it runs once when the server starts again. HR can also run it from *Leave Types & Quotas*; running it again gives the same result, so it is safe to re-run after correcting last year's leave.
+
+## Not yet decided (placeholders)
+
+- Leave quotas, notice periods and maternity/paternity days are placeholders until *HR Portal — Final Rules v1* is signed off. HR can edit them under *Leave Types & Quotas*.
+- Biometric export format: the import accepts a daily sheet (ID, Date, Check In, Check Out) or a raw punch log (ID, Date/Time).
+- Only fixed-date public holidays are seeded. HR adds Eid and other moon-sighted holidays.
