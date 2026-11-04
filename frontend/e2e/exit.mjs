@@ -31,8 +31,9 @@ async function as(email, fn) {
     await page.goto(`${BASE}/login`);
     await page.getByLabel("Work email").fill(email);
     await page.getByLabel("Password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("heading", { name: /Welcome/ }).waitFor();
+    await page.getByRole("button", { name: "Sign in securely" }).click();
+    await page.waitForURL(/\/dashboard$/);
+    await page.locator("main h1").first().waitFor();
     try {
       return await fn(page);
     } catch (err) {
@@ -327,7 +328,7 @@ await step(9, "Ayesha starts a termination for Sara (last day yesterday); after 
   await page.goto(`${BASE}/login`);
   await page.getByLabel("Work email").fill("employee2@ehb.local");
   await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByRole("button", { name: "Sign in securely" }).click();
   await page.getByRole("alert").waitFor();
   s(await snap(page, "step9-sara-login-refused"));
   await context.close();

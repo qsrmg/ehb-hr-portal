@@ -43,8 +43,9 @@ async function as(email, fn) {
     await page.goto(`${BASE}/login`);
     await page.getByLabel("Work email").fill(email);
     await page.getByLabel("Password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("heading", { name: /Welcome/ }).waitFor();
+    await page.getByRole("button", { name: "Sign in securely" }).click();
+    await page.waitForURL(/\/dashboard$/);
+    await page.locator("main h1").first().waitFor();
     try {
       return await fn(page);
     } catch (err) {

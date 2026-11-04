@@ -2,6 +2,7 @@
 
 | Script | What it covers | Screenshots |
 |---|---|---|
+| `design.mjs` | Landing, sign-in and dashboard at 1366px and 375px: sections, Sign in / Access HR Portal go to `/login`, signed-in users go from `/` to `/dashboard`, no sideways scrolling; full-page screenshots | `test-screenshots/design/` |
 | `travel.mjs` | Travel steps 0–8: request, approvals, Admin booking, advance, settlement, cancellation | `test-screenshots/travel/` |
 | `inventory.mjs` | My Inventory steps 1–12: register, issue, confirm, report lost, HR recovery (with purchase cost), Management write-off, revoke, exit clearance, repairs, department items, asset request, Excel import, team view | `test-screenshots/inventory/` |
 | `exit.mjs` | Resignation & exit clearance steps 1–9: resignation with early release, HR decision, exit interview, IT / Admin blocked by a laptop, parallel clearances, Finance settlement, letters by email, termination completed and login refused | `test-screenshots/exit/` |
@@ -40,7 +41,7 @@ The server logs go to `test-screenshots/e2e-logs/` (ignored by git, like the scr
 
 | Variable | Default |
 |---|---|
-| `E2E_SPECS` | `travel,inventory,exit` (e.g. `E2E_SPECS=exit` to run one) |
+| `E2E_SPECS` | `design,travel,inventory,exit` (e.g. `E2E_SPECS=exit` to run one) |
 | `E2E_DB_NAME` | `hr_ms_e2e` (must end in `_e2e`) |
 | `E2E_API_PORT` / `E2E_WEB_PORT` | `5100` / `3100` |
 | `E2E_MAIL_PORT` / `E2E_SMTP_PORT` | `8125` / `1125` |

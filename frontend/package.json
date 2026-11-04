@@ -10,7 +10,8 @@
     "e2e": "node e2e/run-all.mjs",
     "e2e:travel": "node e2e/travel.mjs",
     "e2e:inventory": "node e2e/inventory.mjs",
-    "e2e:exit": "node e2e/exit.mjs"
+    "e2e:exit": "node e2e/exit.mjs",
+    "e2e:design": "node e2e/design.mjs"
   },
   "dependencies": {
     "next": "16.4.2",

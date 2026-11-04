@@ -21,7 +21,7 @@ export default function ChangePasswordPage() {
     try {
       await post("/auth/change-password", { currentPassword: form.currentPassword, newPassword: form.newPassword });
       await refresh();
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (err) {
       setError((err as Error).message);
     } finally {

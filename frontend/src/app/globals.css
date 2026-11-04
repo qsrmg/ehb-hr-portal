@@ -12,6 +12,19 @@
   --color-brand-dark: #152b45;
   --color-accent: #2b7a87;
   --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-manrope), "Segoe UI", Arial, sans-serif;
+
+  /* EHB HR Portal design (landing, sign-in, dashboard, sidebar) */
+  --color-ink-950: #09182f; /* page background */
+  --color-ink-900: #0f1f39; /* sidebar and darker panels */
+  --color-ink-800: #15284a; /* cards */
+  --color-ink-700: #1c3259; /* raised tiles, inputs on dark */
+  --color-line: #243a62; /* card borders on dark */
+  --color-mist: #f5f6fa; /* light card on the dark page */
+  --color-haze: #9fb0cc; /* muted blue-grey body text */
+  --color-primary: #2563eb;
+  --color-primary-hover: #4279f0;
+  --color-sun: #f7c632;
   --font-mono: var(--font-geist-mono);
 }
 

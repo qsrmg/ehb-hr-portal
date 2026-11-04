@@ -16,7 +16,7 @@ const NAV: NavGroup[] = [
   {
     title: "My HR",
     items: [
-      { href: "/", label: "Dashboard" },
+      { href: "/dashboard", label: "Dashboard" },
       { href: "/profile", label: "My Profile" },
       { href: "/attendance", label: "Attendance" },
       { href: "/leave", label: "Leave" },
@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   const nav = (
     <nav className="flex flex-col gap-5 px-3 py-4">
