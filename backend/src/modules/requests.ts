@@ -24,6 +24,10 @@ import {
 } from "../services/travel.js";
 import { travelApproved } from "./travel.js";
 import { assetRequestApproved } from "./assets.js";
+import {
+  createExitCase, daysBetween, exitCaseOpened, handoverFor, handoverWarning, noticeFor, openExitCase, resignationChain,
+} from "../services/exits.js";
+import type { OnStepApproved } from "../services/approvals.js";
 import type { Prisma, RequestType } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
@@ -166,6 +170,7 @@ async function prepare(
   if (type === "TRAVEL") return prepareTravel(user, body, existingId);
   if (type === "TRAVEL_SETTLEMENT") return prepareSettlement(user, body, files, existingId);
   if (type === "ASSET_REQUEST") return prepareAssetRequest(body);
+  if (type === "RESIGNATION") return prepareResignation(user, body, existingId);
 
   const input = parse(letterSchema, body);
   return {
@@ -256,6 +261,80 @@ async function prepareAssetRequest(body: unknown): Promise<Prepared> {
     },
   };
 }
+
+const resignationSchema = z.object({
+  reason: z.string().trim().min(3, "Give the reason for resigning"),
+  proposedLastDay: ymdString,
+});
+
+/** Resignation: the notice period (probation or confirmed) is worked out from the day notice is given. */
+async function prepareResignation(user: AuthUser, body: unknown, existingId?: number): Promise<Prepared> {
+  const input = parse(resignationSchema, body);
+  if (await openExitCase(user.id)) throw new HttpError(400, "Your exit is already under way");
+  const other = await prisma.request.findFirst({
+    where: { employeeId: user.id, type: "RESIGNATION", status: { in: ["PENDING", "RETURNED"] }, ...(existingId ? { id: { not: existingId } } : {}) },
+  });
+  if (other) throw new HttpError(400, `You already have a resignation waiting for approval (request #${other.id})`);
+  // A resubmitted resignation keeps the day notice was first given.
+  const existing = existingId ? await prisma.resignationRequest.findUnique({ where: { requestId: existingId } }) : null;
+  const givenOn = existing?.resignationDate ?? toDate(todayYmd());
+  if (input.proposedLastDay < ymd(givenOn) || input.proposedLastDay < todayYmd()) throw new HttpError(400, "The last working day cannot be in the past");
+  const notice = await noticeFor(user.id, givenOn);
+  return {
+    title: `Resignation · last working day ${input.proposedLastDay}`,
+    data: {},
+    chain: await resignationChain(user.id),
+    persist: async (tx, requestId, isUpdate) => {
+      const fields = {
+        reason: input.reason, resignationDate: givenOn, proposedLastDay: toDate(input.proposedLastDay),
+        onProbation: notice.onProbation, noticeDays: notice.noticeDays, noticeEndDate: notice.noticeEndDate, earlyReleaseRecommended: null,
+      };
+      if (isUpdate) await tx.resignationRequest.update({ where: { requestId }, data: fields });
+      else await tx.resignationRequest.create({ data: { requestId, ...fields } });
+    },
+  };
+}
+
+const decisionSchema = z.object({
+  comment: z.string().optional(),
+  // Resignation: the Line Manager's recommendation on early release, and HR's final last working day
+  earlyRelease: z.boolean().optional(),
+  lastWorkingDay: ymdString.optional(),
+  waiveShortfall: z.boolean().optional(),
+});
+type Decision = z.infer<typeof decisionSchema>;
+
+/**
+ * Early release: the Line Manager recommends it, HR approves it. HR's final approval sets the last working day
+ * and opens the exit case; Finance deducts any notice not served unless HR waives it.
+ */
+const resignationDecision = (body: Decision, approverId: number): OnStepApproved => async (tx, ctx) => {
+  if (ctx.type !== "RESIGNATION") return;
+  const r = await tx.resignationRequest.findUniqueOrThrow({ where: { requestId: ctx.requestId } });
+  const early = r.proposedLastDay < r.noticeEndDate;
+  let recommended = r.earlyReleaseRecommended;
+  if (ctx.step.label === "Line Manager" && early) {
+    if (body.earlyRelease === undefined) {
+      throw new HttpError(400, `The proposed last day is before the notice period ends (${ymd(r.noticeEndDate)}). Say whether you recommend releasing them early.`);
+    }
+    recommended = body.earlyRelease;
+    await tx.resignationRequest.update({ where: { id: r.id }, data: { earlyReleaseRecommended: recommended } });
+  }
+  if (!ctx.isFinal) return;
+  const hadLineManager = (await tx.requestStep.count({ where: { requestId: ctx.requestId, label: "Line Manager" } })) > 0;
+  const mayRelease = recommended === true || !hadLineManager;
+  const lastDay = toDate(body.lastWorkingDay ?? ymd(early && !mayRelease ? r.noticeEndDate : r.proposedLastDay));
+  if (lastDay < r.resignationDate) throw new HttpError(400, "The last working day is before the resignation date");
+  if (lastDay < r.noticeEndDate && !mayRelease) {
+    throw new HttpError(400, `The Line Manager did not recommend early release, so the last working day cannot be before the notice period ends (${ymd(r.noticeEndDate)})`);
+  }
+  const shortfallDays = Math.max(0, daysBetween(lastDay, r.noticeEndDate));
+  await createExitCase(tx, {
+    employeeId: ctx.employeeId, type: "RESIGNATION", reason: r.reason, requestId: ctx.requestId, startedById: approverId,
+    noticeGivenOn: r.resignationDate, noticeDays: r.noticeDays, noticeEndDate: r.noticeEndDate, lastWorkingDay: lastDay,
+    shortfallDays, shortfallWaived: shortfallDays > 0 && !!body.waiveShortfall,
+  });
+};
 
 /** Pre-trip travel request: Line Manager → HOD (+ Management above the threshold, + Finance for an advance). */
 async function prepareTravel(user: AuthUser, body: unknown, existingId?: number): Promise<Prepared> {
@@ -389,6 +468,7 @@ const TYPE_ROUTES: Record<string, RequestType> = {
   travel: "TRAVEL",
   settlement: "TRAVEL_SETTLEMENT",
   asset: "ASSET_REQUEST",
+  resignation: "RESIGNATION",
 };
 
 async function saveAttachments(tx: Tx, requestId: number, files: Express.Multer.File[]) {
@@ -460,17 +540,17 @@ requestsRouter.put("/:id/resubmit", requestFilesUpload.any(), async (req, res) =
   }
 });
 
-const actionSchema = z.object({ comment: z.string().optional() });
-
 for (const action of ["approve", "reject", "return"] as const) {
   requestsRouter.post(`/:id/${action}`, async (req, res) => {
-    const { comment } = actionSchema.parse(req.body ?? {});
+    const body = parse(decisionSchema, req.body ?? {});
     const id = Number(req.params.id);
-    await actOnRequest(id, currentUser(req), action.toUpperCase() as "APPROVE", comment, onApproved);
+    const user = currentUser(req);
+    await actOnRequest(id, user, action.toUpperCase() as "APPROVE", body.comment, onApproved, resignationDecision(body, user.id));
     if (action === "approve") {
-      const r = await prisma.request.findUnique({ where: { id }, select: { type: true, status: true } });
+      const r = await prisma.request.findUnique({ where: { id }, select: { type: true, status: true, exitCase: { select: { id: true } } } });
       if (r?.type === "TRAVEL" && r.status === "APPROVED") await travelApproved(id);
       if (r?.type === "ASSET_REQUEST" && r.status === "APPROVED") await assetRequestApproved(id);
+      if (r?.type === "RESIGNATION" && r.status === "APPROVED" && r.exitCase) await exitCaseOpened(r.exitCase.id);
     }
     res.json({ ok: true });
   });
@@ -594,6 +674,8 @@ const detailInclude = {
       settlement: { include: { request: { select: { id: true, status: true } }, lines: true } },
     },
   },
+  resignation: true,
+  exitCase: { select: { id: true } },
 } satisfies Prisma.RequestInclude;
 
 type Detail = Prisma.RequestGetPayload<{ include: typeof detailInclude }>;
@@ -795,8 +877,38 @@ requestsRouter.get("/:id", async (req, res) => {
         }
       : null,
     canFulfil: r.type === "ASSET_REQUEST" && r.status === "APPROVED" && !r.assetRequest?.assignment && hasRole(user, "ADMIN"),
+    resignation: r.resignation ? await resignationDetail(r, user, current) : null,
   });
 });
+
+/** Resignation details, and what the current approver must decide (early release, last working day). */
+async function resignationDetail(r: Detail, user: AuthUser, current: Detail["steps"][number] | undefined) {
+  const x = r.resignation!;
+  const early = x.proposedLastDay < x.noticeEndDate;
+  const canAct = !!current && canActOnStep(user, r.employeeId, current, priorApproverIds(r.steps, current.order));
+  const isFinal = !!current && current.order === Math.max(...r.steps.map((s) => s.order));
+  const hadLineManager = r.steps.some((s) => s.label === "Line Manager");
+  const mayReleaseEarly = x.earlyReleaseRecommended === true || !hadLineManager;
+  // Warn HR at approval time about the team and approvals the leaver still holds.
+  const warning = r.status === "PENDING" && hasRole(user, "HR", "MANAGEMENT") && user.id !== r.employeeId
+    ? handoverWarning(r.employee.fullName, await handoverFor(r.employeeId))
+    : null;
+  return {
+    reason: x.reason,
+    resignationDate: ymd(x.resignationDate),
+    proposedLastDay: ymd(x.proposedLastDay),
+    onProbation: x.onProbation,
+    noticeDays: x.noticeDays,
+    noticeEndDate: ymd(x.noticeEndDate),
+    earlyRelease: early,
+    earlyReleaseRecommended: x.earlyReleaseRecommended,
+    mayReleaseEarly,
+    exitCaseId: r.exitCase?.id ?? null,
+    decision: canAct ? (isFinal ? "FINAL" : current!.label === "Line Manager" && early ? "LINE_MANAGER" : null) : null,
+    defaultLastWorkingDay: ymd(early && !mayReleaseEarly ? x.noticeEndDate : x.proposedLastDay),
+    handoverWarning: warning,
+  };
+}
 
 requestsRouter.get("/:id/attachments/:attachmentId", async (req, res) => {
   const user = currentUser(req);

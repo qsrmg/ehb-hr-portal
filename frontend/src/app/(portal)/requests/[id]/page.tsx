@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { Alert, Button, Card, Field, Info, PageHeader, Spinner, StatusBadge, Textarea } from "@/components/ui";
-import { AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES } from "@/components/RequestForms";
+import { Alert, Button, Card, Field, Info, Input, LinkButton, PageHeader, Select, Spinner, StatusBadge, Textarea } from "@/components/ui";
+import { AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES, ResignationForm } from "@/components/RequestForms";
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { ExpenseDetails, type ExpenseDetail } from "@/components/ExpenseDetails";
 import { TravelForm } from "@/components/TravelForm";
@@ -34,7 +34,16 @@ type Detail = {
   travel: TravelDetail | null;
   assetRequest: AssetRequestDetail | null;
   canFulfil: boolean;
+  resignation: Resignation | null;
 } & Partial<TravelFlags>;
+
+type Resignation = {
+  reason: string; resignationDate: string; proposedLastDay: string; onProbation: boolean; noticeDays: number; noticeEndDate: string;
+  earlyRelease: boolean; earlyReleaseRecommended: boolean | null; mayReleaseEarly: boolean; exitCaseId: number | null;
+  decision: "LINE_MANAGER" | "FINAL" | null; defaultLastWorkingDay: string; handoverWarning: string | null;
+};
+
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
 
 const KIND_LABELS: Record<string, string> = { MISSED_PUNCH: "Missed punch", FIELD_VISIT: "Field visit", OTHER: "Other" };
 const ACTION_LABELS: Record<string, string> = {
@@ -52,16 +61,24 @@ export default function RequestDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(search.get("submitted") ? "Request submitted. It has been sent to the first approver." : null);
+  const [earlyRelease, setEarlyRelease] = useState<"" | "yes" | "no">("");
+  const [lastWorkingDay, setLastWorkingDay] = useState("");
+  const [waiveShortfall, setWaiveShortfall] = useState(false);
 
   if (loading && !r) return <Spinner />;
   if (error || !r) return <Alert>{error}</Alert>;
 
   const act = async (action: "approve" | "reject" | "return" | "cancel") => {
-    if (action === "cancel" && !confirm("Cancel this request?")) return;
+    if (action === "cancel" && !confirm(r.type === "RESIGNATION" ? "Withdraw your resignation?" : "Cancel this request?")) return;
     setBusy(action);
     setActionError(null);
     try {
-      await post(`/requests/${r.id}/${action}`, { comment });
+      const decision = action === "approve" && r.resignation?.decision
+        ? r.resignation.decision === "LINE_MANAGER"
+          ? { earlyRelease: earlyRelease === "" ? undefined : earlyRelease === "yes" }
+          : { lastWorkingDay: lastWorkingDay || r.resignation.defaultLastWorkingDay, waiveShortfall }
+        : {};
+      await post(`/requests/${r.id}/${action}`, { comment, ...decision });
       setComment("");
       setNotice({ approve: "Approved.", reject: "Rejected.", return: "Returned to the employee for changes.", cancel: "Request cancelled." }[action]);
       await reload();
@@ -87,7 +104,8 @@ export default function RequestDetailPage() {
           <>
             {r.letterAvailable && <Button onClick={() => download(`/requests/${r.id}/letter`, `letter-${r.id}.pdf`)}>Download letter (PDF)</Button>}
             {r.canResubmit && !editing && <Button onClick={() => setEditing(true)}>Edit and resubmit</Button>}
-            {r.canCancel && <Button variant="secondary" loading={busy === "cancel"} onClick={() => act("cancel")}>Cancel request</Button>}
+            {r.resignation?.exitCaseId && <LinkButton href={`/exits/${r.resignation.exitCaseId}`}>Open exit clearance</LinkButton>}
+            {r.canCancel && <Button variant="secondary" loading={busy === "cancel"} onClick={() => act("cancel")}>{r.type === "RESIGNATION" ? "Withdraw resignation" : "Cancel request"}</Button>}
           </>
         }
       />
@@ -106,6 +124,7 @@ export default function RequestDetailPage() {
           {r.type === "LETTER" && <LetterForm requestId={r.id} initial={{ letterType: r.data.letterType ?? "", addressedTo: r.data.addressedTo ?? "", purpose: r.data.purpose ?? "" }} onDone={resubmitted} />}
           {r.type === "EXPENSE" && r.expense && <ExpenseForm requestId={r.id} initial={r.expense} onDone={resubmitted} />}
           {r.type === "TRAVEL" && r.travel && <TravelForm requestId={r.id} initial={r.travel} onDone={resubmitted} />}
+          {r.resignation && <ResignationForm requestId={r.id} initial={r.resignation} onDone={resubmitted} />}
           {r.type === "ASSET_REQUEST" && r.assetRequest && <AssetRequestForm requestId={r.id} initial={r.assetRequest} onDone={resubmitted} />}
           {r.type === "TRAVEL_SETTLEMENT" && r.settlement && r.expense && (
             <SettlementForm
@@ -143,6 +162,18 @@ export default function RequestDetailPage() {
                   <Info label="Check in" value={r.attendanceUpdate.checkIn ?? "Keep machine time"} />
                   <Info label="Check out" value={r.attendanceUpdate.checkOut ?? "Keep machine time"} />
                   <div className="sm:col-span-2"><Info label="Explanation" value={r.attendanceUpdate.reason} /></div>
+                </>
+              )}
+              {r.resignation && (
+                <>
+                  <Info label="Resignation given on" value={fmtDate(r.resignation.resignationDate)} />
+                  <Info label="Proposed last working day" value={fmtDate(r.resignation.proposedLastDay)} />
+                  <Info label="Notice period" value={`${r.resignation.noticeDays} days${r.resignation.onProbation ? " (probation)" : ""}, ends ${fmtDate(r.resignation.noticeEndDate)}`} />
+                  <Info
+                    label="Early release"
+                    value={!r.resignation.earlyRelease ? "Not needed" : r.resignation.earlyReleaseRecommended == null ? "Asked; Line Manager to recommend" : r.resignation.earlyReleaseRecommended ? "Recommended by the Line Manager" : "Not recommended by the Line Manager"}
+                  />
+                  <div className="sm:col-span-2"><Info label="Reason" value={r.resignation.reason} /></div>
                 </>
               )}
               {r.type === "LETTER" && (
@@ -214,6 +245,37 @@ export default function RequestDetailPage() {
             <Card title={`Your decision (${r.currentStepLabel})`}>
               <div className="space-y-3">
                 {actionError && <Alert>{actionError}</Alert>}
+                {r.resignation?.handoverWarning && <Alert kind="warning">{r.resignation.handoverWarning}</Alert>}
+                {r.resignation?.decision === "LINE_MANAGER" && (
+                  <Field label="Early release" hint={`The proposed last day is before the notice period ends (${fmtDate(r.resignation.noticeEndDate)}). HR decides.`}>
+                    <Select value={earlyRelease} onChange={(e) => setEarlyRelease(e.target.value as "" | "yes" | "no")}>
+                      <option value="">Choose…</option>
+                      <option value="yes">I recommend releasing them early</option>
+                      <option value="no">I do not recommend it (full notice)</option>
+                    </Select>
+                  </Field>
+                )}
+                {r.resignation?.decision === "FINAL" && (() => {
+                  const lwd = lastWorkingDay || r.resignation.defaultLastWorkingDay;
+                  const shortfall = Math.max(0, daysBetween(lwd, r.resignation.noticeEndDate));
+                  return (
+                    <div className="space-y-3 rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
+                      <Field
+                        label="Last working day"
+                        hint={r.resignation.mayReleaseEarly ? `Notice ends ${fmtDate(r.resignation.noticeEndDate)}.` : `The Line Manager did not recommend early release: not before ${fmtDate(r.resignation.noticeEndDate)}.`}
+                      >
+                        <Input type="date" value={lwd} min={r.resignation.mayReleaseEarly ? r.resignation.resignationDate : r.resignation.noticeEndDate} onChange={(e) => setLastWorkingDay(e.target.value)} />
+                      </Field>
+                      {shortfall > 0 && (
+                        <label className="flex items-start gap-2 text-sm text-slate-700">
+                          <input type="checkbox" className="mt-0.5" checked={waiveShortfall} onChange={(e) => setWaiveShortfall(e.target.checked)} />
+                          <span>Waive the notice shortfall of {shortfall} day{shortfall === 1 ? "" : "s"} (otherwise Finance deducts it from the final settlement)</span>
+                        </label>
+                      )}
+                      <p className="text-xs text-slate-500">Approving opens exit clearance: IT / Admin, Line Manager and HR clear in parallel, then Finance. The login is switched off automatically after the last working day.</p>
+                    </div>
+                  );
+                })()}
                 <Field label="Comment" hint="Required when rejecting or returning">
                   <Textarea value={comment} onChange={(e) => setComment(e.target.value)} />
                 </Field>

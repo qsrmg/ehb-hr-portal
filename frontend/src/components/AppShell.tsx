@@ -48,6 +48,7 @@ const NAV: NavGroup[] = [
       { href: "/admin/expenses", label: "Expense Claims", show: any("FINANCE", "HR", "MANAGEMENT") },
       { href: "/admin/travel", label: "Travel", show: any("ADMIN", "FINANCE", "HR", "MANAGEMENT") },
       { href: "/admin/assets", label: "Assets", show: any("ADMIN", "HR", "FINANCE", "MANAGEMENT") },
+      { href: "/exits", label: "Exit Clearance", show: (u) => u.hasTeam || hasRole(u, "HR", "MANAGEMENT", "ADMIN", "FINANCE") },
       { href: "/admin/expense-settings", label: "Expense & Travel Settings", show: any("FINANCE", "HR") },
       { href: "/admin/requests", label: "All Requests", show: any("HR", "MANAGEMENT") },
       { href: "/admin/settings", label: "Rules & Settings", show: any("HR") },

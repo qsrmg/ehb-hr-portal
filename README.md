@@ -83,7 +83,8 @@ The tests use a separate `hr_ms_test` database (created automatically), so your 
 - the emails at every approval step, and retries when the mail server fails;
 - the 3-hour reminders: office hours, weekends, holidays and the interval;
 - pro-rata entitlement and Annual Leave carry forward, including the automatic run on 1 January;
-- recalculation of balances when HR changes a joining date or a quota.
+- recalculation of balances when HR changes a joining date or a quota;
+- resignation and exit clearance: notice periods, early release, the four clearances, the final settlement, letters, deactivation and handover.
 
 ### Browser tests (e2e)
 
@@ -92,7 +93,20 @@ cd frontend
 npm run e2e
 ```
 
-One command runs every browser test (Travel, then My Inventory). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+One command runs every browser test (Travel, My Inventory, then Resignation & exit clearance). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+
+## Resignation & exit clearance
+
+- **Resignation** (My Requests → Resignation): Line Manager → HOD → HR. For an HOD's own resignation, Management takes the HOD step. The employee can withdraw it until HR's final approval; after that only HR can cancel the exit.
+- **Notice period:** 30 days for confirmed staff, 7 days on probation (until the *On probation until* date on the employee record). Both are in *Rules & Settings*.
+- **Early release:** if the proposed last day is before the notice ends, the Line Manager recommends (or not) and HR sets the last working day. Finance deducts the days not served unless HR waives them.
+- **Exit clearance** opens on HR's approval, or when HR starts an exit for a termination, end of contract or other reason (*Exit Clearance → Start an exit*):
+  - IT / Admin, the Line Manager and HR clear in parallel;
+  - IT / Admin can only clear once My Inventory shows the employee as cleared and no asset incident is waiting for a decision;
+  - Finance clears last, by recording the final settlement. It comes pre-filled with asset recoveries, unsettled travel advances, approved claims not yet paid, notice days not served, and unused Annual Leave days (leave encashment can be switched off in *Rules & Settings*). Finance enters the amounts; the portal does not calculate salary.
+- **Letters:** once all four have cleared, HR issues the experience and relieving letters. They are emailed as PDFs to the employee's personal email, and HR can download them.
+- **Deactivation:** the login is switched off automatically at the end of the last working day (hourly job), even if clearance is not finished. HR then completes the exit. *Complete exit* is blocked until every card is cleared and the leaver's team, departments, pending approvals and clearance cards are reassigned (one click on the exit page). HR is warned about this when approving the resignation.
+- **Exit interview:** optional, filled in by the employee (or recorded by HR) and visible to HR only.
 
 ## Leave year-end
 

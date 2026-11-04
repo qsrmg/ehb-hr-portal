@@ -25,6 +25,7 @@ export const TYPE_LABELS: Record<RequestType, string> = {
   TRAVEL: "Travel Request",
   TRAVEL_SETTLEMENT: "Travel Settlement",
   ASSET_REQUEST: "Asset Request",
+  RESIGNATION: "Resignation",
 };
 
 type ResolvedStep = {
@@ -172,6 +173,8 @@ export function canActOnStep(user: AuthUser, requesterId: number, step: StepRule
 }
 
 export type OnApproved = (tx: Tx, requestId: number, finalApproverId: number) => Promise<void>;
+/** Runs inside the transaction when a step is approved, before the chain moves on (e.g. to save what the approver decided). */
+export type OnStepApproved = (tx: Tx, ctx: { requestId: number; type: RequestType; employeeId: number; step: { order: number; label: string }; isFinal: boolean }) => Promise<void>;
 
 /** Approve, reject or return the current step. Every action is recorded with who, when and the comment. */
 export async function actOnRequest(
@@ -180,6 +183,7 @@ export async function actOnRequest(
   action: "APPROVE" | "REJECT" | "RETURN",
   comment: string | undefined,
   onApproved: OnApproved,
+  onStepApproved?: OnStepApproved,
 ) {
   if ((action === "REJECT" || action === "RETURN") && !comment?.trim()) {
     throw new HttpError(400, action === "REJECT" ? "Give a reason for rejecting" : "Say what needs to be changed");
@@ -207,6 +211,7 @@ export async function actOnRequest(
       return { request, final: stepStatus, step };
     }
     const next = request.steps.find((s) => s.order === step.order + 1);
+    await onStepApproved?.(tx, { requestId, type: request.type, employeeId: request.employeeId, step, isFinal: !next });
     if (next) {
       await activateStep(tx, request.employeeId, next, [...prior, user.id], now);
       await tx.request.update({ where: { id: requestId }, data: { currentStep: next.order } });

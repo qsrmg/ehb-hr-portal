@@ -51,12 +51,14 @@ model Employee {
   roles              Role[]         @default([EMPLOYEE])
   status             EmployeeStatus @default(ACTIVE)
 
-  fullName    String
-  fatherName  String?
-  gender      Gender?
-  dateOfBirth DateTime? @db.Date
-  designation String?
-  joiningDate DateTime  @db.Date
+  fullName         String
+  fatherName       String?
+  gender           Gender?
+  dateOfBirth      DateTime? @db.Date
+  designation      String?
+  joiningDate      DateTime  @db.Date
+  // Resignation notice: the probation notice period applies until this date (empty = confirmed)
+  probationEndDate DateTime? @db.Date
 
   departmentId Int?
   department   Department? @relation("DepartmentMembers", fields: [departmentId], references: [id])
@@ -114,6 +116,15 @@ model Employee {
   assetIncidentsRecorded AssetIncident[]    @relation("IncidentRecorder")
   assetRecoveriesSet     AssetIncident[]    @relation("IncidentRecoverySetter")
   assetWriteOffs         AssetIncident[]    @relation("IncidentWriteOff")
+  exits                  ExitCase[]         @relation("ExitEmployee")
+  exitsStarted           ExitCase[]         @relation("ExitStartedBy")
+  exitsCompleted         ExitCase[]         @relation("ExitCompletedBy")
+  exitsCancelled         ExitCase[]         @relation("ExitCancelledBy")
+  exitLettersIssued      ExitCase[]         @relation("ExitLettersBy")
+  exitsSettled           ExitCase[]         @relation("ExitSettledBy")
+  clearancesToApprove    ExitClearance[]    @relation("ClearanceApprover")
+  clearancesCleared      ExitClearance[]    @relation("ClearanceClearedBy")
+  exitInterviewsRecorded ExitInterview[]
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
@@ -230,6 +241,7 @@ enum RequestType {
   TRAVEL
   TRAVEL_SETTLEMENT
   ASSET_REQUEST
+  RESIGNATION
 }
 
 enum RequestStatus {
@@ -270,6 +282,8 @@ model Request {
   expenseClaim            ExpenseClaim?
   travelRequest           TravelRequest?
   assetRequest            AssetRequest?
+  resignation             ResignationRequest?
+  exitCase                ExitCase?
 
   @@index([employeeId, status])
 }
@@ -810,4 +824,165 @@ model AssetRequest {
   neededBy     DateTime?        @db.Date
   assignmentId Int?             @unique
   assignment   AssetAssignment? @relation(fields: [assignmentId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Resignation & exit clearance
+// ---------------------------------------------------------------------------
+
+enum ExitType {
+  RESIGNATION
+  TERMINATION
+  END_OF_CONTRACT
+  OTHER
+}
+
+enum ExitStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum ClearanceArea {
+  IT_ADMIN
+  LINE_MANAGER
+  HR
+  FINANCE
+}
+
+enum ClearanceStatus {
+  WAITING // Finance waits until the other three have cleared
+  PENDING
+  CLEARED
+}
+
+enum SettlementItemKind {
+  ASSET_RECOVERY
+  TRAVEL_ADVANCE
+  NOTICE_SHORTFALL
+  LEAVE_ENCASHMENT
+  EXPENSE_PAYABLE
+  OTHER
+}
+
+enum SettlementDirection {
+  DEDUCT // the employee owes the company
+  PAY // the company owes the employee
+}
+
+/**
+ * The resignation form: Line Manager -> HOD (Management for an HOD) -> HR.
+ */
+model ResignationRequest {
+  id                      Int      @id @default(autoincrement())
+  requestId               Int      @unique
+  request                 Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  reason                  String
+  resignationDate         DateTime @db.Date // the day notice was given
+  proposedLastDay         DateTime @db.Date
+  onProbation             Boolean  @default(false)
+  noticeDays              Int
+  noticeEndDate           DateTime @db.Date
+  // Asked of the Line Manager when the proposed last day is before the notice period ends
+  earlyReleaseRecommended Boolean?
+}
+
+/**
+ * Opened when HR approves a resignation, or started by HR for another reason.
+ */
+model ExitCase {
+  id              Int        @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee   @relation("ExitEmployee", fields: [employeeId], references: [id])
+  type            ExitType
+  reason          String
+  requestId       Int?       @unique
+  request         Request?   @relation(fields: [requestId], references: [id])
+  noticeGivenOn   DateTime   @db.Date
+  noticeDays      Int        @default(0)
+  noticeEndDate   DateTime?  @db.Date
+  lastWorkingDay  DateTime   @db.Date
+  shortfallDays   Int        @default(0) // notice not served; Finance deducts it unless HR waived it
+  shortfallWaived Boolean    @default(false)
+  status          ExitStatus @default(OPEN)
+  startedById     Int
+  startedBy       Employee   @relation("ExitStartedBy", fields: [startedById], references: [id])
+  createdAt       DateTime   @default(now())
+  deactivatedAt   DateTime? // login switched off after the last working day
+
+  completedAt   DateTime?
+  completedById Int?
+  completedBy   Employee? @relation("ExitCompletedBy", fields: [completedById], references: [id])
+  cancelledAt   DateTime?
+  cancelledById Int?
+  cancelledBy   Employee? @relation("ExitCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason  String?
+
+  lettersIssuedAt   DateTime?
+  lettersIssuedById Int?
+  lettersIssuedBy   Employee? @relation("ExitLettersBy", fields: [lettersIssuedById], references: [id])
+  lettersEmailedTo  String?
+
+  // Final settlement, recorded by Finance (the portal does not calculate salary)
+  settlementNet       Decimal?  @db.Decimal(12, 2) // positive: paid to the employee; negative: owed by the employee
+  settlementPaidOn    DateTime? @db.Date
+  settlementMethod    String?
+  settlementReference String?
+  settlementNote      String?
+  settledAt           DateTime?
+  settledById         Int?
+  settledBy           Employee? @relation("ExitSettledBy", fields: [settledById], references: [id])
+
+  clearances      ExitClearance[]
+  settlementItems ExitSettlementItem[]
+  interview       ExitInterview?
+
+  @@index([employeeId, status])
+}
+
+model ExitClearance {
+  id          Int             @id @default(autoincrement())
+  caseId      Int
+  case        ExitCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  area        ClearanceArea
+  status      ClearanceStatus
+  approverId  Int? // Line Manager card: the manager when the case opened
+  approver    Employee?       @relation("ClearanceApprover", fields: [approverId], references: [id])
+  clearedById Int?
+  clearedBy   Employee?       @relation("ClearanceClearedBy", fields: [clearedById], references: [id])
+  clearedAt   DateTime?
+  comment     String?
+
+  @@unique([caseId, area])
+}
+
+model ExitSettlementItem {
+  id          Int                 @id @default(autoincrement())
+  caseId      Int
+  case        ExitCase            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  order       Int
+  kind        SettlementItemKind
+  direction   SettlementDirection
+  description String
+  days        Decimal?            @db.Decimal(6, 1)
+  amount      Decimal             @db.Decimal(12, 2)
+}
+
+/**
+ * Optional; visible to HR only.
+ */
+model ExitInterview {
+  id             Int      @id @default(autoincrement())
+  caseId         Int      @unique
+  case           ExitCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  primaryReason  String
+  rating         Int? // overall experience, 1-5
+  wouldRecommend Boolean?
+  wouldReturn    Boolean?
+  likedMost      String?
+  improve        String?
+  comments       String?
+  recordedById   Int
+  recordedBy     Employee @relation(fields: [recordedById], references: [id])
+  createdAt      DateTime @default(now())
 }

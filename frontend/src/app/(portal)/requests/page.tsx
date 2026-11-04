@@ -21,6 +21,7 @@ export default function MyRequestsPage() {
             <LinkButton href="/requests/new/expense" variant="secondary">Expense claim</LinkButton>
             <LinkButton href="/requests/new/travel" variant="secondary">Travel</LinkButton>
             <LinkButton href="/requests/new/asset" variant="secondary">Asset</LinkButton>
+            <LinkButton href="/requests/new/resignation" variant="secondary">Resignation</LinkButton>
           </>
         }
       />

@@ -159,3 +159,31 @@ export function letterPdf(opts: {
     doc.text("______________________").text(opts.approvedBy).fillColor(MUTED).text("Human Resources, EHB Technologies (Pvt.) Ltd.");
   });
 }
+
+export const EXIT_LETTERS = { EXPERIENCE: "Experience Letter", RELIEVING: "Relieving Letter" } as const;
+export type ExitLetterKind = keyof typeof EXIT_LETTERS;
+
+const longDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+/** Letters issued at the end of exit clearance (same layout as the Letter module's letters). */
+export function exitLetterPdf(kind: ExitLetterKind, opts: {
+  reference: string; date: string; issuedBy: string;
+  employee: Employee & { joiningDate: Date };
+  lastWorkingDay: Date; resignedOn: Date | null;
+}) {
+  const { employee: e } = opts;
+  const role = `${e.designation ?? "a member of staff"} in the ${e.department?.name ?? "company"} department`;
+  const bodies: Record<ExitLetterKind, string> = {
+    EXPERIENCE: `This is to certify that ${e.fullName} (Employee Code ${e.code}) worked with EHB Technologies (Pvt.) Ltd. from ${longDate(e.joiningDate)} to ${longDate(opts.lastWorkingDay)} as ${role}. During this period we found them hardworking and professional. We wish them every success in the future.`,
+    RELIEVING: `This is to confirm that ${e.fullName} (Employee Code ${e.code}), ${role}, has been relieved of their duties with EHB Technologies (Pvt.) Ltd. with effect from the close of business on ${longDate(opts.lastWorkingDay)}${opts.resignedOn ? `, following their resignation dated ${longDate(opts.resignedOn)}` : ""}. They have completed the company's exit clearance.`,
+  };
+  return render((doc) => {
+    header(doc, EXIT_LETTERS[kind]);
+    doc.fontSize(10).fillColor(MUTED).text(`Ref: ${opts.reference}`).text(`Date: ${opts.date}`).moveDown();
+    doc.fillColor("#000000").fontSize(11).text("To Whom It May Concern").moveDown(1.5);
+    doc.font("Helvetica-Bold").text(`Subject: ${EXIT_LETTERS[kind]}`).font("Helvetica").moveDown();
+    doc.text(bodies[kind], { align: "justify", lineGap: 3 });
+    doc.moveDown(4);
+    doc.text("______________________").text(opts.issuedBy).fillColor(MUTED).text("Human Resources, EHB Technologies (Pvt.) Ltd.");
+  });
+}

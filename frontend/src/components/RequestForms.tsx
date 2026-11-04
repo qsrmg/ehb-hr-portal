@@ -171,6 +171,48 @@ export function AttendanceUpdateForm({ onDone, requestId, initial, defaultDate }
   );
 }
 
+type Notice = { onProbation: boolean; noticeDays: number; noticeEndDate: string; exitOpen: boolean };
+
+export function ResignationForm({ onDone, requestId, initial }: { onDone: Done; requestId?: number; initial?: { reason: string; proposedLastDay: string } }) {
+  const { data: notice } = useApi<Notice>(requestId ? null : "/exits/notice");
+  const [form, setForm] = useState({ reason: initial?.reason ?? "", proposedLastDay: initial?.proposedLastDay ?? "" });
+  const [files, setFiles] = useState<FileList | null>(null);
+  const { busy, error, run } = useSubmit(onDone);
+  const early = !!notice && !!form.proposedLastDay && form.proposedLastDay < notice.noticeEndDate;
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => submitForm("resignation", requestId, form, files));
+      }}
+    >
+      {error && <Alert>{error}</Alert>}
+      {notice?.exitOpen && <Alert kind="warning">Your exit is already under way.</Alert>}
+      {notice && (
+        <p className="rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
+          Your notice period is <strong>{notice.noticeDays} days</strong>{notice.onProbation ? " (probation)" : ""}: from today it ends on <strong>{notice.noticeEndDate}</strong>.
+        </p>
+      )}
+      <Field label="Proposed last working day">
+        <Input type="date" required value={form.proposedLastDay} onChange={(e) => setForm({ ...form, proposedLastDay: e.target.value })} />
+      </Field>
+      {early && (
+        <Alert kind="info">
+          This is before your notice period ends. Your Line Manager may recommend an early release and HR decides. Unless HR waives it, Finance deducts the notice not served from your final settlement.
+        </Alert>
+      )}
+      <Field label="Reason for resigning">
+        <Textarea required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+      </Field>
+      <Field label="Resignation letter (optional)" hint="PDF, JPG or PNG">
+        <Input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFiles(e.target.files)} />
+      </Field>
+      <Button type="submit" loading={busy} disabled={notice?.exitOpen}>{requestId ? "Resubmit" : "Submit resignation"}</Button>
+    </form>
+  );
+}
+
 export const LETTER_TYPES: Record<string, string> = {
   EXPERIENCE: "Experience Letter",
   EMPLOYMENT: "Employment Verification Letter",

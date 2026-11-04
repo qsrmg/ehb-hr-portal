@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { getSettings, settingNumber } from "../lib/settings.js";
 import { addDays, isYmd, toDate, todayYmd, ymd } from "../lib/dates.js";
 import { expenseRules, FINANCE_STEP, lineApproved, pkr, round2 } from "./expenses.js";
+import { lastWorkingDayLimit } from "./exits.js";
 import type { StepSpec } from "./approvals.js";
 import type { ExpenseLine, Prisma } from "../generated/prisma/client.js";
 
@@ -80,6 +81,8 @@ export async function evaluateTravel(employeeId: number, input: TravelInput, exc
       select: { requestId: true },
     });
     if (overlap) errors.push(`These dates overlap with travel request #${overlap.requestId}`);
+    const lastDay = await lastWorkingDayLimit(employeeId);
+    if (lastDay && toDate(input.returnDate) > lastDay) errors.push(`Your last working day is ${ymd(lastDay)}; the trip cannot end after it`);
   }
   return {
     errors,

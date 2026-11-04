@@ -7,7 +7,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { setMailTransport } from "../src/lib/mailer.js";
 import { addDays, isWeekend, todayYmd, toDate, ymd } from "../src/lib/dates.js";
 
-export type SentEmail = { to: string; subject: string; text: string; html: string };
+export type SentEmail = { to: string; subject: string; text: string; html: string; attachments: string[] };
 
 /** Emails delivered by the queue end up here instead of a mail server. */
 export const outbox: SentEmail[] = [];
@@ -25,7 +25,7 @@ export function useMemoryTransport() {
           return callback(new Error("Simulated SMTP outage"), undefined as never);
         }
         const d = mail.data;
-        outbox.push({ to: String(d.to), subject: String(d.subject), text: String(d.text), html: String(d.html) });
+        outbox.push({ to: String(d.to), subject: String(d.subject), text: String(d.text), html: String(d.html), attachments: (d.attachments ?? []).map((x) => String(x.filename)) });
         callback(null, { envelope: mail.message.getEnvelope(), messageId: `${Date.now()}@test` } as never);
       },
     }),

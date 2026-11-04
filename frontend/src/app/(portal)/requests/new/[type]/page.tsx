@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Alert, Card, PageHeader } from "@/components/ui";
-import { AttendanceUpdateForm, LeaveForm, LetterForm } from "@/components/RequestForms";
+import { AttendanceUpdateForm, LeaveForm, LetterForm, ResignationForm } from "@/components/RequestForms";
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { TravelForm } from "@/components/TravelForm";
 import { SettlementForm } from "@/components/SettlementForm";
@@ -15,6 +15,7 @@ const TITLES: Record<string, { title: string; subtitle: string }> = {
   travel: { title: "Travel request", subtitle: "Business trips within Pakistan. Goes to your Line Manager and Head of Department; Admin books tickets and hotel once approved." },
   settlement: { title: "Trip settlement", subtitle: "What the trip cost, after you return. Goes to your Line Manager and Finance; any advance is deducted." },
   asset: { title: "Request an asset", subtitle: "Ask for a company item or account. Goes to your Line Manager, then Admin, who issues it from stock." },
+  resignation: { title: "Resignation", subtitle: "Goes to your Line Manager, your Head of Department and HR. Only they can see it. You can withdraw it until HR gives final approval." },
   expense: { title: "Expense claim", subtitle: "Local expenses with receipts. Goes to your Line Manager, Head of Department and Finance; Finance pays it once approved." },
 };
 
@@ -36,6 +37,7 @@ export default function NewRequestPage() {
         {type === "expense" && <ExpenseForm onDone={done} />}
         {type === "travel" && <TravelForm onDone={done} />}
         {type === "asset" && <AssetRequestForm onDone={done} />}
+        {type === "resignation" && <ResignationForm onDone={done} />}
         {type === "settlement" && (search.get("travel") ? <SettlementForm travelRequestId={Number(search.get("travel"))} onDone={done} /> : <Alert>Open the trip and choose “Submit trip settlement”.</Alert>)}
       </Card>
     </div>

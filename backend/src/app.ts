@@ -17,6 +17,7 @@ import { adminRouter } from "./modules/admin.js";
 import { expensesRouter } from "./modules/expenses.js";
 import { travelRouter } from "./modules/travel.js";
 import { assetsRouter } from "./modules/assets.js";
+import { exitsRouter } from "./modules/exits.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 
 export const app = express();
@@ -39,6 +40,7 @@ app.use("/api/documents", documentsRouter);
 app.use("/api/expenses", expensesRouter);
 app.use("/api/travel", travelRouter);
 app.use("/api/assets", assetsRouter);
+app.use("/api/exits", exitsRouter);
 app.use("/api", adminRouter);
 
 app.use(notFound);

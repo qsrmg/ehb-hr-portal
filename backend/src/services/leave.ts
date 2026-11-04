@@ -3,6 +3,7 @@ import { audit } from "../lib/audit.js";
 import { nowParts, toDate, todayYmd, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { countWorkingDays } from "./attendance.js";
+import { lastWorkingDayLimit } from "./exits.js";
 import type { LeaveType, Prisma } from "../generated/prisma/client.js";
 
 type Db = typeof prisma | Prisma.TransactionClient;
@@ -111,6 +112,8 @@ export async function evaluateLeave(employeeId: number, input: LeaveInput, exclu
     include: { request: { select: { id: true } } },
   });
   if (overlap) errors.push(`These dates overlap with leave request #${overlap.request.id}`);
+  const lastDay = await lastWorkingDayLimit(employeeId);
+  if (lastDay && end > lastDay) errors.push(`Your last working day is ${ymd(lastDay)}; leave cannot go beyond it`);
 
   const year = start.getUTCFullYear();
   let available: number | null = null;

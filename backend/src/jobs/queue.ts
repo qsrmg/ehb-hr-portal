@@ -3,11 +3,13 @@ import { env } from "../config/env.js";
 import { deliverEmail, type EmailMessage } from "../lib/mailer.js";
 import { sendDueReminders } from "./reminders.js";
 import { yearEndCarryForward } from "../services/leave.js";
+import { deactivateDueExits } from "../services/exits.js";
 
 // Background jobs run on pg-boss, which keeps its queue in the same PostgreSQL database (schema "pgboss").
 const EMAIL_QUEUE = "email";
 const REMINDER_QUEUE = "approval-reminders";
 export const CARRY_FORWARD_QUEUE = "leave-carry-forward";
+const EXIT_DEACTIVATION_QUEUE = "exit-deactivation";
 /** 00:05 on 1 January, company time. */
 export const CARRY_FORWARD_CRON = "5 0 1 1 *";
 
@@ -49,6 +51,14 @@ export async function startQueue(opts: QueueOptions = {}) {
     await instance.work(CARRY_FORWARD_QUEUE, async () => {
       const { fromYear, updated } = await yearEndCarryForward();
       console.log(`[carry-forward] carried ${fromYear} into ${fromYear + 1}: ${updated} balances`);
+    });
+
+    // Every hour: logins of leavers whose last working day has ended are switched off.
+    await instance.createQueue(EXIT_DEACTIVATION_QUEUE);
+    await instance.schedule(EXIT_DEACTIVATION_QUEUE, "5 * * * *", null, { tz: env.APP_TIMEZONE });
+    await instance.work(EXIT_DEACTIVATION_QUEUE, async () => {
+      const count = await deactivateDueExits();
+      if (count) console.log(`[exits] deactivated ${count} account(s) after their last working day`);
     });
   }
   boss = instance;

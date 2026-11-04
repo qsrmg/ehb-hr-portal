@@ -25,6 +25,10 @@ export const SETTING_DEFAULTS = {
   "travel.mileageRatePerKm": { value: "", label: "Own-car mileage rate per km (PKR, empty = mileage cannot be claimed)", optional: true },
   "travel.hotelLimitPerNight": { value: "", label: "Hotel limit per night (PKR, empty = no limit)", optional: true },
   "travel.settlementDays": { value: "15", label: "Days after return within which the trip settlement must be submitted" },
+  // Resignation & exit clearance
+  "exit.noticeDays": { value: "30", label: "Resignation notice period for confirmed employees (days)" },
+  "exit.probationNoticeDays": { value: "7", label: "Resignation notice period during probation (days)" },
+  "exit.leaveEncashment": { value: "1", label: "Pay out unused Annual Leave in the final settlement (1 = on, 0 = off)" },
 } as const satisfies Record<string, { value: string; label: string; optional?: boolean }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

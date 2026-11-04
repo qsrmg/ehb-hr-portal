@@ -19,7 +19,7 @@ const WEB_PORT = Number(env.E2E_WEB_PORT ?? 3100);
 const MAIL_PORT = Number(env.E2E_MAIL_PORT ?? 8125);
 const SMTP_PORT = Number(env.E2E_SMTP_PORT ?? 1125);
 const UPLOAD_DIR = path.join(BACKEND, "uploads-e2e");
-const SPECS = (env.E2E_SPECS ?? "travel,inventory").split(",").map((s) => s.trim()).filter(Boolean);
+const SPECS = (env.E2E_SPECS ?? "travel,inventory,exit").split(",").map((s) => s.trim()).filter(Boolean);
 
 // Safety: this script drops the database, so it only ever works on one whose name ends in _e2e.
 if (!/_e2e$/.test(DB_NAME)) {
@@ -110,7 +110,7 @@ function runSpec(spec) {
     const child = spawn(process.execPath, [path.join(FRONTEND, "e2e", `${spec}.mjs`)], {
       cwd: FRONTEND,
       stdio: "inherit",
-      env: { ...env, E2E_BASE_URL: `http://localhost:${WEB_PORT}`, E2E_MAILPIT_URL: `http://127.0.0.1:${MAIL_PORT}` },
+      env: { ...env, E2E_BASE_URL: `http://localhost:${WEB_PORT}`, E2E_API_URL: `http://localhost:${API_PORT}/api`, E2E_MAILPIT_URL: `http://127.0.0.1:${MAIL_PORT}` },
     });
     child.on("exit", (code) => resolve(code ?? 1));
   });

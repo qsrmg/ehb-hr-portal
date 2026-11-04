@@ -48,6 +48,7 @@ function present(e: EmployeeWithRelations, viewer: AuthUser) {
     department: e.department,
     manager: e.manager,
     joiningDate: ymd(e.joiningDate),
+    probationEndDate: e.probationEndDate ? ymd(e.probationEndDate) : null,
     status: e.status,
     roles: e.roles,
   };
@@ -158,6 +159,7 @@ const hrEmployeeSchema = z.object({
   dateOfBirth: optionalDate,
   designation: optionalText,
   joiningDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  probationEndDate: optionalDate,
   departmentId: z.number().int().nullable().optional(),
   managerId: z.number().int().nullable().optional(),
   machineId: optionalText,
@@ -178,10 +180,11 @@ const hrEmployeeSchema = z.object({
 });
 
 function toDbFields(input: z.infer<typeof hrEmployeeSchema>) {
-  const { dateOfBirth, joiningDate, roles, ...rest } = input;
+  const { dateOfBirth, joiningDate, probationEndDate, roles, ...rest } = input;
   const data: Record<string, unknown> = { ...rest };
   if (dateOfBirth !== undefined) data.dateOfBirth = dateOfBirth ? toDate(dateOfBirth) : null;
   if (joiningDate !== undefined) data.joiningDate = toDate(joiningDate);
+  if (probationEndDate !== undefined) data.probationEndDate = probationEndDate ? toDate(probationEndDate) : null;
   if (roles !== undefined) data.roles = [...new Set<string>(["EMPLOYEE", ...roles])];
   return data;
 }
