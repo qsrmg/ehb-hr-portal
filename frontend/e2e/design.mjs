@@ -118,6 +118,111 @@ for (const vp of WIDTHS) {
   });
 }
 
+// ---------- The 10 most-used signed-in pages, dark theme, with a contrast check ----------
+const API = env.E2E_API_URL ?? "http://localhost:5000/api";
+async function apiAs(email) {
+  const { token } = await (await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: PASSWORD }) })).json();
+  return async (method, p, body) => {
+    const res = await fetch(`${API}${p}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json();
+    if (!res.ok) throw new Error(`${method} ${p}: ${data.message}`);
+    return data;
+  };
+}
+
+/** Text elements whose contrast with the colour actually behind them (all layers blended) is below 4.5:1. */
+const lowContrast = (p) =>
+  p.evaluate(() => {
+    const parse = (c) => {
+      const m = c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const [r, g, b, a = 1] = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
+      return { r, g, b, a };
+    };
+    const over = (top, bottom) => ({ r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a), b: top.b * top.a + bottom.b * (1 - top.a), a: 1 });
+    const background = (el) => {
+      const layers = [];
+      for (let e = el; e; e = e.parentElement) {
+        const c = parse(getComputedStyle(e).backgroundColor);
+        if (c && c.a > 0) layers.push(c);
+        if (c && c.a === 1) break;
+      }
+      return layers.reverse().reduce((acc, c) => over(c, acc), { r: 9, g: 24, b: 47, a: 1 });
+    };
+    const lum = ({ r, g, b }) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const bad = [];
+    for (const el of document.querySelectorAll("main td, main th, main input, main select, main textarea, main label, main button, main [role=alert], main [role=status], main h1, main h2, main p, main a, main dd, main dt, main li, main span")) {
+      if (!el.offsetParent || el.disabled || !el.textContent.trim() && !["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName)) continue;
+      if (el.closest("[aria-hidden=true]")) continue;
+      const st = getComputedStyle(el);
+      const fg = parse(st.color);
+      if (!fg) continue;
+      const bg = background(el);
+      const [l1, l2] = [lum(over(fg, bg)), lum(bg)].sort((a, b) => b - a);
+      const ratio = (l1 + 0.05) / (l2 + 0.05);
+      if (ratio < 4.5) bad.push(`${el.tagName.toLowerCase()} "${(el.value || el.textContent).trim().slice(0, 40)}" ${ratio.toFixed(2)}:1`);
+    }
+    return [...new Set(bad)];
+  });
+
+await step("pages", "10 most-used signed-in pages in the dark theme: screenshots at 1366px, text contrast at least 4.5:1", async (check) => {
+  // A leave request from Ali waiting with Hamza, so the request page shows the approver's decision form.
+  const ali = await apiAs("employee@ehb.local");
+  const types = await ali("GET", "/leave/types");
+  const casual = types.find((t) => t.code === "CL") ?? types[0];
+  const start = new Date(Date.now() + 21 * 86_400_000);
+  while ([0, 6].includes(start.getUTCDay())) start.setUTCDate(start.getUTCDate() + 1);
+  const leaveDay = start.toISOString().slice(0, 10);
+  const fd = new FormData();
+  for (const [k, v] of Object.entries({ leaveTypeId: casual.id, startDate: leaveDay, endDate: leaveDay, reason: "Family wedding" })) fd.append(k, String(v));
+  const { token } = await (await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "employee@ehb.local", password: PASSWORD }) })).json();
+  const created = await (await fetch(`${API}/requests/leave`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd })).json();
+  if (!created.id) throw new Error(`Could not create a leave request: ${created.message}`);
+
+  const pages = [
+    ["employee@ehb.local", "/attendance", "attendance"],
+    ["employee@ehb.local", "/leave", "leave"],
+    ["employee@ehb.local", "/requests", "my-requests"],
+    ["employee@ehb.local", "/requests/new/leave", "leave-form-with-error"],
+    ["employee@ehb.local", "/payslips", "payslips"],
+    ["employee@ehb.local", "/documents", "policies"],
+    ["employee@ehb.local", "/profile", "profile"],
+    ["manager@ehb.local", "/approvals", "approvals"],
+    ["manager@ehb.local", `/requests/${created.id}`, "request-decision"],
+    ["hr@ehb.local", "/admin/employees", "hr-employees"],
+  ];
+  const problems = [];
+  for (const [email, url, name] of pages) {
+    const { p, close } = await page(WIDTHS[0]);
+    try {
+      await signIn(p, email);
+      await p.goto(`${BASE}${url}`);
+      await p.locator("main h1").first().waitFor();
+      await p.waitForLoadState("networkidle");
+      if (name === "leave-form-with-error") {
+        // An error message from the server, to check that errors stay readable.
+        await p.locator("label", { hasText: /^Leave type/ }).locator("select").selectOption({ index: 0 });
+        await p.getByLabel("From", { exact: true }).fill("2020-01-06");
+        await p.getByLabel("To", { exact: true }).fill("2020-01-06");
+        await p.getByLabel("Reason", { exact: true }).fill("Checking the error message");
+        await p.getByRole("button", { name: "Submit leave request" }).click({ force: true });
+        await p.getByRole("alert").first().waitFor().catch(() => {});
+      }
+      await noSideScroll(p, url);
+      await shot(p, `page-${String(pages.findIndex((x) => x[2] === name) + 1).padStart(2, "0")}-${name}`);
+      const bad = await lowContrast(p);
+      if (bad.length) problems.push(`${url}: ${bad.slice(0, 5).join("; ")}${bad.length > 5 ? ` (+${bad.length - 5} more)` : ""}`);
+      else check(`${url}: all text at least 4.5:1`);
+    } finally {
+      await close();
+    }
+  }
+  if (problems.length) throw new Error(`Low contrast — ${problems.join(" | ")}`);
+});
+
 await browser.close();
 fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify({ ranAt: new Date().toISOString(), results }, null, 2));
 console.log(`\n${results.filter((r) => r.status === "PASS").length} of ${results.length} steps passed. Screenshots: ${OUT}`);

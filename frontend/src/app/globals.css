@@ -8,13 +8,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-brand: #1e3a5c;
-  --color-brand-dark: #152b45;
-  --color-accent: #2b7a87;
   --font-sans: var(--font-geist-sans);
   --font-display: var(--font-manrope), "Segoe UI", Arial, sans-serif;
 
-  /* EHB HR Portal design (landing, sign-in, dashboard, sidebar) */
+  /* EHB HR Portal design */
   --color-ink-950: #09182f; /* page background */
   --color-ink-900: #0f1f39; /* sidebar and darker panels */
   --color-ink-800: #15284a; /* cards */
@@ -28,7 +25,103 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Not inlined, so the dark portal theme below can redefine them. */
+@theme {
+  --color-brand: #1e3a5c;
+  --color-brand-dark: #152b45;
+  --color-accent: #2b7a87;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/*
+ * Dark theme for every signed-in page. The pages are written with Tailwind's slate, white and status
+ * colours; inside .portal-dark those colours are redefined so the same classes read well on the dark navy
+ * background: light slates become dark surfaces, dark slates become light text, and the pale status tints
+ * become translucent tints with light text. Solid 500/600 shades (buttons) are left as they are.
+ */
+.portal-dark {
+  color-scheme: dark; /* native date pickers, dropdown lists and scrollbars render dark */
+  color: #e6ecf6;
+
+  --color-brand: var(--color-primary);
+  --color-brand-dark: var(--color-primary-hover);
+  --color-accent: #8db4ff;
+
+  --color-slate-50: #172b4d;
+  --color-slate-100: #1f3459;
+  --color-slate-200: #2a4069;
+  --color-slate-300: #3a5280;
+  --color-slate-400: #8296b8;
+  --color-slate-500: #a3b3cd;
+  --color-slate-600: #b8c5dc;
+  --color-slate-700: #d3dcec;
+  --color-slate-800: #e6ecf6;
+  --color-slate-900: #f3f6fb;
+  --color-slate-950: #ffffff;
+
+  --color-emerald-50: rgb(16 185 129 / 0.14);
+  --color-emerald-100: rgb(16 185 129 / 0.22);
+  --color-emerald-200: rgb(52 211 153 / 0.38);
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-emerald-900: #d1fae5;
+
+  --color-amber-50: rgb(247 198 50 / 0.13);
+  --color-amber-100: rgb(247 198 50 / 0.22);
+  --color-amber-200: rgb(247 198 50 / 0.4);
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-amber-900: #fef3c7;
+
+  --color-red-50: rgb(239 68 68 / 0.14);
+  --color-red-100: rgb(239 68 68 / 0.22);
+  --color-red-200: rgb(248 113 113 / 0.42);
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-red-900: #fee2e2;
+
+  --color-orange-50: rgb(249 115 22 / 0.14);
+  --color-orange-100: rgb(249 115 22 / 0.22);
+  --color-orange-200: rgb(251 146 60 / 0.4);
+  --color-orange-700: #fdba74;
+  --color-orange-800: #fed7aa;
+  --color-orange-900: #ffedd5;
+
+  --color-sky-50: rgb(14 165 233 / 0.14);
+  --color-sky-100: rgb(14 165 233 / 0.22);
+  --color-sky-200: rgb(56 189 248 / 0.4);
+  --color-sky-700: #7dd3fc;
+  --color-sky-800: #bae6fd;
+
+  --color-blue-50: rgb(59 130 246 / 0.14);
+  --color-blue-100: rgb(59 130 246 / 0.22);
+  --color-blue-200: rgb(96 165 250 / 0.4);
+  --color-blue-700: #93c5fd;
+  --color-blue-800: #bfdbfe;
+
+  --color-teal-50: rgb(20 184 166 / 0.14);
+  --color-teal-200: rgb(45 212 191 / 0.4);
+  --color-teal-700: #5eead4;
+
+  --color-violet-50: rgb(139 92 246 / 0.16);
+  --color-violet-200: rgb(167 139 250 / 0.4);
+  --color-violet-700: #c4b5fd;
+}
+
+/* White surfaces become cards; red text used for errors and amounts stays readable on navy. */
+.portal-dark .bg-white {
+  background-color: var(--color-ink-800);
+}
+.portal-dark .hover\:bg-white:hover {
+  background-color: var(--color-ink-700);
+}
+.portal-dark .text-red-600 {
+  color: #fca5a5;
+}
+.portal-dark ::placeholder {
+  color: #7f93b5;
 }

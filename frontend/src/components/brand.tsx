@@ -13,7 +13,7 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   }, []);
   const box = { sm: "h-9 w-[74px]", md: "h-11 w-[90px]", lg: "h-[60px] w-[132px]" }[size];
   return (
-    <span className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white px-2 ${box}`}>
+    <span className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#ffffff] px-2 ${box}`}>
       {missing ? (
         <span className="font-display text-lg font-extrabold leading-none tracking-tight text-ink-950" aria-label="EHB">
           E<span className="text-sun">H</span>B

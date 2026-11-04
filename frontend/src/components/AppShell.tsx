@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const dark = pathname === "/dashboard";
+  const wide = pathname === "/dashboard";
   const roles = user.roles.filter((r) => r !== "EMPLOYEE").map((r) => ROLE_LABELS[r]).join(", ") || "Employee";
   const close = () => setOpen(false);
 
@@ -129,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className={`flex min-h-screen ${dark ? "bg-ink-950" : ""}`}>
+    <div className="portal-dark flex min-h-screen bg-ink-950">
       <aside className="hidden w-64 shrink-0 border-r border-white/5 bg-ink-900 lg:block">
         <div className="sticky top-0 h-screen">{sidebar}</div>
       </aside>
@@ -159,7 +159,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-sun px-1 text-center text-[10px] font-bold leading-4 text-ink-950">{unread > 99 ? "99+" : unread}</span>}
           </Link>
         </header>
-        <main className={`mx-auto w-full flex-1 px-4 py-6 sm:px-6 ${dark ? "max-w-7xl lg:py-8" : "max-w-6xl"}`}>{children}</main>
+        <main className={`mx-auto w-full flex-1 px-4 py-6 sm:px-6 lg:py-8 ${wide ? "max-w-7xl" : "max-w-6xl"}`}>{children}</main>
       </div>
     </div>
   );
