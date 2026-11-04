@@ -5,6 +5,7 @@ import { currentUser, hasRole, requireAuth } from "../middleware/auth.js";
 import { monthlyAttendance } from "../services/attendance.js";
 import { balancesFor } from "../services/leave.js";
 import { pendingForUserWhere, TYPE_LABELS } from "../services/approvals.js";
+import { getSettings } from "../lib/settings.js";
 
 export const dashboardRouter = Router();
 dashboardRouter.use(requireAuth);
@@ -15,7 +16,7 @@ dashboardRouter.get("/", async (req, res) => {
   const today = todayYmd();
   const { year, month } = parseMonth(undefined);
 
-  const [todayRecord, attendance, balances, myPending, tasks, unread, latestPayslip] = await Promise.all([
+  const [todayRecord, attendance, balances, myPending, tasks, unread, latestPayslip, recent, settings, annual] = await Promise.all([
     prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: user.id, date: toDate(today) } } }),
     monthlyAttendance(user.id, year, month),
     balancesFor(user.id, year),
@@ -33,7 +34,16 @@ dashboardRouter.get("/", async (req, res) => {
     }),
     prisma.notification.count({ where: { employeeId: user.id, read: false } }),
     prisma.payslip.findFirst({ where: { employeeId: user.id }, orderBy: [{ year: "desc" }, { month: "desc" }] }),
+    prisma.request.findMany({
+      where: { employeeId: user.id },
+      include: { steps: { select: { order: true, label: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+    }),
+    getSettings(),
+    prisma.leaveType.findUnique({ where: { code: "AL" }, select: { carryForwardMax: true } }),
   ]);
+  const stepLabel = (r: (typeof recent)[number]) => (r.status === "PENDING" ? r.steps.find((s) => s.order === r.currentStep)?.label ?? null : null);
 
   let hr = null;
   if (hasRole(user, "HR")) {
@@ -60,8 +70,14 @@ dashboardRouter.get("/", async (req, res) => {
       id: r.id, title: r.title, type: r.type, typeLabel: TYPE_LABELS[r.type], status: r.status, createdAt: r.createdAt,
       currentStepLabel: r.status === "PENDING" ? r.steps.find((s) => s.order === r.currentStep)?.label ?? null : null,
     })),
+    recent: recent.map((r) => ({ id: r.id, title: r.title, type: r.type, typeLabel: TYPE_LABELS[r.type], status: r.status, updatedAt: r.updatedAt, currentStepLabel: stepLabel(r) })),
+    rules: {
+      lateAfter: settings["attendance.lateAfter"],
+      payslipsDueDay: Number(settings["payroll.availableByDay"]),
+      annualCarryForwardMax: annual?.carryForwardMax == null ? null : Number(annual.carryForwardMax),
+    },
     tasks: tasks.map((s) => ({
-      requestId: s.requestId, title: s.request.title, typeLabel: TYPE_LABELS[s.request.type], step: s.label,
+      requestId: s.requestId, type: s.request.type, title: s.request.title, typeLabel: TYPE_LABELS[s.request.type], step: s.label,
       employee: s.request.employee.fullName, pendingSince: s.pendingSince,
     })),
     unreadNotifications: unread,
