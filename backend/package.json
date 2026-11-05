@@ -17,7 +17,8 @@
     "test": "node --import tsx --import ./test/setup.ts --test --test-isolation=none --test-concurrency=1 \"test/**/*.test.ts\"",
     "mailpit": "..\\\\tools\\\\mailpit\\\\mailpit.exe --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025",
     "postdb:migrate": "prisma generate",
-    "postdb:deploy": "prisma generate"
+    "postdb:deploy": "prisma generate",
+    "db:demo": "tsx prisma/demo.ts"
   },
   "keywords": [],
   "author": "",

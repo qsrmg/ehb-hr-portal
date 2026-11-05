@@ -68,9 +68,9 @@ const SECURITY: { icon: LucideIcon; title: string; text: string }[] = [
 ];
 
 const PHASES = [
-  { phase: "Phase 1", when: "At launch", items: ["Login and dashboard", "Employee profiles", "Attendance", "Attendance Update", "Leave", "Pay slip and tax statement", "Policies and HR documents"] },
-  { phase: "Phase 2", when: "Next", items: ["Letter Request", "Expense Claim", "Travel", "Resignation and exit clearance", "Performance (BSC)", "My Inventory (assets)", "Manpower Requisition and internal jobs"] },
-  { phase: "Phase 3", when: "Later", items: ["PF statement and withdrawal", "Training request", "Visiting card"] },
+  { phase: "Phase 1", when: "Built", built: true, items: ["Login and dashboard", "Employee profiles", "Attendance", "Attendance Update", "Leave", "Pay slip and tax statement", "Policies and HR documents"] },
+  { phase: "Phase 2", when: "Built", built: true, items: ["Letter Request", "Expense Claim", "Travel", "Resignation and exit clearance", "Performance (BSC)", "My Inventory (assets)", "Manpower Requisition and internal jobs"] },
+  { phase: "Phase 3", when: "Next", built: false, items: ["PF statement and withdrawal", "Training request", "Visiting card"] },
 ];
 
 const FACTS = [
@@ -301,17 +301,17 @@ export default function LandingPage() {
         {/* Rollout */}
         <section className="bg-ink-900 py-24 sm:py-28" aria-labelledby="rollout-title">
           <div className={container}>
-            <SectionHead id="rollout-title" eyebrow="Rollout" title="Three phases, daily essentials first." />
+            <SectionHead id="rollout-title" eyebrow="Rollout" title="Three phases, daily essentials first." text="Phases 1 and 2 are built. Phase 3 is next." />
             <div className="mt-14 grid gap-4 md:grid-cols-3">
               {PHASES.map((p, i) => (
-                <Reveal key={p.phase} index={i} className={`h-full rounded-2xl border p-6 ${i === 0 ? "border-sun/40 bg-ink-800/80" : "border-white/[.07] bg-ink-800/40"}`}>
+                <Reveal key={p.phase} index={i} className={`h-full rounded-2xl border p-6 ${p.built ? "border-sun/40 bg-ink-800/80" : "border-dashed border-white/20 bg-ink-800/40"}`}>
                   <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider ${i === 0 ? "bg-sun text-ink-950" : "bg-white/10 text-white"}`}>{p.phase}</span>
-                    <span className="text-sm text-haze">{p.when}</span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider ${p.built ? "bg-sun text-ink-950" : "bg-white/10 text-white"}`}>{p.phase}</span>
+                    <span className={`inline-flex items-center gap-1 text-sm font-semibold ${p.built ? "text-emerald-300" : "text-haze"}`}>{p.built && <CircleCheck className="h-4 w-4" aria-hidden="true" />}{p.when}</span>
                   </div>
                   <ul className="mt-5 space-y-2.5 text-sm text-white/85">
                     {p.items.map((it) => (
-                      <li key={it} className="flex items-start gap-2"><CircleCheck className={`mt-0.5 h-4 w-4 shrink-0 ${i === 0 ? "text-sun" : "text-white/30"}`} aria-hidden="true" />{it}</li>
+                      <li key={it} className="flex items-start gap-2"><CircleCheck className={`mt-0.5 h-4 w-4 shrink-0 ${p.built ? "text-sun" : "text-white/30"}`} aria-hidden="true" />{it}</li>
                     ))}
                   </ul>
                 </Reveal>

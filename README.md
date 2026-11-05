@@ -28,6 +28,12 @@ Phase 1 of the portal described in `EHB_HR_Portal_Project_Overview11.pdf`: login
 
 `npm run db:reset` in `backend/` drops all data, re-applies migrations and re-seeds.
 
+## Demo for HR
+
+- **Demo data:** `npm run db:demo -- --yes` (in `backend/`, with the backend stopped) **wipes** the database in `backend/.env` and the `uploads` folder, then loads realistic fake data: 15 employees in 7 departments, a month of attendance, leave, an expense claim, a trip, assets, a resignation in progress, a performance cycle at goal setting and an open internal job. Logins: `<name>@ehb.demo` / `Password@123`.
+- **[DEMO.md](DEMO.md):** the 20-minute demo script.
+- **[DECISIONS.md](DECISIONS.md):** the printable checklist of settings HR and Finance must decide before go-live.
+
 ## Landing page and HR email
 
 `/` is the public landing page; signed-in users go straight to `/dashboard`. *Sign in* and *Access HR Portal* open `/login`.
@@ -101,7 +107,7 @@ cd frontend
 npm run e2e
 ```
 
-One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, then Hiring). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, Hiring, then the demo walk-through on the demo data). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
 
 ## Resignation & exit clearance
 

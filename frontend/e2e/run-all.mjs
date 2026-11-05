@@ -19,7 +19,7 @@ const WEB_PORT = Number(env.E2E_WEB_PORT ?? 3100);
 const MAIL_PORT = Number(env.E2E_MAIL_PORT ?? 8125);
 const SMTP_PORT = Number(env.E2E_SMTP_PORT ?? 1125);
 const UPLOAD_DIR = path.join(BACKEND, "uploads-e2e");
-const SPECS = (env.E2E_SPECS ?? "design,travel,inventory,exit,performance,hiring").split(",").map((s) => s.trim()).filter(Boolean);
+const SPECS = (env.E2E_SPECS ?? "design,travel,inventory,exit,performance,hiring,demo").split(",").map((s) => s.trim()).filter(Boolean);
 
 // Safety: this script drops the database, so it only ever works on one whose name ends in _e2e.
 if (!/_e2e$/.test(DB_NAME)) {
@@ -93,7 +93,10 @@ async function waitFor(name, url, child, timeoutMs) {
   throw new Error(`${name} did not start within ${timeoutMs / 1000}s; see test-screenshots/e2e-logs/${name}.log`);
 }
 
-async function resetDatabase() {
+// The demo walk-through runs on the HR demo data (prisma/demo.ts); every other test on the standard seed.
+const SEEDS = { demo: "npx tsx prisma/demo.ts --skip-reset" };
+
+async function resetDatabase(spec) {
   const client = new pg.Client({ connectionString: adminUrl.toString() });
   await client.connect();
   await client.query(`drop database if exists "${DB_NAME}" with (force)`);
@@ -102,7 +105,7 @@ async function resetDatabase() {
   const opts = { cwd: BACKEND, env: backendEnv, stdio: "pipe" };
   execSync("npx prisma migrate deploy", opts);
   fs.rmSync(UPLOAD_DIR, { recursive: true, force: true });
-  execSync("npx prisma db seed", opts);
+  execSync(SEEDS[spec] ?? "npx prisma db seed", opts);
 }
 
 function runSpec(spec) {
@@ -135,7 +138,7 @@ try {
 
   for (const spec of SPECS) {
     console.log(`\n=== ${spec}: resetting and seeding ${DB_NAME} ===`);
-    await resetDatabase();
+    await resetDatabase(spec);
     await fetch(`http://127.0.0.1:${MAIL_PORT}/api/v1/messages`, { method: "DELETE" });
     const backend = start("backend", process.execPath, ["--import", "tsx", "src/index.ts"], { cwd: BACKEND, env: backendEnv });
     try {
