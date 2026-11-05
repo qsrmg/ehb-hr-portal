@@ -40,6 +40,10 @@ export const SETTING_DEFAULTS = {
   "performance.band3From": { value: "2.5", label: "Overall score from which the result is rating 3" },
   "performance.band2From": { value: "1.5", label: "Overall score from which the result is rating 2 (below: rating 1)" },
   "performance.minPerspectiveWeight": { value: "0", label: "Minimum weight per BSC perspective on a scorecard (%)" },
+  // Manpower Requisition and internal jobs
+  "hiring.internalOnlyDays": { value: "7", label: "Days a job is open to internal applicants only before external candidates (when posted to both)" },
+  "hiring.minMonthsInRole": { value: "12", label: "Months in the current role before an employee can apply for an internal job" },
+  "hiring.minPerformanceRating": { value: "0", label: "Minimum last performance rating to apply for an internal job (1-5, 0 = off)" },
   "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
 } as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean }>;
 

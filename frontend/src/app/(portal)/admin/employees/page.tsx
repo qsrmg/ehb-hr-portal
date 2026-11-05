@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, StatusBadge, Table, Td } from "@/components/ui";
 import { ImportForm } from "@/components/ImportResult";
 import { post } from "@/lib/api";
@@ -13,6 +13,54 @@ import { fmtDate } from "@/lib/format";
 type Row = { id: number; code: string; fullName: string; email: string; designation: string | null; department: string | null; manager: string | null; roles: Role[]; status: string; joiningDate: string };
 type Dept = { id: number; name: string };
 type ImportResult = { rowsRead: number; created: { code: string; fullName: string; email: string }[]; skipped: { row: number; reason: string }[]; managersLinked: number; initialPassword: string };
+
+type HireContext = {
+  id: number; title: string; grade: string | null; department: { id: number; name: string }; reportsTo: { id: number; fullName: string } | null; targetStartDate: string;
+  applications: { id: number; name: string; email: string | null; internal: boolean; stage: string }[];
+};
+
+/** Add employee for an external candidate hired through a requisition: pre-filled, and the candidate is marked hired. */
+function HireForm({ ctx, applicationId }: { ctx: HireContext; applicationId: number }) {
+  const router = useRouter();
+  const app = ctx.applications.find((a) => a.id === applicationId);
+  const [f, setF] = useState({ fullName: app?.name ?? "", email: "", personalEmail: app?.email ?? "", joiningDate: ctx.targetStartDate, designation: ctx.title, grade: ctx.grade ?? "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!app || app.internal) return <Alert>That candidate cannot be hired through Add employee.</Alert>;
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  return (
+    <Card title={`New employee from requisition #${ctx.id}: ${ctx.title}`}>
+      <form
+        className="grid gap-4 sm:grid-cols-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            const created = await post<{ id: number }>("/employees", {
+              ...f, grade: f.grade || null, personalEmail: f.personalEmail || null, departmentId: ctx.department.id, managerId: ctx.reportsTo?.id ?? null, applicationId,
+            });
+            router.push(`/admin/employees/${created.id}?created=1`);
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {error && <div className="sm:col-span-2"><Alert>{error}</Alert></div>}
+        <p className="text-sm text-slate-600 sm:col-span-2">{ctx.department.name}, reporting to {ctx.reportsTo?.fullName ?? "—"}. Creating the record marks {app.name} as hired on the requisition.</p>
+        <Field label="Full name"><Input required value={f.fullName} onChange={set("fullName")} /></Field>
+        <Field label="Work email" hint="Their new company email"><Input type="email" required value={f.email} onChange={set("email")} /></Field>
+        <Field label="Personal email"><Input type="email" value={f.personalEmail} onChange={set("personalEmail")} /></Field>
+        <Field label="Joining date"><Input type="date" required value={f.joiningDate} onChange={set("joiningDate")} /></Field>
+        <Field label="Designation"><Input value={f.designation} onChange={set("designation")} /></Field>
+        <Field label="Grade"><Input value={f.grade} onChange={set("grade")} /></Field>
+        <div className="flex items-end"><Button type="submit" loading={busy}>Create employee</Button></div>
+      </form>
+    </Card>
+  );
+}
 
 export default function EmployeesPage() {
   const { user } = useAuth();
@@ -27,6 +75,10 @@ export default function EmployeesPage() {
   const [showNew, setShowNew] = useState(false);
   const [newEmp, setNewEmp] = useState({ fullName: "", email: "", joiningDate: "", designation: "", departmentId: "" });
   const [createError, setCreateError] = useState<string | null>(null);
+  const search = useSearchParams();
+  const hireId = Number(search.get("hire")) || null;
+  const requisitionId = Number(search.get("requisition")) || null;
+  const hireCtx = useApi<HireContext>(isHr && hireId && requisitionId ? `/hiring/requisitions/${requisitionId}` : null);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +96,9 @@ export default function EmployeesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Employees" subtitle="Employee records. HR changes job, department, manager and salary fields." actions={isHr && <Button onClick={() => setShowNew(!showNew)}>Add employee</Button>} />
+
+      {hireId && hireCtx.error && <Alert>{hireCtx.error}</Alert>}
+      {hireId && hireCtx.data && <HireForm ctx={hireCtx.data} applicationId={hireId} />}
 
       {isHr && showNew && (
         <Card title="New employee">

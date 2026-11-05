@@ -19,6 +19,7 @@ import { travelRouter } from "./modules/travel.js";
 import { assetsRouter } from "./modules/assets.js";
 import { exitsRouter } from "./modules/exits.js";
 import { performanceRouter } from "./modules/performance.js";
+import { hiringRouter } from "./modules/hiring.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 
 export const app = express();
@@ -43,6 +44,7 @@ app.use("/api/travel", travelRouter);
 app.use("/api/assets", assetsRouter);
 app.use("/api/exits", exitsRouter);
 app.use("/api/performance", performanceRouter);
+app.use("/api/hiring", hiringRouter);
 app.use("/api", adminRouter);
 
 app.use(notFound);

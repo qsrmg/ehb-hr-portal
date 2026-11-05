@@ -45,6 +45,8 @@ export const requestFilesUpload = multer({
     cb(null, true);
   },
 });
+/** Hiring: job descriptions and CVs (PDF or Word) */
+export const hiringUpload = diskUpload("hiring", /\.(pdf|docx?)$/, 1);
 /** Policies and HR forms */
 export const documentUpload = diskUpload("documents", /\.pdf$/, 1);
 /** Generated letters */

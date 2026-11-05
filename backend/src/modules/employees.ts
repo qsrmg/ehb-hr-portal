@@ -12,6 +12,7 @@ import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from ".
 import { recalculateEntitlements } from "../services/leave.js";
 import { employeeDeactivated } from "./assets.js";
 import { addJoinerToOpenCycles } from "../services/performance.js";
+import { closeIfFilled, externalHireContext, hiredExternally, notifyApplicant } from "../services/hiring.js";
 import type { Employee, Prisma } from "../generated/prisma/client.js";
 
 export const employeesRouter = Router();
@@ -50,6 +51,7 @@ function present(e: EmployeeWithRelations, viewer: AuthUser) {
     manager: e.manager,
     joiningDate: ymd(e.joiningDate),
     probationEndDate: e.probationEndDate ? ymd(e.probationEndDate) : null,
+    roleSince: e.roleSince ? ymd(e.roleSince) : null,
     status: e.status,
     roles: e.roles,
   };
@@ -64,6 +66,7 @@ function present(e: EmployeeWithRelations, viewer: AuthUser) {
   if (self || hr || finance) Object.assign(out, { bankName: e.bankName, bankAccount: e.bankAccount });
   if (self || hr || finance || management) {
     Object.assign(out, {
+      grade: e.grade,
       basicSalary: e.basicSalary == null ? null : Number(e.basicSalary),
       grossSalary: e.grossSalary == null ? null : Number(e.grossSalary),
     });
@@ -176,16 +179,21 @@ const hrEmployeeSchema = z.object({
   familyDetails: optionalText,
   bankName: optionalText,
   bankAccount: optionalText,
+  grade: optionalText,
+  roleSince: optionalDate,
+  // Add employee for a hired external candidate (Manpower Requisition)
+  applicationId: z.number().int().optional(),
   basicSalary: optionalMoney,
   grossSalary: optionalMoney,
 });
 
 function toDbFields(input: z.infer<typeof hrEmployeeSchema>) {
-  const { dateOfBirth, joiningDate, probationEndDate, roles, ...rest } = input;
+  const { dateOfBirth, joiningDate, probationEndDate, roleSince, roles, applicationId: _application, ...rest } = input;
   const data: Record<string, unknown> = { ...rest };
   if (dateOfBirth !== undefined) data.dateOfBirth = dateOfBirth ? toDate(dateOfBirth) : null;
   if (joiningDate !== undefined) data.joiningDate = toDate(joiningDate);
   if (probationEndDate !== undefined) data.probationEndDate = probationEndDate ? toDate(probationEndDate) : null;
+  if (roleSince !== undefined) data.roleSince = roleSince ? toDate(roleSince) : null;
   if (roles !== undefined) data.roles = [...new Set<string>(["EMPLOYEE", ...roles])];
   return data;
 }
@@ -208,6 +216,7 @@ employeesRouter.post("/", requireRole("HR"), async (req, res) => {
   const input = parseHrBody(req.body);
   if (!input.email || !input.fullName || !input.joiningDate) throw new HttpError(400, "Email, full name and joining date are required");
   if (input.managerId) await assertEmployee(input.managerId);
+  if (input.applicationId) await externalHireContext(input.applicationId);
   const code = await nextEmployeeCode(Number(input.joiningDate.slice(0, 4)));
   const created = await prisma.employee
     .create({
@@ -220,7 +229,13 @@ employeesRouter.post("/", requireRole("HR"), async (req, res) => {
       include: withRelations,
     })
     .catch(uniqueError);
-  await audit(user.id, "CREATE", "Employee", created.id, { code });
+  await audit(user.id, "CREATE", "Employee", created.id, { code, ...(input.applicationId ? { applicationId: input.applicationId } : {}) });
+  if (input.applicationId) {
+    const app = await externalHireContext(input.applicationId);
+    await prisma.$transaction((tx) => hiredExternally(tx, input.applicationId!, created.id, user.id));
+    await notifyApplicant(app, app.requisition.title, "HIRED");
+    await closeIfFilled(app.requisitionId, user.id);
+  }
   // Joiners in the first months of an open performance cycle are included in it.
   await addJoinerToOpenCycles(created.id);
   res.status(201).json({ ...present(created, user), initialPassword: env.DEFAULT_PASSWORD });

@@ -11,6 +11,8 @@ type Db = Tx | typeof prisma;
 export type StepSpec = {
   label: string;
   approver: "LINE_MANAGER" | "HOD" | Role;
+  /** A named person (e.g. the hiring manager of a requisition); `approver` is then ignored. */
+  approverId?: number | null;
   /** Role steps: nobody who approved an earlier step of the request may act on this one. */
   excludePriorApprovers?: boolean;
   /** If that leaves nobody, the step goes to this role instead of being skipped. */
@@ -28,6 +30,7 @@ export const TYPE_LABELS: Record<RequestType, string> = {
   RESIGNATION: "Resignation",
   PERFORMANCE_GOALS: "Performance Goals",
   PERFORMANCE_REVIEW: "Performance Review",
+  MANPOWER: "Manpower Requisition",
 };
 
 /**
@@ -66,8 +69,8 @@ export async function resolveSteps(db: Tx, employeeId: number, chain: StepSpec[]
   const steps: Omit<ResolvedStep, "order">[] = [];
   const plain = { excludePriorApprovers: false, fallbackRole: null, fallbackLabel: null };
   for (const spec of chain) {
-    if (spec.approver === "LINE_MANAGER" || spec.approver === "HOD") {
-      const approverId = spec.approver === "LINE_MANAGER" ? emp.managerId : emp.department?.hodId ?? null;
+    if (spec.approverId !== undefined || spec.approver === "LINE_MANAGER" || spec.approver === "HOD") {
+      const approverId = spec.approverId !== undefined ? spec.approverId : spec.approver === "LINE_MANAGER" ? emp.managerId : emp.department?.hodId ?? null;
       // No one to send it to, or the requester is their own approver: skip this link.
       if (!approverId || approverId === employeeId) continue;
       if (steps.some((s) => s.approverId === approverId)) continue;

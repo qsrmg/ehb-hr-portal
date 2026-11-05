@@ -29,9 +29,12 @@ import {
 } from "../services/exits.js";
 import type { OnStepApproved } from "../services/approvals.js";
 import { performanceActed, performanceApproved } from "../services/performance.js";
+import { BUDGET_STEP_LABELS, canSeeSalary, manpowerActed, manpowerApproved, manpowerStepApproved } from "../services/hiring.js";
 
 /** Goals and results are prepared on the scorecard, not as a form the employee fills in. */
 const PERFORMANCE_TYPES = new Set<RequestType>(["PERFORMANCE_GOALS", "PERFORMANCE_REVIEW"]);
+/** Edited and resubmitted on their own page (scorecard, requisition), not through the generic request form. */
+const OWN_PAGE_TYPES = new Set<RequestType>([...PERFORMANCE_TYPES, "MANPOWER"]);
 import type { Prisma, RequestType } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
@@ -305,6 +308,10 @@ const decisionSchema = z.object({
   earlyRelease: z.boolean().optional(),
   lastWorkingDay: ymdString.optional(),
   waiveShortfall: z.boolean().optional(),
+  // Manpower Requisition: Finance confirms the budget at its step
+  salaryMin: z.coerce.number().optional(),
+  salaryMax: z.coerce.number().optional(),
+  budgetNote: z.string().max(1000).optional(),
 });
 type Decision = z.infer<typeof decisionSchema>;
 
@@ -461,6 +468,7 @@ const onApproved: OnApproved = async (tx, requestId) => {
     }
   }
   if (PERFORMANCE_TYPES.has(request.type)) await performanceApproved(tx, requestId);
+  if (request.type === "MANPOWER") await manpowerApproved(tx, requestId);
   // LETTER: the PDF is generated on download from the approved request.
   // EXPENSE: Finance marks the claim as paid afterwards.
 };
@@ -530,6 +538,7 @@ requestsRouter.put("/:id/resubmit", requestFilesUpload.any(), async (req, res) =
     if (existing.employeeId !== user.id) throw new HttpError(403, "Only the person who submitted it can resubmit");
     if (existing.status !== "RETURNED") throw new HttpError(400, "Only returned requests can be edited and resubmitted");
     if (PERFORMANCE_TYPES.has(existing.type)) throw new HttpError(400, "Performance goals and reviews are changed on the scorecard");
+    if (existing.type === "MANPOWER") throw new HttpError(400, "Change the requisition and submit it again from its page");
     checkFileFields(existing.type, files);
     const prepared = await prepare(existing.type, user, req.body, files, existing._count.attachments, id);
     await prisma.$transaction(async (tx) => {
@@ -553,7 +562,11 @@ for (const action of ["approve", "reject", "return"] as const) {
     const user = currentUser(req);
     const kind = await prisma.request.findUnique({ where: { id }, select: { type: true } });
     if (action === "reject" && kind && PERFORMANCE_TYPES.has(kind.type)) throw new HttpError(400, "Performance goals and reviews cannot be rejected; return them for changes instead");
-    await actOnRequest(id, user, action.toUpperCase() as "APPROVE", body.comment, onApproved, resignationDecision(body, user.id));
+    const resignation = resignationDecision(body, user.id);
+    await actOnRequest(id, user, action.toUpperCase() as "APPROVE", body.comment, onApproved, async (tx, ctx) => {
+      await resignation(tx, ctx);
+      await manpowerStepApproved(tx, ctx, body, user.id);
+    });
     if (action === "approve") {
       const r = await prisma.request.findUnique({ where: { id }, select: { type: true, status: true, exitCase: { select: { id: true } } } });
       if (r?.type === "TRAVEL" && r.status === "APPROVED") await travelApproved(id);
@@ -561,6 +574,7 @@ for (const action of ["approve", "reject", "return"] as const) {
       if (r?.type === "RESIGNATION" && r.status === "APPROVED" && r.exitCase) await exitCaseOpened(r.exitCase.id);
     }
     if (kind && PERFORMANCE_TYPES.has(kind.type) && action !== "reject") await performanceActed(id, action);
+    if (kind?.type === "MANPOWER") await manpowerActed(id, action, user.id);
     res.json({ ok: true });
   });
 }
@@ -570,6 +584,7 @@ requestsRouter.post("/:id/cancel", async (req, res) => {
   if (r?.type === "TRAVEL") throw new HttpError(400, "Use \"Cancel trip\" to cancel a travel request");
   if (r && PERFORMANCE_TYPES.has(r.type)) throw new HttpError(400, "Performance goals and reviews cannot be cancelled");
   await cancelRequest(Number(req.params.id), currentUser(req));
+  if (r?.type === "MANPOWER") await manpowerActed(Number(req.params.id), "cancel", currentUser(req).id);
   res.json({ ok: true });
 });
 
@@ -819,10 +834,11 @@ requestsRouter.get("/:id", async (req, res) => {
       : null,
     currentStepLabel: current?.label ?? null,
     canAct: current ? canActOnStep(user, r.employeeId, current, priorApproverIds(r.steps, current.order)) : false,
-    canResubmit: r.status === "RETURNED" && r.employeeId === user.id && !PERFORMANCE_TYPES.has(r.type),
-    canCancel: r.type !== "TRAVEL" && !PERFORMANCE_TYPES.has(r.type) && ["PENDING", "RETURNED"].includes(r.status) && r.employeeId === user.id,
+    canResubmit: r.status === "RETURNED" && r.employeeId === user.id && !OWN_PAGE_TYPES.has(r.type),
+    canCancel: r.type !== "TRAVEL" && !PERFORMANCE_TYPES.has(r.type) && (r.type === "MANPOWER" ? r.status === "PENDING" : ["PENDING", "RETURNED"].includes(r.status)) && r.employeeId === user.id,
     canReject: !PERFORMANCE_TYPES.has(r.type),
     performance: PERFORMANCE_TYPES.has(r.type) ? { scorecardId: (r.data as { scorecardId?: number }).scorecardId ?? null } : null,
+    requisition: r.type === "MANPOWER" ? await requisitionDetail(r, user, current) : null,
     letterAvailable: r.type === "LETTER" && r.status === "APPROVED" && (r.employeeId === user.id || hasRole(user, "HR")),
     expense: r.expenseClaim
       ? {
@@ -957,3 +973,28 @@ requestsRouter.get("/:id/letter", async (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="${data.letterType.toLowerCase()}-letter-${r.id}.pdf"`);
   res.send(pdf);
 });
+
+/** A requisition's summary on its approval request, and whether this approver must confirm the budget. */
+async function requisitionDetail(r: Detail, user: AuthUser, current: Detail["steps"][number] | undefined) {
+  const req = await prisma.requisition.findFirst({
+    where: { id: (r.data as { requisitionId?: number }).requisitionId ?? -1 },
+    include: {
+      department: { select: { name: true } }, reportsTo: { select: { fullName: true } },
+      exitCase: { select: { employee: { select: { fullName: true, grade: true } } } }, replacesEmployee: { select: { fullName: true, grade: true } },
+    },
+  });
+  if (!req) return null;
+  const canAct = !!current && canActOnStep(user, r.employeeId, current, priorApproverIds(r.steps, current.order));
+  const salary = canSeeSalary(user);
+  const leaver = req.exitCase?.employee ?? req.replacesEmployee ?? null;
+  const n = (v: { toString(): string } | null) => (v == null ? null : Number(v));
+  return {
+    id: req.id, title: req.title, department: req.department.name, headcount: req.headcount, grade: req.grade, employmentType: req.employmentType,
+    reportsTo: req.reportsTo?.fullName ?? null, targetStartDate: ymd(req.targetStartDate), justification: req.justification, skills: req.skills,
+    reason: req.reason, overHeadcount: req.overHeadcount, gradeChanged: req.gradeChanged,
+    replaces: leaver ? { fullName: leaver.fullName, grade: leaver.grade } : null,
+    suggestedSalary: salary || r.employeeId === user.id ? { min: n(req.suggestedSalaryMin), max: n(req.suggestedSalaryMax) } : null,
+    budget: salary ? { min: n(req.salaryMin), max: n(req.salaryMax), note: req.budgetNote } : null,
+    confirmBudget: canAct && !!current && BUDGET_STEP_LABELS.includes(current.label),
+  };
+}

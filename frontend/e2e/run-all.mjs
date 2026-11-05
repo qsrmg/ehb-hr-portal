@@ -19,7 +19,7 @@ const WEB_PORT = Number(env.E2E_WEB_PORT ?? 3100);
 const MAIL_PORT = Number(env.E2E_MAIL_PORT ?? 8125);
 const SMTP_PORT = Number(env.E2E_SMTP_PORT ?? 1125);
 const UPLOAD_DIR = path.join(BACKEND, "uploads-e2e");
-const SPECS = (env.E2E_SPECS ?? "design,travel,inventory,exit,performance").split(",").map((s) => s.trim()).filter(Boolean);
+const SPECS = (env.E2E_SPECS ?? "design,travel,inventory,exit,performance,hiring").split(",").map((s) => s.trim()).filter(Boolean);
 
 // Safety: this script drops the database, so it only ever works on one whose name ends in _e2e.
 if (!/_e2e$/.test(DB_NAME)) {

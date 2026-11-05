@@ -91,7 +91,8 @@ The tests use a separate `hr_ms_test` database (created automatically), so your 
 - pro-rata entitlement and Annual Leave carry forward, including the automatic run on 1 January;
 - recalculation of balances when HR changes a joining date or a quota;
 - resignation and exit clearance: notice periods, early release, the four clearances, the final settlement, letters, deactivation and handover;
-- performance (BSC): settings, templates, cycle eligibility, goals with and without the HOD step, confidentiality, self and manager review, calibration, appeal, the cycle overview.
+- performance (BSC): settings, templates, cycle eligibility, goals with and without the HOD step, confidentiality, self and manager review, calibration, appeal, the cycle overview;
+- hiring: who can raise requisitions, the three approval routes, Finance's budget confirmation, headcount, returned/rejected/withdrawn requisitions, posting windows, eligibility, confidentiality until shortlisting, external candidates, internal and external hires, the draft replacement.
 
 ### Browser tests (e2e)
 
@@ -100,7 +101,7 @@ cd frontend
 npm run e2e
 ```
 
-One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, then Performance). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, then Hiring). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
 
 ## Resignation & exit clearance
 
@@ -133,6 +134,26 @@ Six-monthly Balanced Scorecard cycles (sidebar: *Performance*).
 - **Result:** the employee acknowledges it (a comment is kept on record) or appeals once to HR; HR's decision is final. The scorecard downloads as a PDF.
 - **Confidentiality:** ratings are visible only to the employee, their Line Manager, the HOD, HR and Management. Finance and Admin cannot open scorecards.
 - **Attendance:** the attendance and leave summary is shown for reference only and is not scored. There is no link to salary.
+
+## Manpower Requisition and internal jobs
+
+Sidebar: *Jobs and hiring*.
+
+- **Requisitions:** Line Managers and HODs raise them for their own department, and HR for any department. A requisition is a **new position** or a **replacement**: for someone whose resignation or exit is approved, or for an employee who moved internally.
+- **Approval routes** (the usual duplicate-step skipping and Management stand-in apply):
+  - New position, or over the approved headcount: Line Manager → HOD → Finance → Management → HR.
+  - Replacement at the same grade, within headcount: Line Manager → HOD → HR.
+  - Replacement at a different grade: Line Manager → HOD → Finance → HR.
+- **Budget:** the requester's salary range is only a suggestion; Line Managers don't see confirmed salaries. Finance must enter the confirmed salary range at its step. HR maintains the approved headcount per department (*Headcount* tab). Going over it isn't blocked, but adds Finance and Management.
+- **Posting:** HR posts an approved position as internal only, external only, or both. For both, it is internal only for the first 7 days (a setting).
+- **Who can apply:** active employees who are not on probation, with at least 12 months in their current role (a setting). A minimum last performance rating is also a setting, off by default.
+- **Confidentiality:** applications are confidential. The applicant's current manager is told only at shortlisting, and the applicant is told this when applying.
+- **Tracking:** HR moves applicants through Applied → Shortlisted → Interview → Offer → Hired or Not selected. The hiring manager sees shortlisted candidates and adds interview feedback. Candidates who are not selected get a polite email and a status update in the portal. HR adds external candidates by hand.
+- **Hiring:**
+  - **Internal hire:** the employee moves (department, manager, designation, grade; "in current role since" starts again), and their former manager gets a draft replacement requisition. It is not submitted.
+  - **External hire:** *Create employee* opens Add employee, pre-filled from the requisition.
+  - The position closes when every place is filled, and the remaining applicants are told. HR can also close it with a reason.
+- **Employee record:** two new HR fields, *Grade* and *In current role since*.
 
 ## Leave year-end
 

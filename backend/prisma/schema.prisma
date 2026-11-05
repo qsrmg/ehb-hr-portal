@@ -41,6 +41,8 @@ model Department {
 
   assetAssignments    AssetAssignment[]
   performanceTemplate PerformanceTemplate?
+  approvedHeadcount   Int? // maintained by HR; empty = no limit
+  requisitions        Requisition[]
 }
 
 model Employee {
@@ -60,6 +62,9 @@ model Employee {
   joiningDate      DateTime  @db.Date
   // Resignation notice: the probation notice period applies until this date (empty = confirmed)
   probationEndDate DateTime? @db.Date
+  // Hiring: the grade replacements keep by default, and since when the employee is in their current role
+  grade            String?
+  roleSince        DateTime? @db.Date // empty = joining date; set again by an internal move
 
   departmentId Int?
   department   Department? @relation("DepartmentMembers", fields: [departmentId], references: [id])
@@ -134,6 +139,16 @@ model Employee {
   scorecardCheckIns       ScorecardCheckIn[]
   ratingAdjustments       RatingAdjustment[]
   performanceTemplates    PerformanceTemplate[]
+  requisitionsRaised      Requisition[]         @relation("RequisitionRequester")
+  requisitionsReporting   Requisition[]         @relation("RequisitionReportsTo")
+  requisitionsReplacing   Requisition[]         @relation("RequisitionReplaces")
+  requisitionsBudgeted    Requisition[]         @relation("RequisitionBudgetBy")
+  requisitionsPosted      Requisition[]         @relation("RequisitionPostedBy")
+  requisitionsClosed      Requisition[]         @relation("RequisitionClosedBy")
+  jobApplications         JobApplication[]      @relation("ApplicationApplicant")
+  hiredFromApplications   JobApplication[]      @relation("ApplicationHired")
+  applicationEvents       ApplicationEvent[]
+  interviewFeedback       InterviewFeedback[]
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
@@ -253,6 +268,7 @@ enum RequestType {
   RESIGNATION
   PERFORMANCE_GOALS
   PERFORMANCE_REVIEW
+  MANPOWER
 }
 
 enum RequestStatus {
@@ -297,6 +313,7 @@ model Request {
   exitCase                ExitCase?
   scorecardGoals          Scorecard?               @relation("ScorecardGoals")
   scorecardReview         Scorecard?               @relation("ScorecardReview")
+  requisition             Requisition?
 
   @@index([employeeId, status])
 }
@@ -949,6 +966,7 @@ model ExitCase {
   clearances      ExitClearance[]
   settlementItems ExitSettlementItem[]
   interview       ExitInterview?
+  replacements    Requisition[]
 
   @@index([employeeId, status])
 }
@@ -1157,4 +1175,153 @@ model PerformanceTemplate {
   updatedById  Int
   updatedBy    Employee   @relation(fields: [updatedById], references: [id])
   updatedAt    DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Manpower Requisition and internal jobs
+// ---------------------------------------------------------------------------
+
+enum RequisitionReason {
+  NEW
+  REPLACEMENT
+}
+
+enum EmploymentType {
+  PERMANENT
+  CONTRACT
+  INTERN
+}
+
+/**
+ * DRAFT -> SUBMITTED (approval) -> APPROVED -> POSTED -> FILLED; or CANCELLED
+ */
+enum RequisitionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  POSTED
+  FILLED
+  CANCELLED
+}
+
+enum PostingScope {
+  INTERNAL
+  EXTERNAL
+  BOTH
+}
+
+enum ApplicationStage {
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  HIRED
+  NOT_SELECTED
+  WITHDRAWN
+}
+
+model Requisition {
+  id              Int               @id @default(autoincrement())
+  status          RequisitionStatus @default(DRAFT)
+  requestedById   Int
+  requestedBy     Employee          @relation("RequisitionRequester", fields: [requestedById], references: [id])
+  requestId       Int?              @unique // the approval request once submitted
+  request         Request?          @relation(fields: [requestId], references: [id])
+  departmentId    Int
+  department      Department        @relation(fields: [departmentId], references: [id])
+  title           String
+  grade           String?
+  headcount       Int               @default(1)
+  employmentType  EmploymentType    @default(PERMANENT)
+  reportsToId     Int? // the hiring manager
+  reportsTo       Employee?         @relation("RequisitionReportsTo", fields: [reportsToId], references: [id])
+  targetStartDate DateTime          @db.Date
+  justification   String
+  skills          String?
+  jdPath          String?
+  jdName          String?
+
+  reason             RequisitionReason
+  exitCaseId         Int? // replacement for a leaver
+  exitCase           ExitCase?         @relation(fields: [exitCaseId], references: [id])
+  replacesEmployeeId Int?
+  replacesEmployee   Employee?         @relation("RequisitionReplaces", fields: [replacesEmployeeId], references: [id])
+  gradeChanged       Boolean           @default(false)
+  overHeadcount      Boolean           @default(false)
+
+  // Salary: a suggestion from the requester; Finance confirms the budget at its step
+  suggestedSalaryMin  Decimal?  @db.Decimal(12, 2)
+  suggestedSalaryMax  Decimal?  @db.Decimal(12, 2)
+  salaryMin           Decimal?  @db.Decimal(12, 2)
+  salaryMax           Decimal?  @db.Decimal(12, 2)
+  budgetNote          String?
+  budgetConfirmedById Int?
+  budgetConfirmedBy   Employee? @relation("RequisitionBudgetBy", fields: [budgetConfirmedById], references: [id])
+  budgetConfirmedAt   DateTime?
+
+  // Posting (HR)
+  scope        PostingScope?
+  description  String?
+  requirements String?
+  postedAt     DateTime?
+  postedById   Int?
+  postedBy     Employee?     @relation("RequisitionPostedBy", fields: [postedById], references: [id])
+  externalFrom DateTime?     @db.Date // external candidates from this date (internal-only window first)
+  closingDate  DateTime?     @db.Date
+
+  closedAt     DateTime?
+  closedById   Int?
+  closedBy     Employee?        @relation("RequisitionClosedBy", fields: [closedById], references: [id])
+  closedReason String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  applications JobApplication[]
+
+  @@index([status])
+}
+
+model JobApplication {
+  id                Int                 @id @default(autoincrement())
+  requisitionId     Int
+  requisition       Requisition         @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  employeeId        Int? // internal applicant
+  employee          Employee?           @relation("ApplicationApplicant", fields: [employeeId], references: [id])
+  candidateName     String? // external candidate, added by HR
+  candidateEmail    String?
+  candidatePhone    String?
+  note              String?
+  cvPath            String?
+  cvName            String?
+  stage             ApplicationStage    @default(APPLIED)
+  managerNotifiedAt DateTime? // the applicant's current manager is told at shortlisting
+  hiredEmployeeId   Int?
+  hiredEmployee     Employee?           @relation("ApplicationHired", fields: [hiredEmployeeId], references: [id])
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  events            ApplicationEvent[]
+  feedback          InterviewFeedback[]
+
+  @@unique([requisitionId, employeeId])
+}
+
+model ApplicationEvent {
+  id            Int              @id @default(autoincrement())
+  applicationId Int
+  application   JobApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stage         ApplicationStage
+  note          String?
+  byId          Int
+  by            Employee         @relation(fields: [byId], references: [id])
+  createdAt     DateTime         @default(now())
+}
+
+model InterviewFeedback {
+  id             Int            @id @default(autoincrement())
+  applicationId  Int
+  application    JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  authorId       Int
+  author         Employee       @relation(fields: [authorId], references: [id])
+  recommendation String // HIRE, MAYBE or NO_HIRE
+  comment        String
+  createdAt      DateTime       @default(now())
 }

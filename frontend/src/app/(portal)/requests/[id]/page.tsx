@@ -13,7 +13,7 @@ import { AssetRequestForm } from "@/components/AssetRequestForm";
 import { AssetRequestPanel, type AssetRequestDetail } from "@/components/AssetPanels";
 import { download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 
 type Detail = {
   id: number; type: string; typeLabel: string; title: string; status: string; createdAt: string;
@@ -37,7 +37,17 @@ type Detail = {
   resignation: Resignation | null;
   canReject?: boolean;
   performance: { scorecardId: number | null } | null;
+  requisition: RequisitionInfo | null;
 } & Partial<TravelFlags>;
+
+type RequisitionInfo = {
+  id: number; title: string; department: string; headcount: number; grade: string | null; employmentType: string; reportsTo: string | null;
+  targetStartDate: string; justification: string; skills: string | null; reason: string; overHeadcount: boolean; gradeChanged: boolean;
+  replaces: { fullName: string; grade: string | null } | null;
+  suggestedSalary: { min: number | null; max: number | null } | null;
+  budget: { min: number | null; max: number | null; note: string | null } | null;
+  confirmBudget: boolean;
+};
 
 type Resignation = {
   reason: string; resignationDate: string; proposedLastDay: string; onProbation: boolean; noticeDays: number; noticeEndDate: string;
@@ -66,6 +76,7 @@ export default function RequestDetailPage() {
   const [earlyRelease, setEarlyRelease] = useState<"" | "yes" | "no">("");
   const [lastWorkingDay, setLastWorkingDay] = useState("");
   const [waiveShortfall, setWaiveShortfall] = useState(false);
+  const [budget, setBudget] = useState({ salaryMin: "", salaryMax: "", budgetNote: "" });
 
   if (loading && !r) return <Spinner />;
   if (error || !r) return <Alert>{error}</Alert>;
@@ -79,7 +90,9 @@ export default function RequestDetailPage() {
         ? r.resignation.decision === "LINE_MANAGER"
           ? { earlyRelease: earlyRelease === "" ? undefined : earlyRelease === "yes" }
           : { lastWorkingDay: lastWorkingDay || r.resignation.defaultLastWorkingDay, waiveShortfall }
-        : {};
+        : action === "approve" && r.requisition?.confirmBudget
+          ? { salaryMin: budget.salaryMin ? Number(budget.salaryMin) : undefined, salaryMax: budget.salaryMax ? Number(budget.salaryMax) : undefined, budgetNote: budget.budgetNote }
+          : {};
       await post(`/requests/${r.id}/${action}`, { comment, ...decision });
       setComment("");
       setNotice({ approve: "Approved.", reject: "Rejected.", return: "Returned to the employee for changes.", cancel: "Request cancelled." }[action]);
@@ -108,6 +121,7 @@ export default function RequestDetailPage() {
             {r.canResubmit && !editing && <Button onClick={() => setEditing(true)}>Edit and resubmit</Button>}
             {r.resignation?.exitCaseId && <LinkButton href={`/exits/${r.resignation.exitCaseId}`}>Open exit clearance</LinkButton>}
             {r.performance?.scorecardId && <LinkButton href={`/performance/${r.performance.scorecardId}`}>Open scorecard</LinkButton>}
+            {r.requisition && <LinkButton href={`/hiring/requisitions/${r.requisition.id}`}>Open requisition</LinkButton>}
             {r.canCancel && <Button variant="secondary" loading={busy === "cancel"} onClick={() => act("cancel")}>{r.type === "RESIGNATION" ? "Withdraw resignation" : "Cancel request"}</Button>}
           </>
         }
@@ -177,6 +191,20 @@ export default function RequestDetailPage() {
                     value={!r.resignation.earlyRelease ? "Not needed" : r.resignation.earlyReleaseRecommended == null ? "Asked; Line Manager to recommend" : r.resignation.earlyReleaseRecommended ? "Recommended by the Line Manager" : "Not recommended by the Line Manager"}
                   />
                   <div className="sm:col-span-2"><Info label="Reason" value={r.resignation.reason} /></div>
+                </>
+              )}
+              {r.requisition && (
+                <>
+                  <Info label="Position" value={`${r.requisition.title}${r.requisition.headcount > 1 ? ` (${r.requisition.headcount} positions)` : ""}`} />
+                  <Info label="For department" value={r.requisition.department} />
+                  <Info label="Reason" value={r.requisition.reason === "NEW" ? "New position" : `Replacement for ${r.requisition.replaces?.fullName ?? "a leaver"}`} />
+                  <Info label="Grade" value={`${r.requisition.grade ?? "—"}${r.requisition.gradeChanged ? " (different from the leaver's)" : ""}`} />
+                  <Info label="Hiring manager" value={r.requisition.reportsTo} />
+                  <Info label="Target start" value={fmtDate(r.requisition.targetStartDate)} />
+                  <Info label="Headcount" value={r.requisition.overHeadcount ? "Over the approved headcount" : "Within the approved headcount"} />
+                  {r.requisition.suggestedSalary && <Info label="Suggested salary" value={r.requisition.suggestedSalary.min != null || r.requisition.suggestedSalary.max != null ? `PKR ${fmtMoney(r.requisition.suggestedSalary.min)} to ${fmtMoney(r.requisition.suggestedSalary.max)}` : "None"} />}
+                  {r.requisition.budget?.min != null && <Info label="Budget confirmed" value={`PKR ${fmtMoney(r.requisition.budget.min)} to ${fmtMoney(r.requisition.budget.max)}${r.requisition.budget.note ? ` · ${r.requisition.budget.note}` : ""}`} />}
+                  <div className="sm:col-span-2"><Info label="Why it is needed" value={r.requisition.justification} /></div>
                 </>
               )}
               {r.type === "LETTER" && (
@@ -284,6 +312,16 @@ export default function RequestDetailPage() {
                     </div>
                   );
                 })()}
+                {r.requisition?.confirmBudget && (
+                  <div className="space-y-3 rounded-md bg-slate-50 p-3 ring-1 ring-slate-200">
+                    <p className="text-sm text-slate-700">Confirm the budget before approving: the salary range for this position.</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Salary from (PKR)"><Input type="number" min={0} value={budget.salaryMin} onChange={(e) => setBudget({ ...budget, salaryMin: e.target.value })} /></Field>
+                      <Field label="Salary to (PKR)"><Input type="number" min={0} value={budget.salaryMax} onChange={(e) => setBudget({ ...budget, salaryMax: e.target.value })} /></Field>
+                    </div>
+                    <Field label="Budget note (optional)"><Input value={budget.budgetNote} onChange={(e) => setBudget({ ...budget, budgetNote: e.target.value })} /></Field>
+                  </div>
+                )}
                 <Field label="Comment" hint="Required when rejecting or returning">
                   <Textarea value={comment} onChange={(e) => setComment(e.target.value)} />
                 </Field>

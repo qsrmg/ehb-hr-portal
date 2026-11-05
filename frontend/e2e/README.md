@@ -7,6 +7,7 @@
 | `inventory.mjs` | My Inventory steps 1–12: register, issue, confirm, report lost, HR recovery (with purchase cost), Management write-off, revoke, exit clearance, repairs, department items, asset request, Excel import, team view | `test-screenshots/inventory/` |
 | `exit.mjs` | Resignation & exit clearance steps 1–9: resignation with early release, HR decision, exit interview, IT / Admin blocked by a laptop, parallel clearances, Finance settlement, letters by email, termination completed and login refused | `test-screenshots/exit/` |
 | `performance.mjs` | Performance (BSC) steps 1–9: HR's department template, a cycle, goals adjusted and sent, acknowledged (no duplicate HOD step), check-in, self-review, manager ratings, Admin and Finance refused, HR calibration and release, appeal decided, acknowledgement and PDF, cycle overview | `test-screenshots/performance/` |
+| `hiring.mjs` | Manpower Requisition and internal jobs steps 1–10: headcount, a new position, Finance confirms the budget, approvals, posting, a confidential application (and an ineligible employee), shortlisting with the managers told, interview feedback, external candidates, Create employee from the requisition, internal move, position filled with a polite email and a draft replacement | `test-screenshots/hiring/` |
 
 `travel.mjs` runs in a real browser as Finance, HR, the traveller (Sara), the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
 
@@ -42,7 +43,7 @@ The server logs go to `test-screenshots/e2e-logs/` (ignored by git, like the scr
 
 | Variable | Default |
 |---|---|
-| `E2E_SPECS` | `design,travel,inventory,exit,performance` (e.g. `E2E_SPECS=performance` to run one) |
+| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring` (e.g. `E2E_SPECS=hiring` to run one) |
 | `E2E_DB_NAME` | `hr_ms_e2e` (must end in `_e2e`) |
 | `E2E_API_PORT` / `E2E_WEB_PORT` | `5100` / `3100` |
 | `E2E_MAIL_PORT` / `E2E_SMTP_PORT` | `8125` / `1125` |

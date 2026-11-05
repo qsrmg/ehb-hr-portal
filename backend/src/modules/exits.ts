@@ -165,6 +165,10 @@ exitsRouter.get("/:id", async (req, res) => {
   const finance = c.clearances.find((x) => x.area === "FINANCE");
   const today = todayYmd();
   const lwd = ymd(c.lastWorkingDay);
+  // Replacement requisitions raised for this leaver (Manpower Requisition)
+  const replacements = v.hr || v.management || v.lineManager
+    ? await prisma.requisition.findMany({ where: { exitCaseId: c.id }, select: { id: true, title: true, status: true }, orderBy: { createdAt: "asc" } })
+    : [];
   const completeBlockers = open
     ? [
         ...c.clearances.filter((x) => x.status !== "CLEARED").map((x) => `${AREA_LABELS[x.area]} has not cleared yet`),
@@ -227,6 +231,7 @@ exitsRouter.get("/:id", async (req, res) => {
     canComplete: v.hr && open,
     completeBlockers,
     canCancel: v.hr && open,
+    replacements,
   });
 });
 

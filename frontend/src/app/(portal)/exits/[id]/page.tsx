@@ -38,6 +38,7 @@ type ExitCase = {
   canIssueLetters: boolean; canDownloadLetters: boolean;
   interview: { primaryReason: string; rating: number | null; wouldRecommend: boolean | null; wouldReturn: boolean | null; likedMost: string | null; improve: string | null; comments: string | null; recordedBy: string; at: string } | null;
   interviewSubmitted: boolean; canSubmitInterview: boolean;
+  replacements?: { id: number; title: string; status: string }[];
   canEdit: boolean; canReassign: boolean; canComplete: boolean; completeBlockers: string[]; canCancel: boolean;
 };
 type Option = { id: number; fullName: string; code: string };
@@ -390,6 +391,13 @@ export default function ExitCasePage() {
             <Card title="Asset recoveries">
               <ul className="space-y-1 text-sm">{c.assets.recoveries!.map((r) => <li key={r.tag}>{r.name} ({r.tag}): PKR {fmtMoney(r.amount)}</li>)}</ul>
               <p className="mt-2 text-sm font-medium">Total PKR {fmtMoney(c.assets.recoveryTotal)}</p>
+            </Card>
+          )}
+          {c.replacements && c.replacements.length > 0 && (
+            <Card title="Replacement">
+              <ul className="space-y-1 text-sm">
+                {c.replacements.map((q) => <li key={q.id}><Link className="text-accent hover:underline" href={`/hiring/requisitions/${q.id}`}>Requisition #{q.id}: {q.title}</Link> <span className="text-slate-500">({q.status.toLowerCase()})</span></li>)}
+              </ul>
             </Card>
           )}
           {c.letters && (

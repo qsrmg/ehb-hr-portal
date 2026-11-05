@@ -329,7 +329,8 @@ await step(9, "Ayesha starts a termination for Sara (last day yesterday); after 
   await page.getByLabel("Work email").fill("employee2@ehb.local");
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in securely" }).click();
-  await page.getByRole("alert").waitFor();
+  await page.locator("#login-error").waitFor();
+  ctx.saraLoginMessage = (await page.locator("#login-error").innerText()).trim();
   s(await snap(page, "step9-sara-login-refused"));
   await context.close();
   check("Sara's login is refused");

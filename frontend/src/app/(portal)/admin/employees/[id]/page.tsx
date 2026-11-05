@@ -29,7 +29,7 @@ function initialForm(emp: Profile) {
   return {
     ...f,
     address: emp.address ?? "", familyDetails: emp.familyDetails ?? "", gender: emp.gender ?? "", dateOfBirth: emp.dateOfBirth ?? "",
-    joiningDate: emp.joiningDate, probationEndDate: emp.probationEndDate ?? "", departmentId: emp.department ? String(emp.department.id) : "", managerId: emp.manager ? String(emp.manager.id) : "", status: emp.status,
+    joiningDate: emp.joiningDate, probationEndDate: emp.probationEndDate ?? "", roleSince: emp.roleSince ?? "", grade: emp.grade ?? "", departmentId: emp.department ? String(emp.department.id) : "", managerId: emp.manager ? String(emp.manager.id) : "", status: emp.status,
   } as Record<string, string>;
 }
 
@@ -51,6 +51,8 @@ function EmployeeForm({ emp, onSaved, onMessage }: { emp: Profile; onSaved: (p: 
         ...form,
         gender: form.gender || null,
         probationEndDate: form.probationEndDate || null,
+        roleSince: form.roleSince || null,
+        grade: form.grade || null,
         departmentId: form.departmentId ? Number(form.departmentId) : null,
         managerId: form.managerId ? Number(form.managerId) : null,
         roles,
@@ -86,6 +88,8 @@ function EmployeeForm({ emp, onSaved, onMessage }: { emp: Profile; onSaved: (p: 
             </Select>
           </Field>
           <Field label="Joining date"><Input type="date" value={form.joiningDate} onChange={set("joiningDate")} /></Field>
+          <Field label="Grade" hint="Replacements keep this grade unless Finance approves a change"><Input value={form.grade} onChange={set("grade")} /></Field>
+          <Field label="In current role since" hint="Empty = joining date. Internal jobs need a minimum time in role."><Input type="date" value={form.roleSince} onChange={set("roleSince")} /></Field>
           <Field label="On probation until" hint="Empty = confirmed. The probation notice period applies until this date."><Input type="date" value={form.probationEndDate} onChange={set("probationEndDate")} /></Field>
           <Field label="Status">
             <Select value={form.status} onChange={set("status")}>
