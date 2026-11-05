@@ -187,3 +187,67 @@ export function exitLetterPdf(kind: ExitLetterKind, opts: {
     doc.text("______________________").text(opts.issuedBy).fillColor(MUTED).text("Human Resources, EHB Technologies (Pvt.) Ltd.");
   });
 }
+
+/** Released performance scorecard (BSC): KPIs, ratings, weighted score and band. */
+export function scorecardPdf(opts: {
+  cycle: string;
+  employee: { fullName: string; code: string; designation: string | null; department: string | null; manager: string | null };
+  kpis: { perspective: string; title: string; target: string; weight: number; actual: string | null; selfRating: number | null; finalRating: number | null }[];
+  score: number; band: string; scale: Record<number, string>; managerComment: string | null; reviewedBy: string | null; completedAt: Date | null;
+  appeal: { decision: string; changed: boolean } | null;
+  acknowledged: { at: Date; comment: string | null } | null;
+}) {
+  const date = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return render((doc) => {
+    header(doc, "Performance Scorecard", opts.cycle);
+    keyValues(doc, [
+      ["Employee", `${opts.employee.fullName} (${opts.employee.code})`],
+      ["Designation", opts.employee.designation ?? "-"],
+      ["Department", opts.employee.department ?? "-"],
+      ["Line manager", opts.employee.manager ?? "-"],
+      ["Overall result", `${opts.band} (${opts.score.toFixed(2)} of 5)`],
+      ["Released", opts.completedAt ? date(opts.completedAt) : "-"],
+    ]);
+    const cols = [
+      { label: "Perspective", x: 50, w: 85 }, { label: "KPI and target", x: 140, w: 200 }, { label: "Weight", x: 345, w: 45 },
+      { label: "Actual", x: 395, w: 85 }, { label: "Self", x: 485, w: 25 }, { label: "Final", x: 515, w: 30 },
+    ];
+    let y = doc.y;
+    doc.rect(50, y, 495, 20).fill("#eef2f6");
+    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9);
+    for (const c of cols) doc.text(c.label, c.x + 2, y + 6, { width: c.w });
+    doc.font("Helvetica").fillColor("#000000");
+    y += 26;
+    for (const k of opts.kpis) {
+      const kpiText = `${k.title}\nTarget: ${k.target}`;
+      const height = Math.max(doc.heightOfString(kpiText, { width: 200 }), doc.heightOfString(k.actual ?? "-", { width: 85 })) + 8;
+      if (y + height > doc.page.height - 80) {
+        doc.addPage();
+        y = 50;
+      }
+      doc.fontSize(9);
+      doc.text(k.perspective, cols[0]!.x + 2, y, { width: cols[0]!.w });
+      doc.text(kpiText, cols[1]!.x + 2, y, { width: cols[1]!.w });
+      doc.text(`${k.weight}%`, cols[2]!.x + 2, y, { width: cols[2]!.w });
+      doc.text(k.actual ?? "-", cols[3]!.x + 2, y, { width: cols[3]!.w });
+      doc.text(k.selfRating ? String(k.selfRating) : "-", cols[4]!.x + 2, y, { width: cols[4]!.w });
+      doc.font("Helvetica-Bold").text(k.finalRating ? String(k.finalRating) : "-", cols[5]!.x + 2, y, { width: cols[5]!.w }).font("Helvetica");
+      y += height;
+      doc.moveTo(50, y - 4).lineTo(545, y - 4).strokeColor("#dde3ea").stroke();
+    }
+    doc.x = 50;
+    doc.y = y + 10;
+    doc.fontSize(9).fillColor(MUTED).text(`Ratings: ${[1, 2, 3, 4, 5].map((n) => `${n} ${opts.scale[n]}`).join(" · ")}. The overall result is the weighted average of the final ratings.`, { width: 495 });
+    doc.moveDown();
+    if (opts.managerComment) {
+      doc.fillColor("#000000").font("Helvetica-Bold").fontSize(10).text(`Line Manager's comment${opts.reviewedBy ? ` (${opts.reviewedBy})` : ""}`).font("Helvetica").fontSize(10).text(opts.managerComment, { width: 495 }).moveDown();
+    }
+    if (opts.appeal) {
+      doc.font("Helvetica-Bold").text(`Appeal decided by HR (${opts.appeal.changed ? "result changed" : "result kept"}); this decision is final`).font("Helvetica").text(opts.appeal.decision, { width: 495 }).moveDown();
+    }
+    if (opts.acknowledged) {
+      doc.font("Helvetica-Bold").text(`Acknowledged by the employee on ${date(opts.acknowledged.at)}`).font("Helvetica");
+      if (opts.acknowledged.comment) doc.text(`Employee's comment: ${opts.acknowledged.comment}`, { width: 495 });
+    }
+  });
+}

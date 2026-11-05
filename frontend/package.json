@@ -11,7 +11,8 @@
     "e2e:travel": "node e2e/travel.mjs",
     "e2e:inventory": "node e2e/inventory.mjs",
     "e2e:exit": "node e2e/exit.mjs",
-    "e2e:design": "node e2e/design.mjs"
+    "e2e:design": "node e2e/design.mjs",
+    "e2e:performance": "node e2e/performance.mjs"
   },
   "dependencies": {
     "lucide-react": "0.468.0",

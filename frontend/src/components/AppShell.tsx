@@ -25,6 +25,7 @@ const NAV: NavGroup[] = [
       { href: "/leave", label: "Leave", icon: "calendar" },
       { href: "/payslips", label: "Pay slips & tax", icon: "wallet" },
       { href: "/requests", label: "Requests", icon: "clipboard" },
+      { href: "/performance", label: "Performance", icon: "chart" },
       { href: "/inventory", label: "My inventory", icon: "box" },
       { href: "/documents", label: "Policies and documents", icon: "file" },
       { href: "/profile", label: "My profile", icon: "user" },

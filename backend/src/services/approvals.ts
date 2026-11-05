@@ -26,7 +26,15 @@ export const TYPE_LABELS: Record<RequestType, string> = {
   TRAVEL_SETTLEMENT: "Travel Settlement",
   ASSET_REQUEST: "Asset Request",
   RESIGNATION: "Resignation",
+  PERFORMANCE_GOALS: "Performance Goals",
+  PERFORMANCE_REVIEW: "Performance Review",
 };
+
+/**
+ * Requests the employee did not write themselves (performance goals and results are prepared by their Line
+ * Manager): the generic step emails to the employee are skipped and the module sends its own.
+ */
+export const NOT_EMPLOYEE_AUTHORED: RequestType[] = ["PERFORMANCE_GOALS", "PERFORMANCE_REVIEW"];
 
 type ResolvedStep = {
   order: number;
@@ -224,6 +232,10 @@ export async function actOnRequest(
 
   const { request, final, step } = outcome;
   const link = `/requests/${request.id}`;
+  if (NOT_EMPLOYEE_AUTHORED.includes(request.type)) {
+    if (final === null) await notifyCurrentApprovers(request.id);
+    return;
+  }
   if (final === null) {
     const { step: next } = await loadCurrentStep(request.id);
     await notify(

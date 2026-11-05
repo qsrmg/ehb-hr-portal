@@ -35,6 +35,8 @@ type Detail = {
   assetRequest: AssetRequestDetail | null;
   canFulfil: boolean;
   resignation: Resignation | null;
+  canReject?: boolean;
+  performance: { scorecardId: number | null } | null;
 } & Partial<TravelFlags>;
 
 type Resignation = {
@@ -105,6 +107,7 @@ export default function RequestDetailPage() {
             {r.letterAvailable && <Button onClick={() => download(`/requests/${r.id}/letter`, `letter-${r.id}.pdf`)}>Download letter (PDF)</Button>}
             {r.canResubmit && !editing && <Button onClick={() => setEditing(true)}>Edit and resubmit</Button>}
             {r.resignation?.exitCaseId && <LinkButton href={`/exits/${r.resignation.exitCaseId}`}>Open exit clearance</LinkButton>}
+            {r.performance?.scorecardId && <LinkButton href={`/performance/${r.performance.scorecardId}`}>Open scorecard</LinkButton>}
             {r.canCancel && <Button variant="secondary" loading={busy === "cancel"} onClick={() => act("cancel")}>{r.type === "RESIGNATION" ? "Withdraw resignation" : "Cancel request"}</Button>}
           </>
         }
@@ -228,6 +231,11 @@ export default function RequestDetailPage() {
               onChanged={reload}
             />
           )}
+          {r.performance?.scorecardId && (
+            <Alert kind="info">
+              The goals and ratings are on the <a className="font-semibold underline" href={`/performance/${r.performance.scorecardId}`}>scorecard</a>. Approve to move it on, or return it to the Line Manager with a comment.
+            </Alert>
+          )}
           {r.assetRequest && <AssetRequestPanel requestId={r.id} detail={r.assetRequest} canFulfil={r.canFulfil} onChanged={reload} />}
           {r.travel && (
             <TravelDetails
@@ -282,7 +290,7 @@ export default function RequestDetailPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button loading={busy === "approve"} onClick={() => act("approve")}>Approve</Button>
                   <Button variant="secondary" loading={busy === "return"} onClick={() => act("return")}>Return for changes</Button>
-                  <Button variant="danger" loading={busy === "reject"} onClick={() => act("reject")}>Reject</Button>
+                  {r.canReject !== false && <Button variant="danger" loading={busy === "reject"} onClick={() => act("reject")}>Reject</Button>}
                 </div>
               </div>
             </Card>

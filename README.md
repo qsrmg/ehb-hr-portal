@@ -90,7 +90,8 @@ The tests use a separate `hr_ms_test` database (created automatically), so your 
 - the 3-hour reminders: office hours, weekends, holidays and the interval;
 - pro-rata entitlement and Annual Leave carry forward, including the automatic run on 1 January;
 - recalculation of balances when HR changes a joining date or a quota;
-- resignation and exit clearance: notice periods, early release, the four clearances, the final settlement, letters, deactivation and handover.
+- resignation and exit clearance: notice periods, early release, the four clearances, the final settlement, letters, deactivation and handover;
+- performance (BSC): settings, templates, cycle eligibility, goals with and without the HOD step, confidentiality, self and manager review, calibration, appeal, the cycle overview.
 
 ### Browser tests (e2e)
 
@@ -99,7 +100,7 @@ cd frontend
 npm run e2e
 ```
 
-One command runs every browser test (design screenshots, Travel, My Inventory, then Resignation & exit clearance). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, then Performance). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
 
 ## Resignation & exit clearance
 
@@ -113,6 +114,25 @@ One command runs every browser test (design screenshots, Travel, My Inventory, t
 - **Letters:** once all four have cleared, HR issues the experience and relieving letters. They are emailed as PDFs to the employee's personal email, and HR can download them.
 - **Deactivation:** the login is switched off automatically at the end of the last working day (hourly job), even if clearance is not finished. HR then completes the exit. *Complete exit* is blocked until every card is cleared and the leaver's team, departments, pending approvals and clearance cards are reassigned (one click on the exit page). HR is warned about this when approving the resignation.
 - **Exit interview:** optional, filled in by the employee (or recorded by HR) and visible to HR only.
+
+## Performance (BSC)
+
+Six-monthly Balanced Scorecard cycles (sidebar: *Performance*).
+
+- **Cycles:** HR starts a cycle. Everyone active at the start is included, plus people who join in its first 3 months (a setting); later joiners wait for the next cycle. HR can add or remove someone by hand.
+- **Goals:**
+  - HR keeps a KPI template per department, and new scorecards start from it.
+  - The Line Manager adjusts the KPIs: the four BSC perspectives, at most 10 KPIs, each at least 5%, 100% in total. A minimum weight per perspective is a setting (default 0).
+  - The employee acknowledges the goals or asks for changes, then the HOD approves them. If the Line Manager is also the HOD, there is no duplicate step and the goals are agreed on acknowledgement.
+- **Check-in:** at 3 months; comments only, no score.
+- **Review:**
+  - When the review opens, the employee submits a self-review and the Line Manager rates each KPI (1–5).
+  - Sign-off then runs Line Manager → HOD → HR through the approval engine, so it appears in *Approvals* with the usual emails and reminders.
+  - HR can change a rating during calibration, with a required reason; the original rating stays visible in the rating history.
+  - The overall result is the weighted average. The scale names and the bands (4.5 / 3.5 / 2.5 / 1.5) are in *Rules & settings*.
+- **Result:** the employee acknowledges it (a comment is kept on record) or appeals once to HR; HR's decision is final. The scorecard downloads as a PDF.
+- **Confidentiality:** ratings are visible only to the employee, their Line Manager, the HOD, HR and Management. Finance and Admin cannot open scorecards.
+- **Attendance:** the attendance and leave summary is shown for reference only and is not scored. There is no link to salary.
 
 ## Leave year-end
 

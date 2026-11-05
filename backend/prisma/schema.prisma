@@ -39,7 +39,8 @@ model Department {
   employees Employee[] @relation("DepartmentMembers")
   createdAt DateTime   @default(now())
 
-  assetAssignments AssetAssignment[]
+  assetAssignments    AssetAssignment[]
+  performanceTemplate PerformanceTemplate?
 }
 
 model Employee {
@@ -89,42 +90,50 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  headOf                 Department[]       @relation("DepartmentHod")
-  attendance             AttendanceRecord[]
-  leaveBalances          LeaveBalance[]
-  requests               Request[]          @relation("Requester")
-  stepsToApprove         RequestStep[]      @relation("StepApprover")
-  stepsActed             RequestStep[]      @relation("StepActor")
-  actions                RequestAction[]
-  payslips               Payslip[]
-  lateWarnings           LateWarning[]
-  notifications          Notification[]
-  auditLogs              AuditLog[]
-  documents              Document[]
-  expensesPaid           ExpenseClaim[]     @relation("ExpensePaidBy")
-  travelAdvancesPaid     TravelRequest[]    @relation("TravelAdvancePaidBy")
-  travelAdvanceReturns   TravelRequest[]    @relation("TravelAdvanceReturnedBy")
-  travelBooked           TravelRequest[]    @relation("TravelBookedBy")
-  travelCancelled        TravelRequest[]    @relation("TravelCancelledBy")
-  travelBookingsCreated  TravelBooking[]
-  assetsHeld             AssetAssignment[]  @relation("AssetHolder")
-  assetsIssued           AssetAssignment[]  @relation("AssetIssuer")
-  assetsReceived         AssetAssignment[]  @relation("AssetReceiver")
-  assetRepairsLogged     AssetRepair[]
-  assetIncidentsAbout    AssetIncident[]    @relation("IncidentEmployee")
-  assetIncidentsReported AssetIncident[]    @relation("IncidentReporter")
-  assetIncidentsRecorded AssetIncident[]    @relation("IncidentRecorder")
-  assetRecoveriesSet     AssetIncident[]    @relation("IncidentRecoverySetter")
-  assetWriteOffs         AssetIncident[]    @relation("IncidentWriteOff")
-  exits                  ExitCase[]         @relation("ExitEmployee")
-  exitsStarted           ExitCase[]         @relation("ExitStartedBy")
-  exitsCompleted         ExitCase[]         @relation("ExitCompletedBy")
-  exitsCancelled         ExitCase[]         @relation("ExitCancelledBy")
-  exitLettersIssued      ExitCase[]         @relation("ExitLettersBy")
-  exitsSettled           ExitCase[]         @relation("ExitSettledBy")
-  clearancesToApprove    ExitClearance[]    @relation("ClearanceApprover")
-  clearancesCleared      ExitClearance[]    @relation("ClearanceClearedBy")
-  exitInterviewsRecorded ExitInterview[]
+  headOf                  Department[]          @relation("DepartmentHod")
+  attendance              AttendanceRecord[]
+  leaveBalances           LeaveBalance[]
+  requests                Request[]             @relation("Requester")
+  stepsToApprove          RequestStep[]         @relation("StepApprover")
+  stepsActed              RequestStep[]         @relation("StepActor")
+  actions                 RequestAction[]
+  payslips                Payslip[]
+  lateWarnings            LateWarning[]
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  documents               Document[]
+  expensesPaid            ExpenseClaim[]        @relation("ExpensePaidBy")
+  travelAdvancesPaid      TravelRequest[]       @relation("TravelAdvancePaidBy")
+  travelAdvanceReturns    TravelRequest[]       @relation("TravelAdvanceReturnedBy")
+  travelBooked            TravelRequest[]       @relation("TravelBookedBy")
+  travelCancelled         TravelRequest[]       @relation("TravelCancelledBy")
+  travelBookingsCreated   TravelBooking[]
+  assetsHeld              AssetAssignment[]     @relation("AssetHolder")
+  assetsIssued            AssetAssignment[]     @relation("AssetIssuer")
+  assetsReceived          AssetAssignment[]     @relation("AssetReceiver")
+  assetRepairsLogged      AssetRepair[]
+  assetIncidentsAbout     AssetIncident[]       @relation("IncidentEmployee")
+  assetIncidentsReported  AssetIncident[]       @relation("IncidentReporter")
+  assetIncidentsRecorded  AssetIncident[]       @relation("IncidentRecorder")
+  assetRecoveriesSet      AssetIncident[]       @relation("IncidentRecoverySetter")
+  assetWriteOffs          AssetIncident[]       @relation("IncidentWriteOff")
+  exits                   ExitCase[]            @relation("ExitEmployee")
+  exitsStarted            ExitCase[]            @relation("ExitStartedBy")
+  exitsCompleted          ExitCase[]            @relation("ExitCompletedBy")
+  exitsCancelled          ExitCase[]            @relation("ExitCancelledBy")
+  exitLettersIssued       ExitCase[]            @relation("ExitLettersBy")
+  exitsSettled            ExitCase[]            @relation("ExitSettledBy")
+  clearancesToApprove     ExitClearance[]       @relation("ClearanceApprover")
+  clearancesCleared       ExitClearance[]       @relation("ClearanceClearedBy")
+  exitInterviewsRecorded  ExitInterview[]
+  scorecards              Scorecard[]           @relation("ScorecardEmployee")
+  cyclesCreated           PerformanceCycle[]
+  scorecardGoalsSet       Scorecard[]           @relation("ScorecardGoalsSetBy")
+  scorecardsReviewed      Scorecard[]           @relation("ScorecardReviewedBy")
+  scorecardAppealsDecided Scorecard[]           @relation("ScorecardAppealDecidedBy")
+  scorecardCheckIns       ScorecardCheckIn[]
+  ratingAdjustments       RatingAdjustment[]
+  performanceTemplates    PerformanceTemplate[]
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
@@ -242,6 +251,8 @@ enum RequestType {
   TRAVEL_SETTLEMENT
   ASSET_REQUEST
   RESIGNATION
+  PERFORMANCE_GOALS
+  PERFORMANCE_REVIEW
 }
 
 enum RequestStatus {
@@ -284,6 +295,8 @@ model Request {
   assetRequest            AssetRequest?
   resignation             ResignationRequest?
   exitCase                ExitCase?
+  scorecardGoals          Scorecard?               @relation("ScorecardGoals")
+  scorecardReview         Scorecard?               @relation("ScorecardReview")
 
   @@index([employeeId, status])
 }
@@ -985,4 +998,163 @@ model ExitInterview {
   recordedById   Int
   recordedBy     Employee @relation(fields: [recordedById], references: [id])
   createdAt      DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Performance (Balanced Scorecard), six-monthly cycles
+// ---------------------------------------------------------------------------
+
+enum PerformanceCycleStatus {
+  OPEN
+  CLOSED
+}
+
+/**
+ * GOAL_SETTING -> GOALS_WITH_EMPLOYEE -> GOALS_APPROVAL -> ACTIVE -> MANAGER_REVIEW -> SIGN_OFF -> COMPLETED (-> APPEAL -> COMPLETED) -> ACKNOWLEDGED
+ */
+enum ScorecardStage {
+  GOAL_SETTING // the Line Manager drafts the KPIs
+  GOALS_WITH_EMPLOYEE // the employee acknowledges them or asks for changes
+  GOALS_APPROVAL // with the HOD (approval engine)
+  ACTIVE // goals agreed; check-ins; self-review once the review window opens
+  MANAGER_REVIEW // the employee has submitted the self-review
+  SIGN_OFF // HOD then HR (approval engine); HR may calibrate
+  COMPLETED // result released to the employee
+  APPEAL // the employee appealed to HR (once); HR's decision is final
+  ACKNOWLEDGED // the employee has acknowledged the result
+}
+
+enum BscPerspective {
+  FINANCIAL
+  CUSTOMER
+  INTERNAL_PROCESS
+  LEARNING_GROWTH
+}
+
+model PerformanceCycle {
+  id              Int                    @id @default(autoincrement())
+  name            String
+  startDate       DateTime               @db.Date
+  endDate         DateTime               @db.Date
+  goalsDueDate    DateTime               @db.Date
+  checkInDate     DateTime?              @db.Date
+  reviewOpensDate DateTime               @db.Date
+  reviewDueDate   DateTime               @db.Date
+  status          PerformanceCycleStatus @default(OPEN)
+  createdById     Int
+  createdBy       Employee               @relation(fields: [createdById], references: [id])
+  createdAt       DateTime               @default(now())
+  closedAt        DateTime?
+  scorecards      Scorecard[]
+}
+
+model Scorecard {
+  id         Int              @id @default(autoincrement())
+  cycleId    Int
+  cycle      PerformanceCycle @relation(fields: [cycleId], references: [id])
+  employeeId Int
+  employee   Employee         @relation("ScorecardEmployee", fields: [employeeId], references: [id])
+  stage      ScorecardStage   @default(GOAL_SETTING)
+
+  goalsSetById        Int?
+  goalsSetBy          Employee? @relation("ScorecardGoalsSetBy", fields: [goalsSetById], references: [id])
+  goalsSentAt         DateTime?
+  goalsAcknowledgedAt DateTime?
+  employeeGoalComment String? // the employee's comment when acknowledging or asking for changes
+  goalsRequestId      Int?      @unique // current goal approval (HOD)
+  goalsRequest        Request?  @relation("ScorecardGoals", fields: [goalsRequestId], references: [id])
+
+  selfSubmittedAt    DateTime?
+  selfComment        String?
+  reviewedById       Int?
+  reviewedBy         Employee? @relation("ScorecardReviewedBy", fields: [reviewedById], references: [id])
+  managerSubmittedAt DateTime?
+  managerComment     String?
+  reviewRequestId    Int?      @unique // current result sign-off (HOD -> HR)
+  reviewRequest      Request?  @relation("ScorecardReview", fields: [reviewRequestId], references: [id])
+
+  finalScore         Decimal?  @db.Decimal(4, 2) // weighted 1-5
+  finalBand          String?
+  completedAt        DateTime?
+  employeeAckAt      DateTime?
+  employeeAckComment String?
+
+  appealReason      String?
+  appealedAt        DateTime?
+  appealDecision    String?
+  appealDecidedAt   DateTime?
+  appealDecidedById Int?
+  appealDecidedBy   Employee? @relation("ScorecardAppealDecidedBy", fields: [appealDecidedById], references: [id])
+  appealChanged     Boolean?
+
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  kpis        ScorecardKpi[]
+  checkIns    ScorecardCheckIn[]
+  adjustments RatingAdjustment[]
+
+  @@unique([cycleId, employeeId])
+}
+
+model ScorecardKpi {
+  id             Int                @id @default(autoincrement())
+  scorecardId    Int
+  scorecard      Scorecard          @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+  order          Int
+  perspective    BscPerspective
+  title          String
+  measure        String
+  target         String
+  weight         Int // percent; the scorecard's weights total 100
+  actual         String?
+  selfRating     Int?
+  selfComment    String?
+  managerRating  Int?
+  managerComment String?
+  finalRating    Int? // the manager's rating, or HR's calibrated one
+  adjustments    RatingAdjustment[]
+}
+
+/**
+ * Mid-point check-in: comments only, no score.
+ */
+model ScorecardCheckIn {
+  id          Int       @id @default(autoincrement())
+  scorecardId Int
+  scorecard   Scorecard @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+  authorId    Int
+  author      Employee  @relation(fields: [authorId], references: [id])
+  comment     String
+  createdAt   DateTime  @default(now())
+}
+
+/**
+ * HR calibration: every change of a rating, with the reason.
+ */
+model RatingAdjustment {
+  id          Int          @id @default(autoincrement())
+  scorecardId Int
+  scorecard   Scorecard    @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+  kpiId       Int
+  kpi         ScorecardKpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  fromRating  Int
+  toRating    Int
+  reason      String
+  kind        String       @default("CALIBRATION") // CALIBRATION or APPEAL
+  byId        Int
+  by          Employee     @relation(fields: [byId], references: [id])
+  createdAt   DateTime     @default(now())
+}
+
+/**
+ * KPIs HR saved for a department; a Line Manager can start a scorecard from it.
+ */
+model PerformanceTemplate {
+  id           Int        @id @default(autoincrement())
+  departmentId Int        @unique
+  department   Department @relation(fields: [departmentId], references: [id])
+  kpis         Json
+  updatedById  Int
+  updatedBy    Employee   @relation(fields: [updatedById], references: [id])
+  updatedAt    DateTime   @updatedAt
 }

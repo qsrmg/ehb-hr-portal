@@ -11,6 +11,7 @@ import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
 import { recalculateEntitlements } from "../services/leave.js";
 import { employeeDeactivated } from "./assets.js";
+import { addJoinerToOpenCycles } from "../services/performance.js";
 import type { Employee, Prisma } from "../generated/prisma/client.js";
 
 export const employeesRouter = Router();
@@ -220,6 +221,8 @@ employeesRouter.post("/", requireRole("HR"), async (req, res) => {
     })
     .catch(uniqueError);
   await audit(user.id, "CREATE", "Employee", created.id, { code });
+  // Joiners in the first months of an open performance cycle are included in it.
+  await addJoinerToOpenCycles(created.id);
   res.status(201).json({ ...present(created, user), initialPassword: env.DEFAULT_PASSWORD });
 });
 

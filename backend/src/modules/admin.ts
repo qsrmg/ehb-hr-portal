@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
-import { FINANCE_SETTING_PREFIXES, getSettings, isOptionalSetting, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
+import { FINANCE_SETTING_PREFIXES, getSettings, isOptionalSetting, isTextSetting, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
 import { toDate, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
@@ -55,13 +55,21 @@ adminRouter.put("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
   if (!body.success) throw new HttpError(400, "Invalid settings");
   const before = await getSettings();
   const changes: Record<string, { from: string; to: string }> = {};
+  // Performance bands must run downwards between 1 and 5 (rating 5 from the highest score).
+  const merged = { ...before, ...body.data } as Record<string, string>;
+  const bands = [5, 4, 3, 2].map((n) => Number(merged[`performance.band${n}From`]));
+  if (bands.some((b) => !(b > 1 && b <= 5)) || bands.some((b, i) => i > 0 && b >= bands[i - 1]!)) {
+    throw new HttpError(400, "Performance bands: each score must be between 1 and 5 and lower than the band above it");
+  }
   for (const [key, raw] of Object.entries(body.data)) {
     if (!(key in SETTING_DEFAULTS)) throw new HttpError(400, `Unknown setting ${key}`);
     if (!editableBy(user, key)) throw new HttpError(403, `You cannot change ${SETTING_DEFAULTS[key as SettingKey].label}`);
     const value = raw.trim();
     const isTime = SETTING_DEFAULTS[key as SettingKey].value.includes(":");
     const emptyAllowed = value === "" && isOptionalSetting(key as SettingKey);
-    if (!emptyAllowed && (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value))) {
+    if (isTextSetting(key as SettingKey)) {
+      if (value.length < 2 || value.length > 40) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter a name of 2 to 40 characters`);
+    } else if (!emptyAllowed && (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value))) {
       throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter ${isTime ? "a time as HH:MM" : "a number"}`);
     }
     if (before[key as SettingKey] !== value) changes[key] = { from: before[key as SettingKey], to: value };

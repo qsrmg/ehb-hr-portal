@@ -28,6 +28,10 @@ import {
   createExitCase, daysBetween, exitCaseOpened, handoverFor, handoverWarning, noticeFor, openExitCase, resignationChain,
 } from "../services/exits.js";
 import type { OnStepApproved } from "../services/approvals.js";
+import { performanceActed, performanceApproved } from "../services/performance.js";
+
+/** Goals and results are prepared on the scorecard, not as a form the employee fills in. */
+const PERFORMANCE_TYPES = new Set<RequestType>(["PERFORMANCE_GOALS", "PERFORMANCE_REVIEW"]);
 import type { Prisma, RequestType } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
@@ -456,6 +460,7 @@ const onApproved: OnApproved = async (tx, requestId) => {
       throw new HttpError(400, "Every line is rejected. Reject the claim instead of approving it.");
     }
   }
+  if (PERFORMANCE_TYPES.has(request.type)) await performanceApproved(tx, requestId);
   // LETTER: the PDF is generated on download from the approved request.
   // EXPENSE: Finance marks the claim as paid afterwards.
 };
@@ -524,6 +529,7 @@ requestsRouter.put("/:id/resubmit", requestFilesUpload.any(), async (req, res) =
     if (!existing) throw new HttpError(404, "Request not found");
     if (existing.employeeId !== user.id) throw new HttpError(403, "Only the person who submitted it can resubmit");
     if (existing.status !== "RETURNED") throw new HttpError(400, "Only returned requests can be edited and resubmitted");
+    if (PERFORMANCE_TYPES.has(existing.type)) throw new HttpError(400, "Performance goals and reviews are changed on the scorecard");
     checkFileFields(existing.type, files);
     const prepared = await prepare(existing.type, user, req.body, files, existing._count.attachments, id);
     await prisma.$transaction(async (tx) => {
@@ -545,6 +551,8 @@ for (const action of ["approve", "reject", "return"] as const) {
     const body = parse(decisionSchema, req.body ?? {});
     const id = Number(req.params.id);
     const user = currentUser(req);
+    const kind = await prisma.request.findUnique({ where: { id }, select: { type: true } });
+    if (action === "reject" && kind && PERFORMANCE_TYPES.has(kind.type)) throw new HttpError(400, "Performance goals and reviews cannot be rejected; return them for changes instead");
     await actOnRequest(id, user, action.toUpperCase() as "APPROVE", body.comment, onApproved, resignationDecision(body, user.id));
     if (action === "approve") {
       const r = await prisma.request.findUnique({ where: { id }, select: { type: true, status: true, exitCase: { select: { id: true } } } });
@@ -552,6 +560,7 @@ for (const action of ["approve", "reject", "return"] as const) {
       if (r?.type === "ASSET_REQUEST" && r.status === "APPROVED") await assetRequestApproved(id);
       if (r?.type === "RESIGNATION" && r.status === "APPROVED" && r.exitCase) await exitCaseOpened(r.exitCase.id);
     }
+    if (kind && PERFORMANCE_TYPES.has(kind.type) && action !== "reject") await performanceActed(id, action);
     res.json({ ok: true });
   });
 }
@@ -559,6 +568,7 @@ for (const action of ["approve", "reject", "return"] as const) {
 requestsRouter.post("/:id/cancel", async (req, res) => {
   const r = await prisma.request.findUnique({ where: { id: Number(req.params.id) }, select: { type: true } });
   if (r?.type === "TRAVEL") throw new HttpError(400, "Use \"Cancel trip\" to cancel a travel request");
+  if (r && PERFORMANCE_TYPES.has(r.type)) throw new HttpError(400, "Performance goals and reviews cannot be cancelled");
   await cancelRequest(Number(req.params.id), currentUser(req));
   res.json({ ok: true });
 });
@@ -809,8 +819,10 @@ requestsRouter.get("/:id", async (req, res) => {
       : null,
     currentStepLabel: current?.label ?? null,
     canAct: current ? canActOnStep(user, r.employeeId, current, priorApproverIds(r.steps, current.order)) : false,
-    canResubmit: r.status === "RETURNED" && r.employeeId === user.id,
-    canCancel: r.type !== "TRAVEL" && ["PENDING", "RETURNED"].includes(r.status) && r.employeeId === user.id,
+    canResubmit: r.status === "RETURNED" && r.employeeId === user.id && !PERFORMANCE_TYPES.has(r.type),
+    canCancel: r.type !== "TRAVEL" && !PERFORMANCE_TYPES.has(r.type) && ["PENDING", "RETURNED"].includes(r.status) && r.employeeId === user.id,
+    canReject: !PERFORMANCE_TYPES.has(r.type),
+    performance: PERFORMANCE_TYPES.has(r.type) ? { scorecardId: (r.data as { scorecardId?: number }).scorecardId ?? null } : null,
     letterAvailable: r.type === "LETTER" && r.status === "APPROVED" && (r.employeeId === user.id || hasRole(user, "HR")),
     expense: r.expenseClaim
       ? {

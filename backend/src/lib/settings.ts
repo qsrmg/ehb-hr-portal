@@ -29,11 +29,25 @@ export const SETTING_DEFAULTS = {
   "exit.noticeDays": { value: "30", label: "Resignation notice period for confirmed employees (days)" },
   "exit.probationNoticeDays": { value: "7", label: "Resignation notice period during probation (days)" },
   "exit.leaveEncashment": { value: "1", label: "Pay out unused Annual Leave in the final settlement (1 = on, 0 = off)" },
-} as const satisfies Record<string, { value: string; label: string; optional?: boolean }>;
+  // Performance (BSC)
+  "performance.rating1": { value: "Unsatisfactory", label: "Performance rating 1 (name)", text: true },
+  "performance.rating2": { value: "Needs Improvement", label: "Performance rating 2 (name)", text: true },
+  "performance.rating3": { value: "Meets Expectations", label: "Performance rating 3 (name)", text: true },
+  "performance.rating4": { value: "Exceeds Expectations", label: "Performance rating 4 (name)", text: true },
+  "performance.rating5": { value: "Outstanding", label: "Performance rating 5 (name)", text: true },
+  "performance.band5From": { value: "4.5", label: "Overall score from which the result is rating 5" },
+  "performance.band4From": { value: "3.5", label: "Overall score from which the result is rating 4" },
+  "performance.band3From": { value: "2.5", label: "Overall score from which the result is rating 3" },
+  "performance.band2From": { value: "1.5", label: "Overall score from which the result is rating 2 (below: rating 1)" },
+  "performance.minPerspectiveWeight": { value: "0", label: "Minimum weight per BSC perspective on a scorecard (%)" },
+  "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
+} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 
 export const isOptionalSetting = (key: SettingKey) => "optional" in SETTING_DEFAULTS[key];
+/** Settings whose value is a name rather than a number or a time. */
+export const isTextSetting = (key: SettingKey) => "text" in SETTING_DEFAULTS[key];
 
 /** Settings Finance may change as well as HR. */
 export const FINANCE_SETTING_PREFIXES = ["expense.", "travel."];
