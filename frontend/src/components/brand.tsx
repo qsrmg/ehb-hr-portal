@@ -11,7 +11,7 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
     const el = img.current;
     if (el && el.complete && el.naturalWidth === 0) setMissing(true);
   }, []);
-  const box = { sm: "h-9 w-[74px]", md: "h-11 w-[90px]", lg: "h-[60px] w-[132px]" }[size];
+  const box = { sm: "h-10 w-[84px] py-1", md: "h-12 w-[104px] py-1.5", lg: "h-16 w-[140px] py-2" }[size];
   return (
     <span className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#ffffff] px-2 ${box}`}>
       {missing ? (
