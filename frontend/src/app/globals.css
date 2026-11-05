@@ -126,6 +126,14 @@ body {
   color: #7f93b5;
 }
 
+/* Scrolls without showing a scrollbar (the sidebar menu on short screens). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---------------------------------------------------------------------------
  * Motion (landing and sign-in). Everything animates transform and opacity only,
  * and all of it is switched off for people who prefer reduced motion.

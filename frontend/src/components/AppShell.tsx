@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         href={item.href}
         onClick={close}
         aria-current={active ? "page" : undefined}
-        className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-primary/20 text-white" : "text-white/75 hover:bg-white/5 hover:text-white"}`}
+        className={`group relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-primary/20 text-white" : "text-white/75 hover:bg-white/5 hover:text-white"}`}
       >
         {active && <span aria-hidden="true" className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-sun" />}
         <Icon name={item.icon} className={`h-[18px] w-[18px] shrink-0 ${active ? "text-white" : "text-white/60 group-hover:text-white"}`} />
@@ -98,10 +98,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const sidebar = (
     <div className="flex h-full flex-col font-display">
-      <div className="px-5 pb-4 pt-5">
+      <div className="px-5 pb-3 pt-4">
         <Link href="/dashboard" onClick={close} aria-label="Dashboard"><Logo /></Link>
       </div>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Main">
+      <nav className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-3 pb-3" aria-label="Main">
         {NAV.map((group) => {
           const items = group.items.filter((i) => !i.show || i.show(user));
           if (!items.length) return null;
@@ -113,16 +113,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
-      <div className="border-t border-white/10 px-3 pb-4 pt-4">
+      <div className="border-t border-white/10 px-3 pb-3 pt-3">
         <div className="px-3">
           <div className="truncate text-sm font-bold text-white">{user.fullName}</div>
           <div className="mt-0.5 text-xs text-haze">Employee code {user.code}</div>
           <div className="mt-0.5 truncate text-xs text-haze/80">{roles}</div>
         </div>
-        <div className="mt-3 space-y-0.5">
+        <div className="mt-2 space-y-0.5">
           {link({ href: "/notifications", label: "Notifications", icon: "bell" }, unread)}
           {link({ href: "/change-password", label: "Change password", icon: "key" })}
-          <button onClick={logout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-white/75 transition hover:bg-white/5 hover:text-white">
+          <button onClick={logout} className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-semibold text-white/75 transition hover:bg-white/5 hover:text-white">
             <Icon name="logout" className="h-[18px] w-[18px] text-white/60" /> Sign out
           </button>
         </div>

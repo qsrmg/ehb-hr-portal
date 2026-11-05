@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Spinner } from "@/components/ui";
+import { MoreRequests } from "@/components/MoreRequests";
 import { useAuth, type User } from "@/lib/auth";
 import { download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
@@ -139,9 +140,7 @@ export default function DashboardPage() {
               Download pay slip
             </button>
           )}
-          <Link href="/requests/new/letter" className={outline}>Request a letter</Link>
-          <Link href="/requests/new/expense" className={outline}>Claim expenses</Link>
-          <Link href="/requests/new/travel" className={outline}>Request travel</Link>
+          <MoreRequests className={outline} />
         </div>
       </div>
 

@@ -156,6 +156,32 @@ for (const vp of WIDTHS) {
   });
 }
 
+// ---------- Sidebar on a 1366x768 laptop; dashboard "More requests" menu ----------
+await step("sidebar", "Sidebar at 1366x768: an employee's menu fits; HR's longer menu scrolls without a visible scrollbar", async (check) => {
+  for (const [who, email, mustFit] of [["employee", "employee@ehb.local", true], ["HR", "hr@ehb.local", false]]) {
+    const { p, close } = await page({ name: "1366x768", width: 1366, height: 768 });
+    try {
+      await signIn(p, email);
+      const nav = await p.locator('aside nav[aria-label="Main"]').first().evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight, bar: el.offsetWidth - el.clientWidth }));
+      if (mustFit && nav.scroll > nav.client) throw new Error(`The employee menu needs scrolling (${nav.scroll}px in ${nav.client}px)`);
+      if (nav.bar > 0) throw new Error(`The ${who} menu shows a ${nav.bar}px scrollbar`);
+      await shot(p, `sidebar-${who}-1366x768`);
+      check(`${who}: menu ${nav.scroll}px in ${nav.client}px, no visible scrollbar`);
+      if (who === "employee") {
+        const actions = await p.locator("main").getByRole("link", { name: /^(Apply for leave|Attendance Update)$/ }).count();
+        if (actions !== 2) throw new Error("The two main request links are missing");
+        await p.getByRole("button", { name: "More requests" }).click();
+        await p.getByRole("menu", { name: "More requests" }).getByRole("menuitem", { name: "Claim expenses" }).waitFor();
+        await p.keyboard.press("Escape");
+        if (await p.getByRole("menu", { name: "More requests" }).count()) throw new Error("Escape did not close the menu");
+        check("Three main actions; More requests menu opens and closes with Escape");
+      }
+    } finally {
+      await close();
+    }
+  }
+});
+
 // ---------- Landing and sign-in at every target width; reduced motion ----------
 const EXTRA = [
   { name: "1920", width: 1920, height: 1080 },

@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // Signed-in pages are Client Components behind the sign-in gate, so the server never renders them and
+    // they can't set `instant` themselves. Validate only segments that opt in with `export const instant`.
+    instantInsights: { validationLevel: "manual-warning" },
+  },
   turbopack: {
     rules: {
       "*.css": {
