@@ -288,7 +288,14 @@ export default function ExitCasePage() {
               </>
             )}
             {c.canComplete && (
-              <Button disabled={c.completeBlockers.length > 0} loading={actions.busy === "complete"} onClick={() => confirm("Complete this exit?") && actions.run("complete", () => post(`/exits/${c.id}/complete`)).then(say("Exit completed."))}>
+              <Button
+                disabled={c.completeBlockers.length > 0}
+                loading={actions.busy === "complete"}
+                onClick={() => {
+                  const prompt = c.letters ? "Complete this exit?" : "Letters not issued yet. Complete anyway?";
+                  if (confirm(prompt)) actions.run("complete", () => post(`/exits/${c.id}/complete`)).then(say("Exit completed."));
+                }}
+              >
                 Complete exit
               </Button>
             )}

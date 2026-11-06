@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Card, Field, Input, PageHeader, Spinner } from "@/components/ui";
+import { Alert, Button, Card, Field, Input, PageHeader, Spinner, Switch } from "@/components/ui";
 import { put } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 
-type Setting = { key: string; label: string; value: string; default: string };
+type Setting = { key: string; label: string; value: string; default: string; boolean: boolean };
 
 function SettingsForm({ settings, onSaved }: { settings: Setting[]; onSaved: () => void }) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(settings.map((s) => [s.key, s.value])));
@@ -32,8 +32,12 @@ function SettingsForm({ settings, onSaved }: { settings: Setting[]; onSaved: () 
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">
         {settings.map((s) => (
-          <Field key={s.key} label={s.label} hint={`Default: ${s.default}`}>
-            <Input value={values[s.key] ?? ""} onChange={(e) => setValues({ ...values, [s.key]: e.target.value })} />
+          <Field key={s.key} label={s.label} hint={s.boolean ? undefined : `Default: ${s.default}`}>
+            {s.boolean ? (
+              <Switch checked={values[s.key] === "1"} onChange={(v) => setValues({ ...values, [s.key]: v ? "1" : "0" })} />
+            ) : (
+              <Input value={values[s.key] ?? ""} onChange={(e) => setValues({ ...values, [s.key]: e.target.value })} />
+            )}
           </Field>
         ))}
       </div>

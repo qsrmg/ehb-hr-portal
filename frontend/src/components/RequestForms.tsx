@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { post, put } from "@/lib/api";
+import { todayYmd } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
+
+const daysBefore = (ymd: string, days: number) => {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+};
 
 type Done = (requestId: number) => void;
 
@@ -136,6 +143,8 @@ export function AttendanceUpdateForm({ onDone, requestId, initial, defaultDate }
   });
   const [files, setFiles] = useState<FileList | null>(null);
   const { busy, error, run } = useSubmit(onDone);
+  const { data: me } = useApi<{ updateRequests: { windowDays: number } }>("/attendance/me");
+  const windowDays = me?.updateRequests.windowDays;
 
   return (
     <form
@@ -147,8 +156,15 @@ export function AttendanceUpdateForm({ onDone, requestId, initial, defaultDate }
     >
       {error && <Alert>{error}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Date">
-          <Input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+        <Field label="Date" hint={windowDays != null ? `Within the last ${windowDays} days` : undefined}>
+          <Input
+            type="date"
+            required
+            value={form.date}
+            max={todayYmd()}
+            min={windowDays != null ? daysBefore(todayYmd(), windowDays) : undefined}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+          />
         </Field>
         <Field label="Reason type">
           <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>

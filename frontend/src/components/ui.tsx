@@ -90,6 +90,25 @@ export const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => <in
 export const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => <select {...props} className={cx(inputClass, props.className)} />;
 export const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea rows={3} {...props} className={cx(inputClass, props.className)} />;
 
+/** An on/off switch for a boolean setting, rather than a 1/0 text field. */
+export function Switch({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        "inline-flex h-7 w-24 shrink-0 items-center rounded-full px-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "justify-start bg-primary text-white" : "justify-end bg-white/10 text-slate-300",
+      )}
+    >
+      <span className="px-2">{checked ? "On" : "Off"}</span>
+    </button>
+  );
+}
+
 export function Alert({ kind = "error", children }: { kind?: "error" | "success" | "info" | "warning"; children: React.ReactNode }) {
   const styles = {
     error: "bg-red-50 text-red-800 ring-red-200",

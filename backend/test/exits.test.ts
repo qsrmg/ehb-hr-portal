@@ -190,9 +190,11 @@ describe("Resignation & exit clearance", () => {
       if (i.kind === "NOTICE_SHORTFALL") i.amount = 8000;
       if (i.kind === "LEAVE_ENCASHMENT") i.amount = 22000;
     }
+    // Finance can also add its own line, e.g. a one-off payment with no fixed kind.
+    items.push({ kind: "OTHER", direction: "PAY", description: "Notice pay in lieu", amount: 15000 });
     const res = await as("fin").post(`/exits/${exit.sara}/settlement`, { items, settledOn: todayYmd(), method: "Bank transfer", reference: "FS-1" });
     ok(res);
-    assert.equal(res.data.net, 22000 - 30000 - 8000);
+    assert.equal(res.data.net, 22000 - 30000 - 8000 + 15000);
     assert.equal((await prisma.exitClearance.findFirstOrThrow({ where: { caseId: exit.sara, area: "FINANCE" } })).status, "CLEARED");
     assert.equal((await notes("hr", "Exit cleared: Sara")).length, 1);
 
@@ -201,8 +203,19 @@ describe("Resignation & exit clearance", () => {
     assert.equal(admin.settlement, null);
     assert.equal(admin.reason, null);
     const hr = (await as("hr").get(`/exits/${exit.sara}`)).data;
-    assert.equal(hr.settlement.net, -16000);
+    assert.equal(hr.settlement.net, -1000);
+    const custom = hr.settlement.items.find((i: { kind: string }) => i.kind === "OTHER");
+    assert.equal(custom.description, "Notice pay in lieu");
+    assert.equal(custom.amount, 15000);
     assert.equal(hr.reason, "Moving to another city");
+  });
+
+  test("leave encashment on exit is an on/off setting, not any number", async () => {
+    assert.equal((await api.call(token.hr!, "PUT", "/settings", { "exit.leaveEncashment": "2" })).status, 400);
+    ok(await api.call(token.hr!, "PUT", "/settings", { "exit.leaveEncashment": "0" }));
+    ok(await api.call(token.hr!, "PUT", "/settings", { "exit.leaveEncashment": "1" }));
+    const visible = (await api.call(token.hr!, "GET", "/settings")).data.find((s: { key: string }) => s.key === "exit.leaveEncashment");
+    assert.equal(visible.boolean, true);
   });
 
   test("the exit interview is optional and visible to HR only", async () => {
@@ -291,6 +304,8 @@ describe("Resignation & exit clearance", () => {
     assert.equal((await prisma.employee.findUniqueOrThrow({ where: { id: id.zara } })).managerId, id.nadia);
     const step = await prisma.requestStep.findFirstOrThrow({ where: { requestId: leave.data.id, order: 0 } });
     assert.equal(step.approverId, id.nadia);
+    // Letters were never issued for Hamza; completing the exit is a warning in the portal, not a block.
+    assert.equal((await as("hr").get(`/exits/${exit.hamza}`)).data.letters, null);
     ok(await as("hr").post(`/exits/${exit.hamza}/complete`));
   });
 

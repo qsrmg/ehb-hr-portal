@@ -28,7 +28,7 @@ export const SETTING_DEFAULTS = {
   // Resignation & exit clearance
   "exit.noticeDays": { value: "30", label: "Resignation notice period for confirmed employees (days)" },
   "exit.probationNoticeDays": { value: "7", label: "Resignation notice period during probation (days)" },
-  "exit.leaveEncashment": { value: "1", label: "Pay out unused Annual Leave in the final settlement (1 = on, 0 = off)" },
+  "exit.leaveEncashment": { value: "1", label: "Pay out unused Annual Leave in the final settlement", boolean: true },
   // Performance (BSC)
   "performance.rating1": { value: "Unsatisfactory", label: "Performance rating 1 (name)", text: true },
   "performance.rating2": { value: "Needs Improvement", label: "Performance rating 2 (name)", text: true },
@@ -45,13 +45,15 @@ export const SETTING_DEFAULTS = {
   "hiring.minMonthsInRole": { value: "12", label: "Months in the current role before an employee can apply for an internal job" },
   "hiring.minPerformanceRating": { value: "0", label: "Minimum last performance rating to apply for an internal job (1-5, 0 = off)" },
   "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
-} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean }>;
+} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 
 export const isOptionalSetting = (key: SettingKey) => "optional" in SETTING_DEFAULTS[key];
 /** Settings whose value is a name rather than a number or a time. */
 export const isTextSetting = (key: SettingKey) => "text" in SETTING_DEFAULTS[key];
+/** Settings that are an on/off switch, stored as "1" or "0" rather than shown as a number. */
+export const isBooleanSetting = (key: SettingKey) => "boolean" in SETTING_DEFAULTS[key];
 
 /** Settings Finance may change as well as HR. */
 export const FINANCE_SETTING_PREFIXES = ["expense.", "travel."];

@@ -1,6 +1,9 @@
-// Regression test: on "Apply for leave", the "These dates overlap with leave request #N" error from a
-// failed submit must clear as soon as the employee changes the dates, not stay stuck once they pick dates
-// that no longer overlap. See e2e/README.md. Run with `npm run e2e` (ONLY=leave or ONLY=... to target it).
+// Regression tests for two request-form bugs. See e2e/README.md. Run with `npm run e2e`.
+// 1. Apply for leave: the "These dates overlap with leave request #N" error from a failed submit must
+//    clear as soon as the employee changes the dates, not stay stuck once they pick dates that no longer
+//    overlap.
+// 2. Attendance Update: the date picker must not let the employee pick a future date or one older than
+//    the request window, rather than only rejecting it after Submit.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -115,6 +118,43 @@ await step(2, "Overlapping dates: submitting shows the overlap error", async (ch
     check("Submits successfully on the corrected, non-overlapping dates");
   } catch (err) {
     await snap(page, "FAILED").catch(() => {});
+    throw err;
+  } finally {
+    await context.close();
+  }
+});
+
+await step(3, "Attendance Update: the date picker's min/max match the request window", async (check) => {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 900 }, timezoneId: "Asia/Karachi" });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  try {
+    await page.goto(`${BASE}/login`);
+    await page.getByLabel("Work email").fill(EMPLOYEE);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign in securely" }).click();
+    await page.waitForURL(/\/dashboard$/);
+
+    await page.goto(`${BASE}/requests/new/attendance-update`);
+    await page.getByRole("heading", { name: "Attendance update" }).waitFor();
+    // Not getByLabel: once the window loads, a hint ("Within the last N days") joins "Date" inside the
+    // same <label>, so the accessible name is no longer exactly "Date". The date input is the only one here.
+    const dateInput = page.locator('input[type="date"]');
+    await dateInput.waitFor();
+    // The default seed leaves the window at 7 days (SETTING_DEFAULTS["attendanceUpdate.windowDays"]).
+    const windowDays = 7;
+    const karachiYmd = (offsetDays = 0) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date(Date.now() + offsetDays * 86_400_000));
+    const expectedMax = karachiYmd(0);
+    const expectedMin = karachiYmd(-windowDays);
+    // min comes from GET /attendance/me, fetched after the form mounts; wait for it to arrive.
+    await page.waitForFunction(() => document.querySelector('input[type="date"]')?.getAttribute("min"));
+    const [min, max] = await Promise.all([dateInput.getAttribute("min"), dateInput.getAttribute("max")]);
+    if (max !== expectedMax) throw new Error(`Expected max="${expectedMax}" (today), got "${max}"`);
+    if (min !== expectedMin) throw new Error(`Expected min="${expectedMin}" (${windowDays} days ago), got "${min}"`);
+    await snap(page, "attendance-update-date-bounds");
+    check(`Date input has min="${min}" and max="${max}", so the browser itself refuses a future or too-old date`);
+  } catch (err) {
+    await snap(page, "FAILED-attendance-update").catch(() => {});
     throw err;
   } finally {
     await context.close();

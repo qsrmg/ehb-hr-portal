@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
-import { FINANCE_SETTING_PREFIXES, getSettings, isOptionalSetting, isTextSetting, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
+import { FINANCE_SETTING_PREFIXES, getSettings, isBooleanSetting, isOptionalSetting, isTextSetting, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
 import { toDate, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
@@ -45,7 +45,7 @@ adminRouter.get("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
   res.json(
     Object.entries(SETTING_DEFAULTS)
       .filter(([key]) => editableBy(user, key))
-      .map(([key, def]) => ({ key, label: def.label, value: values[key as SettingKey], default: def.value, optional: isOptionalSetting(key as SettingKey) })),
+      .map(([key, def]) => ({ key, label: def.label, value: values[key as SettingKey], default: def.value, optional: isOptionalSetting(key as SettingKey), boolean: isBooleanSetting(key as SettingKey) })),
   );
 });
 
@@ -69,6 +69,8 @@ adminRouter.put("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
     const emptyAllowed = value === "" && isOptionalSetting(key as SettingKey);
     if (isTextSetting(key as SettingKey)) {
       if (value.length < 2 || value.length > 40) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter a name of 2 to 40 characters`);
+    } else if (isBooleanSetting(key as SettingKey)) {
+      if (value !== "0" && value !== "1") throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: on or off`);
     } else if (!emptyAllowed && (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value))) {
       throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter ${isTime ? "a time as HH:MM" : "a number"}`);
     }
