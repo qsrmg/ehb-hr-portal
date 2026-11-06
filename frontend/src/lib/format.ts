@@ -55,6 +55,8 @@ export const STATUS_STYLES: Record<string, { label: string; className: string }>
   CLOSED: { label: "Closed", className: "bg-slate-50 text-slate-500 ring-slate-200" },
   AWAITING: { label: "Awaiting your confirmation", className: "bg-amber-50 text-amber-800 ring-amber-200" },
   CONFIRMED: { label: "Confirmed", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  ON_PROBATION: { label: "On probation", className: "bg-sky-50 text-sky-700 ring-sky-200" },
+  DUE: { label: "Confirmation due", className: "bg-amber-50 text-amber-800 ring-amber-200" },
   WEEKEND: { label: "Weekend", className: "bg-slate-50 text-slate-500 ring-slate-200" },
   HOLIDAY: { label: "Holiday", className: "bg-violet-50 text-violet-700 ring-violet-200" },
   NO_DATA: { label: "No data", className: "bg-slate-50 text-slate-400 ring-slate-200" },

@@ -4,12 +4,14 @@ import { deliverEmail, type EmailMessage } from "../lib/mailer.js";
 import { sendDueReminders } from "./reminders.js";
 import { yearEndCarryForward } from "../services/leave.js";
 import { deactivateDueExits } from "../services/exits.js";
+import { notifyProbationDue } from "../services/probation.js";
 
 // Background jobs run on pg-boss, which keeps its queue in the same PostgreSQL database (schema "pgboss").
 const EMAIL_QUEUE = "email";
 const REMINDER_QUEUE = "approval-reminders";
 export const CARRY_FORWARD_QUEUE = "leave-carry-forward";
 const EXIT_DEACTIVATION_QUEUE = "exit-deactivation";
+const PROBATION_DUE_QUEUE = "probation-due";
 /** 00:05 on 1 January, company time. */
 export const CARRY_FORWARD_CRON = "5 0 1 1 *";
 
@@ -59,6 +61,14 @@ export async function startQueue(opts: QueueOptions = {}) {
     await instance.work(EXIT_DEACTIVATION_QUEUE, async () => {
       const count = await deactivateDueExits();
       if (count) console.log(`[exits] deactivated ${count} account(s) after their last working day`);
+    });
+
+    // Daily: the Line Manager (or HR) is told once per employee whose probation has just become due.
+    await instance.createQueue(PROBATION_DUE_QUEUE, { retryLimit: 3, retryDelay: 300 });
+    await instance.schedule(PROBATION_DUE_QUEUE, "10 0 * * *", null, { tz: env.APP_TIMEZONE, missed: "once" });
+    await instance.work(PROBATION_DUE_QUEUE, async () => {
+      const count = await notifyProbationDue();
+      if (count) console.log(`[probation] notified for ${count} confirmation(s) due`);
     });
   }
   boss = instance;

@@ -63,6 +63,16 @@ export default function ProfilePage() {
           <Info label="Line manager" value={data.manager?.fullName} />
           <Info label="Joining date" value={fmtDate(data.joiningDate)} />
           <Info label="Status" value={<StatusBadge status={data.status} />} />
+          <Info
+            label="Employment status"
+            value={
+              <>
+                <StatusBadge status={data.probationStatus ?? "CONFIRMED"} />
+                {data.probationStatus === "ON_PROBATION" && <span className="ml-2 text-xs text-slate-500">{`Until ${fmtDate(data.probationEndDate)}`}</span>}
+                {data.probationStatus === "CONFIRMED" && data.confirmedAt && <span className="ml-2 text-xs text-slate-500">{`Confirmed on ${fmtDate(data.confirmedAt)}`}</span>}
+              </>
+            }
+          />
           <Info label="Roles" value={data.roles.map((r) => ROLE_LABELS[r]).join(", ")} />
         </dl>
       </Card>

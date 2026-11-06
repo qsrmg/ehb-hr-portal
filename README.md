@@ -107,7 +107,7 @@ cd frontend
 npm run e2e
 ```
 
-One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, Hiring, Apply for leave, then the demo walk-through on the demo data). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, Hiring, Apply for leave, Probation confirmation, then the demo walk-through on the demo data). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
 
 ## Resignation & exit clearance
 
@@ -160,6 +160,17 @@ Sidebar: *Jobs and hiring*.
   - **External hire:** *Create employee* opens Add employee, pre-filled from the requisition.
   - The position closes when every place is filled, and the remaining applicants are told. HR can also close it with a reason.
 - **Employee record:** two new HR fields, *Grade* and *In current role since*.
+
+## Probation confirmation
+
+An employee no longer becomes confirmed automatically once their probation end date passes.
+
+- **Confirmation due:** shown on the employee's record (and counted on the Employees list) once the date arrives and HR has not yet decided. A daily job tells the employee's Line Manager once per due cycle (HR, if there is no Line Manager).
+- **The Line Manager** can leave an optional note for HR from *Team → [member]*, before HR decides. Not an approval step; HR has the final say.
+- **HR** opens the employee's record and either *Confirms employment* (the probation date clears, matching "empty = confirmed") or *Extends probation* (a new date and a reason, required). Extending restarts the due cycle for the new date.
+- **Emails:** the employee and their Line Manager are told when HR confirms or extends.
+- **Confidentiality:** the Line Manager's notes and the confirm/extend history are visible to HR, Management and that employee's own Line Manager only. The employee sees their own status (confirmed / on probation, with the date) on their profile, read-only.
+- No new setting: probation length is still set per employee (*On probation until*, already a field); "due" is worked out from that date, not a separate number.
 
 ## Leave year-end
 

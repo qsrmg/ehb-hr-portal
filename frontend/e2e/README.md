@@ -9,6 +9,7 @@
 | `performance.mjs` | Performance (BSC) steps 1–9: HR's department template, a cycle, goals adjusted and sent, acknowledged (no duplicate HOD step), check-in, self-review, manager ratings, Admin and Finance refused, HR calibration and release, appeal decided, acknowledgement and PDF, cycle overview | `test-screenshots/performance/` |
 | `hiring.mjs` | Manpower Requisition and internal jobs steps 1–10: headcount, a new position, Finance confirms the budget, approvals, posting, a confidential application (and an ineligible employee), shortlisting with the managers told, interview feedback, external candidates, Create employee from the requisition, internal move, position filled with a polite email and a draft replacement | `test-screenshots/hiring/` |
 | `leave.mjs` | Apply for leave: submitting overlapping dates shows "These dates overlap with leave request #N"; switching to non-overlapping dates — without resubmitting — clears the message and the form then submits cleanly. Attendance Update: the date input's min/max match the request window | `test-screenshots/leave/` |
+| `probation.mjs` | Probation confirmation: the Employees list due-count, HR sees Confirm/Extend on a due record, the Line Manager leaves a note from the Team page, HR extends with a reason (and the due cycle moves on) or confirms, and the employee sees their own status, read-only, on their profile | `test-screenshots/probation/` |
 | `demo.mjs` | Walks through DEMO.md on the HR demo data (`backend/prisma/demo.ts`, loaded instead of the standard seed): every login and screen the demo uses | `test-screenshots/demo/` |
 
 `travel.mjs` runs in a real browser as Finance, HR, the traveller (Sara), the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
@@ -45,7 +46,7 @@ The server logs go to `test-screenshots/e2e-logs/` (ignored by git, like the scr
 
 | Variable | Default |
 |---|---|
-| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring,leave,demo` (e.g. `E2E_SPECS=demo` to run one) |
+| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring,leave,probation,demo` (e.g. `E2E_SPECS=demo` to run one) |
 | `E2E_DB_NAME` | `hr_ms_e2e` (must end in `_e2e`) |
 | `E2E_API_PORT` / `E2E_WEB_PORT` | `5100` / `3100` |
 | `E2E_MAIL_PORT` / `E2E_SMTP_PORT` | `8125` / `1125` |

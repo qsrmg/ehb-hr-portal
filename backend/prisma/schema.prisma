@@ -61,7 +61,11 @@ model Employee {
   designation      String?
   joiningDate      DateTime  @db.Date
   // Resignation notice: the probation notice period applies until this date (empty = confirmed)
-  probationEndDate DateTime? @db.Date
+  probationEndDate    DateTime? @db.Date
+  // HR's formal confirmation (Module: Probation confirmation). Empty while on probation or still due.
+  confirmedAt         DateTime?
+  // So the Line Manager (or HR, with no manager) is told once per due cycle, not on every run of the daily job
+  probationNotifiedAt DateTime?
   // Hiring: the grade replacements keep by default, and since when the employee is in their current role
   grade            String?
   roleSince        DateTime? @db.Date // empty = joining date; set again by an internal move
@@ -149,6 +153,40 @@ model Employee {
   hiredFromApplications   JobApplication[]      @relation("ApplicationHired")
   applicationEvents       ApplicationEvent[]
   interviewFeedback       InterviewFeedback[]
+  probationDecisions      ProbationDecision[]   @relation("ProbationEmployee")
+  probationDecisionsMade  ProbationDecision[]   @relation("ProbationDecidedBy")
+  probationNotes          ProbationNote[]       @relation("ProbationNoteEmployee")
+  probationNotesWritten   ProbationNote[]       @relation("ProbationNoteAuthor")
+}
+
+/**
+ * HR's formal confirm/extend decision once probation ends, with the reason for an extension.
+ */
+model ProbationDecision {
+  id                       Int       @id @default(autoincrement())
+  employeeId               Int
+  employee                 Employee  @relation("ProbationEmployee", fields: [employeeId], references: [id])
+  kind                     String // CONFIRMED or EXTENDED
+  previousProbationEndDate DateTime? @db.Date
+  newProbationEndDate      DateTime? @db.Date // set for EXTENDED, empty for CONFIRMED
+  reason                   String? // required for EXTENDED
+  decidedById              Int
+  decidedBy                Employee  @relation("ProbationDecidedBy", fields: [decidedById], references: [id])
+  createdAt                DateTime  @default(now())
+}
+
+/**
+ * The Line Manager's optional note for HR before a confirmation decision. Not an approval step; HR
+ * still has the final say. Visible to HR and the employee's Line Manager only, never the employee.
+ */
+model ProbationNote {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation("ProbationNoteEmployee", fields: [employeeId], references: [id])
+  authorId   Int
+  author     Employee @relation("ProbationNoteAuthor", fields: [authorId], references: [id])
+  comment    String
+  createdAt  DateTime @default(now())
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.

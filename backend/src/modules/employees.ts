@@ -13,6 +13,7 @@ import { recalculateEntitlements } from "../services/leave.js";
 import { employeeDeactivated } from "./assets.js";
 import { addJoinerToOpenCycles } from "../services/performance.js";
 import { closeIfFilled, externalHireContext, hiredExternally, notifyApplicant } from "../services/hiring.js";
+import { addProbationNote, confirmEmployee, extendProbation, probationDueCount, probationHistory, probationStatus } from "../services/probation.js";
 import type { Employee, Prisma } from "../generated/prisma/client.js";
 
 export const employeesRouter = Router();
@@ -51,6 +52,8 @@ function present(e: EmployeeWithRelations, viewer: AuthUser) {
     manager: e.manager,
     joiningDate: ymd(e.joiningDate),
     probationEndDate: e.probationEndDate ? ymd(e.probationEndDate) : null,
+    confirmedAt: e.confirmedAt,
+    probationStatus: probationStatus(e),
     roleSince: e.roleSince ? ymd(e.roleSince) : null,
     status: e.status,
     roles: e.roles,
@@ -105,7 +108,7 @@ employeesRouter.get("/", async (req, res) => {
     rows.map((e) => ({
       id: e.id, code: e.code, fullName: e.fullName, email: e.email, designation: e.designation,
       department: e.department?.name ?? null, manager: e.manager?.fullName ?? null, roles: e.roles,
-      status: e.status, joiningDate: ymd(e.joiningDate),
+      status: e.status, joiningDate: ymd(e.joiningDate), probationStatus: probationStatus(e),
     })),
   );
 });
@@ -136,6 +139,12 @@ employeesRouter.patch("/me/contact", async (req, res) => {
   res.json(present(updated, user));
 });
 
+// How many active employees are waiting on a confirmation decision right now. Before "/:id" so it is not
+// read as an employee id.
+employeesRouter.get("/probation-due-count", requireRole("HR", "MANAGEMENT", "FINANCE", "ADMIN"), async (req, res) => {
+  res.json({ count: await probationDueCount() });
+});
+
 employeesRouter.get("/:id", async (req, res) => {
   const user = currentUser(req);
   const id = Number(req.params.id);
@@ -144,7 +153,13 @@ employeesRouter.get("/:id", async (req, res) => {
   const allowed = e.id === user.id || e.managerId === user.id || hasRole(user, "HR", "MANAGEMENT", "FINANCE", "ADMIN");
   if (!allowed) throw new HttpError(403, "You can only view your own team");
   if (sensitiveFieldsShown(user, id)) await audit(user.id, "VIEW_SENSITIVE", "Employee", id);
-  res.json(present(e, user));
+  // The Line Manager's notes and HR's confirm/extend history: HR, Management and this employee's own
+  // Line Manager only — never the employee themselves.
+  const canSeeProbationHistory = e.managerId === user.id || hasRole(user, "HR", "MANAGEMENT");
+  res.json({
+    ...present(e, user),
+    ...(canSeeProbationHistory ? { probationHistory: await probationHistory(id) } : {}),
+  });
 });
 
 const optionalText = z.string().trim().nullable().optional().transform((v) => (v === "" ? null : v));
@@ -274,6 +289,42 @@ employeesRouter.post("/:id/reset-password", requireRole("HR"), async (req, res) 
   });
   await audit(user.id, "RESET_PASSWORD", "Employee", id);
   res.json({ ok: true, initialPassword: env.DEFAULT_PASSWORD });
+});
+
+// HR confirms employment once probation is due (or earlier, if HR chooses to confirm ahead of the date)
+employeesRouter.post("/:id/confirm", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const id = Number(req.params.id);
+  const decision = await confirmEmployee(id, user.id);
+  await audit(user.id, "CONFIRM", "Employee", id);
+  res.json({ ok: true, decision });
+});
+
+const extendProbationSchema = z.object({
+  probationEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the new probation end date"),
+  reason: z.string().trim().min(3, "Give the reason for extending probation"),
+});
+
+// HR extends probation with a new end date; a reason is required and kept with the decision history
+employeesRouter.post("/:id/extend-probation", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const id = Number(req.params.id);
+  const parsed = extendProbationSchema.safeParse(req.body);
+  if (!parsed.success) throw new HttpError(400, parsed.error.issues.map((i) => i.message).join("; "));
+  const decision = await extendProbation(id, parsed.data.probationEndDate, parsed.data.reason, user.id);
+  await audit(user.id, "EXTEND_PROBATION", "Employee", id, { newProbationEndDate: parsed.data.probationEndDate, reason: parsed.data.reason });
+  res.json({ ok: true, decision });
+});
+
+const probationNoteSchema = z.object({ comment: z.string().trim().min(2, "Enter a note").max(1000) });
+
+// The employee's Line Manager leaves an optional note for HR before HR decides. Not an approval step.
+employeesRouter.post("/:id/probation-note", async (req, res) => {
+  const user = currentUser(req);
+  const parsed = probationNoteSchema.safeParse(req.body);
+  if (!parsed.success) throw new HttpError(400, parsed.error.issues.map((i) => i.message).join("; "));
+  const note = await addProbationNote(Number(req.params.id), user.id, parsed.data.comment);
+  res.json({ ok: true, note: { id: note.id, comment: note.comment, at: note.createdAt } });
 });
 
 const GENDERS: Record<string, "MALE" | "FEMALE" | "OTHER"> = { male: "MALE", m: "MALE", female: "FEMALE", f: "FEMALE", other: "OTHER" };

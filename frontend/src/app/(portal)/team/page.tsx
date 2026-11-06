@@ -2,14 +2,57 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Alert, Card, Input, PageHeader, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
+import { Alert, Button, Card, Input, PageHeader, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
 import { AttendanceTable, MonthPicker, type MonthData } from "@/components/AttendanceMonth";
 import { TeamAssets } from "@/components/AssetPanels";
+import { post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { currentMonth, fmtDate, todayYmd } from "@/lib/format";
+import type { Profile } from "@/lib/types";
 
 type Daily = { date: string; lastImported: string | null; rows: { employeeId: number; code: string; fullName: string; designation: string | null; department: string | null; status: string; leaveType: string | null; checkIn: string | null; checkOut: string | null }[] };
 type LeaveRow = { requestId: number; status: string; employee: { id: number; fullName: string; code: string }; leaveType: string; startDate: string; endDate: string; days: number };
+
+/** Shown only when the team member's probation is due: a note to HR before they confirm or extend it. */
+function ProbationDueNote({ employeeId }: { employeeId: number }) {
+  const { data: emp, reload } = useApi<Profile>(`/employees/${employeeId}`);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  if (!emp || emp.probationStatus !== "DUE") return null;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await post(`/employees/${employeeId}/probation-note`, { comment });
+      setComment("");
+      setMsg({ kind: "success", text: "Note sent to HR." });
+      reload();
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md bg-amber-50 p-3 ring-1 ring-amber-200">
+      <p className="text-sm text-amber-900">
+        <StatusBadge status="DUE" /> {emp.fullName}&apos;s probation ended {fmtDate(emp.probationEndDate)}. HR will confirm their employment or extend probation; you can leave an optional note for HR first — this is not an approval step.
+      </p>
+      {emp.probationHistory?.notes.map((n) => (
+        <p key={n.id} className="mt-2 text-xs text-amber-800">Your note ({fmtDate(n.at)}): {n.comment}</p>
+      ))}
+      <form onSubmit={submit} className="mt-2 flex flex-wrap gap-2">
+        <Input placeholder="Optional note for HR" value={comment} onChange={(e) => setComment(e.target.value)} className="flex-1" aria-label="Note for HR" />
+        <Button size="sm" type="submit" loading={busy} disabled={!comment.trim()}>Send</Button>
+      </form>
+      {msg && <p className={`mt-1 text-xs ${msg.kind === "success" ? "text-emerald-700" : "text-red-700"}`}>{msg.text}</p>}
+    </div>
+  );
+}
 
 export default function TeamPage() {
   const [tab, setTab] = useState<"today" | "leave" | "member" | "assets">("today");
@@ -79,6 +122,7 @@ export default function TeamPage() {
             <MonthPicker month={month} onChange={setMonth} />
             {member.loading ? <Spinner /> : member.error ? <Alert>{member.error}</Alert> : member.data && (
               <>
+                <ProbationDueNote employeeId={memberId} />
                 <p className="text-sm text-slate-600">
                   {member.data.employee.fullName} ({member.data.employee.code}): {member.data.summary.onTime} on time · {member.data.summary.late} late · {member.data.summary.halfDay} half day · {member.data.summary.absent} absent · {member.data.summary.leave} leave
                 </p>

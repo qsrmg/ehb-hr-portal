@@ -9,6 +9,7 @@ import { hasRole, ROLE_LABELS, useAuth, type Role } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import type { Profile } from "@/lib/types";
 import { AssetClearanceCard } from "@/components/AssetPanels";
+import { ProbationCard } from "@/components/ProbationCard";
 import { fmtDate, fmtMoney } from "@/lib/format";
 
 type Option = { id: number; name?: string; fullName?: string; code?: string };
@@ -138,7 +139,7 @@ export default function EmployeeDetailPage() {
   const search = useSearchParams();
   const { user } = useAuth();
   const isHr = hasRole(user, "HR");
-  const { data: emp, loading, error, setData } = useApi<Profile>(`/employees/${id}`);
+  const { data: emp, loading, error, setData, reload } = useApi<Profile>(`/employees/${id}`);
   const balances = useApi<Balance[]>(`/leave/balances/${id}`);
   const [msg, setMsg] = useState<Msg>(
     search.get("created") ? { kind: "success", text: "Employee created. They log in with the default initial password and must change it at first login." } : null,
@@ -168,7 +169,9 @@ export default function EmployeeDetailPage() {
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
 
       {isHr ? (
-        <EmployeeForm key={emp.id} emp={emp} onSaved={setData} onMessage={setMsg} />
+        // Re-keyed when probation changes outside this form (Confirm/Extend below), so the "On probation
+        // until" field it holds in local state does not go stale, the same way KpiEditor re-keys on save.
+        <EmployeeForm key={`${emp.id}-${emp.confirmedAt}-${emp.probationEndDate}`} emp={emp} onSaved={setData} onMessage={setMsg} />
       ) : (
         <Card title="Information">
           <dl className="grid gap-4 sm:grid-cols-3">
@@ -180,6 +183,8 @@ export default function EmployeeDetailPage() {
           </dl>
         </Card>
       )}
+
+      <ProbationCard emp={emp} canAct={isHr} onChanged={reload} />
 
       {hasRole(user, "HR", "ADMIN", "FINANCE", "MANAGEMENT") && <AssetClearanceCard employeeId={emp.id} />}
 

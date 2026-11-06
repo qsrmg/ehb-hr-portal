@@ -10,7 +10,10 @@ import { hasRole, ROLE_LABELS, useAuth, type Role } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { fmtDate } from "@/lib/format";
 
-type Row = { id: number; code: string; fullName: string; email: string; designation: string | null; department: string | null; manager: string | null; roles: Role[]; status: string; joiningDate: string };
+type Row = {
+  id: number; code: string; fullName: string; email: string; designation: string | null; department: string | null; manager: string | null;
+  roles: Role[]; status: string; joiningDate: string; probationStatus?: "ON_PROBATION" | "DUE" | "CONFIRMED";
+};
 type Dept = { id: number; name: string };
 type ImportResult = { rowsRead: number; created: { code: string; fullName: string; email: string }[]; skipped: { row: number; reason: string }[]; managersLinked: number; initialPassword: string };
 
@@ -66,6 +69,8 @@ export default function EmployeesPage() {
   const { user } = useAuth();
   const router = useRouter();
   const isHr = hasRole(user, "HR");
+  const canSeeDueCount = hasRole(user, "HR", "MANAGEMENT", "FINANCE", "ADMIN");
+  const dueCount = useApi<{ count: number }>(canSeeDueCount ? "/employees/probation-due-count" : null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("ACTIVE");
   const [departmentId, setDepartmentId] = useState("");
@@ -96,6 +101,12 @@ export default function EmployeesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Employees" subtitle="Employee records. HR changes job, department, manager and salary fields." actions={isHr && <Button onClick={() => setShowNew(!showNew)}>Add employee</Button>} />
+
+      {!!dueCount.data?.count && (
+        <Alert kind="warning">
+          {dueCount.data.count} employee{dueCount.data.count === 1 ? "" : "s"} {dueCount.data.count === 1 ? "is" : "are"} waiting on a confirmation decision — look for <StatusBadge status="DUE" /> below.
+        </Alert>
+      )}
 
       {hireId && hireCtx.error && <Alert>{hireCtx.error}</Alert>}
       {hireId && hireCtx.data && <HireForm ctx={hireCtx.data} applicationId={hireId} />}
@@ -167,7 +178,10 @@ export default function EmployeesPage() {
                 <Td>{e.manager ?? "—"}</Td>
                 <Td className="text-xs text-slate-500">{e.roles.filter((r) => r !== "EMPLOYEE").map((r) => ROLE_LABELS[r]).join(", ") || "Employee"}</Td>
                 <Td>{fmtDate(e.joiningDate)}</Td>
-                <Td><StatusBadge status={e.status} /></Td>
+                <Td>
+                  <StatusBadge status={e.status} />
+                  {e.probationStatus === "DUE" && <span className="ml-1"><StatusBadge status="DUE" /></span>}
+                </Td>
               </tr>
             ))}
           </Table>
