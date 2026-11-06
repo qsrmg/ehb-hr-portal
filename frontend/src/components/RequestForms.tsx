@@ -29,7 +29,7 @@ function useSubmit(onDone: Done) {
       setBusy(false);
     }
   };
-  return { busy, error, run };
+  return { busy, error, run, clearError: () => setError(null) };
 }
 
 type LeaveType = { id: number; code: string; name: string; annualQuota: number | null; noticeDays: number; documentAfterDays: number | null; needsHrApproval: boolean };
@@ -45,15 +45,18 @@ export function LeaveForm({ onDone, requestId, initial }: { onDone: Done; reques
   });
   const [files, setFiles] = useState<FileList | null>(null);
   const [preview, setPreview] = useState<(Preview & { key: string }) | null>(null);
-  const { busy, error, run } = useSubmit(onDone);
+  const { busy, error, run, clearError } = useSubmit(onDone);
 
   // Until the employee picks one, the first available leave type is selected.
   const leaveTypeId = form.leaveTypeId || (types?.[0] ? String(types[0].id) : "");
   const previewKey = leaveTypeId && form.startDate && form.endDate ? `${leaveTypeId}|${form.startDate}|${form.endDate}` : null;
   const currentPreview = preview && preview.key === previewKey ? preview : null;
 
-  // Live check of working days, balance, notice period and document requirement
+  // Live check of working days, balance, notice period and document requirement. A stale error from a
+  // previous submit attempt (e.g. an overlap with another request) is cleared as soon as the employee
+  // changes the type or dates, so it never outlives the dates it was reported for.
   useEffect(() => {
+    clearError();
     if (!previewKey) return;
     const t = setTimeout(() => {
       post<Preview>("/leave/preview", { leaveTypeId, startDate: form.startDate, endDate: form.endDate, excludeRequestId: requestId })
@@ -61,6 +64,7 @@ export function LeaveForm({ onDone, requestId, initial }: { onDone: Done; reques
         .catch(() => setPreview(null));
     }, 250);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewKey, leaveTypeId, form.startDate, form.endDate, requestId]);
 
   const type = types?.find((t) => String(t.id) === leaveTypeId);

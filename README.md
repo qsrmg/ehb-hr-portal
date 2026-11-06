@@ -107,7 +107,7 @@ cd frontend
 npm run e2e
 ```
 
-One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, Hiring, then the demo walk-through on the demo data). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
+One command runs every browser test (design screenshots, Travel, My Inventory, Resignation & exit clearance, Performance, Hiring, Apply for leave, then the demo walk-through on the demo data). Before **each** test it drops, migrates and seeds a separate `hr_ms_e2e` database, so the tests never touch `hr_ms` and don't depend on each other or on earlier runs. It starts its own backend (port 5100), frontend (3100) and Mailpit (8125) and stops them at the end. You don't need to start anything, and your own dev servers on 3000/5000/8025 can stay running. Details are in [frontend/e2e/README.md](frontend/e2e/README.md).
 
 ## Resignation & exit clearance
 
