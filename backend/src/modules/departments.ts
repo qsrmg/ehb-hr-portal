@@ -39,7 +39,7 @@ departmentsRouter.post("/", requireRole("HR"), async (req, res) => {
 
 departmentsRouter.patch("/:id", requireRole("HR"), async (req, res) => {
   const parsed = schema.partial().safeParse(req.body);
-  if (!parsed.success) throw new HttpError(400, "Invalid department");
+  if (!parsed.success) throw new HttpError(400, parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   await grantHod(parsed.data.hodId);
   const dept = await prisma.department.update({ where: { id: Number(req.params.id) }, data: parsed.data });
   await audit(currentUser(req).id, "UPDATE", "Department", dept.id, parsed.data);

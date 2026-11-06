@@ -18,7 +18,7 @@ const FEATURES: { icon: LucideIcon; title: string; text: React.ReactNode }[] = [
   { icon: LayoutDashboard, title: "Employee Dashboard", text: "Today's in-time, monthly attendance, leave balances and pending tasks on one screen." },
   { icon: Clock, title: "Attendance Management", text: "Each day shown as On Time, Late, Half Day or Absent. Fix a missed punch without overwriting the record." },
   { icon: CalendarDays, title: "Leave Management", text: "Working days counted for you, balance and notice period checked, documents requested when needed." },
-  { icon: Wallet, title: "Payroll & Payslips", text: "Download monthly pay slips as PDF by the 5th, and view your yearly tax statement for July to June." },
+  { icon: Wallet, title: "Payroll & Pay Slips", text: "Download monthly pay slips as PDF by the 5th, and view your yearly tax statement for July to June." },
   { icon: FileText, title: "Employee Documents", text: "Company policies and HR forms uploaded by HR, ready to read and download." },
   { icon: ClipboardList, title: "HR Requests", text: "Letters, expenses, travel and more, with 13 request forms rolling out in phases." },
   { icon: Workflow, title: "Approval Workflow", text: "Every request moves to the right approver in turn, and every step is recorded." },

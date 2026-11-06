@@ -20,7 +20,7 @@ Tick each line and write the agreed value. Every item can be changed later in th
 |---|---|---|---|
 | ☐ | Annual Leave: quota / notice / carry forward | 14 / 3 days / 14 | |
 | ☐ | Casual Leave / Sick Leave (certificate after) | 10 / 8 (2 days) | |
-| ☐ | Leave Without Pay | No quota, HR approves, 3 days notice | |
+| ☐ | Leave Without Pay | No quota, HR approves, 3 days' notice | |
 | ☐ | Maternity / Paternity (check the federal Act) | 180 / 30 days | |
 | ☐ | Moon-sighted holidays (Eid, Muharram, Rabi-ul-Awal) | Not entered | |
 

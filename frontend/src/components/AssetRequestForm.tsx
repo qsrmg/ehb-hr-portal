@@ -39,7 +39,7 @@ export function AssetRequestForm({ onDone, requestId, initial }: { onDone: (id: 
       </Field>
       <Field label="Why do you need it?"><Textarea required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. New joiner, or my laptop no longer holds a charge" /></Field>
       <Field label="Needed by (optional)"><Input type="date" min={todayYmd()} value={form.neededBy} onChange={(e) => setForm({ ...form, neededBy: e.target.value })} /></Field>
-      <p className="text-xs text-slate-500">Goes to your Line Manager, then Admin. Once approved, Admin issues an item and you confirm receipt in My Inventory.</p>
+      <p className="text-xs text-slate-500">Goes to your Line Manager, then Admin. Once approved, Admin issues an item and you confirm receipt in My inventory.</p>
       <Button type="submit" loading={busy}>{requestId ? "Resubmit request" : "Submit request"}</Button>
     </form>
   );

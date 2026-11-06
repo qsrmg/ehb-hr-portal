@@ -52,7 +52,7 @@ adminRouter.get("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
 adminRouter.put("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
   const user = currentUser(req);
   const body = z.record(z.string(), z.string()).safeParse(req.body);
-  if (!body.success) throw new HttpError(400, "Invalid settings");
+  if (!body.success) throw new HttpError(400, body.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   const before = await getSettings();
   const changes: Record<string, { from: string; to: string }> = {};
   // Performance bands must run downwards between 1 and 5 (rating 5 from the highest score).

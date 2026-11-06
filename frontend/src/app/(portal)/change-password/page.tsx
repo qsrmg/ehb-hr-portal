@@ -15,7 +15,7 @@ export default function ChangePasswordPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.newPassword !== form.confirm) return setError("The new passwords do not match");
+    if (form.newPassword !== form.confirm) return setError("The new passwords do not match.");
     setBusy(true);
     setError(null);
     try {

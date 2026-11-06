@@ -379,7 +379,7 @@ async function issueAsset(tx: Prisma.TransactionClient, asset: Awaited<ReturnTyp
     const ar = await tx.assetRequest.findFirst({ where: { requestId: input.requestId }, include: { request: true } });
     if (!ar || ar.request.status !== "APPROVED") throw new HttpError(400, "That asset request is not approved");
     if (ar.assignmentId) throw new HttpError(400, "That asset request has already been fulfilled");
-    if (ar.categoryId !== asset.categoryId) throw new HttpError(400, `The request is for a different category than ${asset.category.name}`);
+    if (ar.categoryId !== asset.categoryId) throw new HttpError(400, `The request is for a different category from ${asset.category.name}`);
     input = { ...input, assigneeType: "EMPLOYEE", employeeId: ar.request.employeeId };
     assetRequestId = ar.id;
   }

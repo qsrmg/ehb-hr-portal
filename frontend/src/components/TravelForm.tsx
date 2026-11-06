@@ -92,7 +92,7 @@ export function TravelForm({ onDone, requestId, initial }: { onDone: (id: number
       <Field label="Travel advance (PKR, optional)" hint="Adds a Finance approval step. Unspent advance is returned after the trip.">
         <Input type="number" min="0" step="0.01" value={form.advanceRequested} onChange={set("advanceRequested")} placeholder="0" />
       </Field>
-      <p className="text-xs text-slate-500">Goes to your Line Manager and Head of Department (and Finance for an advance). Business-trip costs are claimed in the settlement after you return, not in Expense Claim.</p>
+      <p className="text-xs text-slate-500">Goes to your Line Manager and Head of Department (and Finance for an advance). Business-trip costs are claimed in the settlement after you return, not in the Expense claim.</p>
       <Button type="submit" loading={busy}>{requestId ? "Resubmit travel request" : "Submit travel request"}</Button>
     </form>
   );
