@@ -274,3 +274,87 @@ export function LetterForm({ onDone, requestId, initial }: { onDone: Done; reque
     </form>
   );
 }
+
+export const TRAINING_TYPES: Record<string, string> = {
+  COURSE: "Course",
+  WORKSHOP: "Workshop",
+  CONFERENCE: "Conference",
+  CERTIFICATION: "Certification",
+  OTHER: "Other",
+};
+
+type TrainingInitial = {
+  programmeTitle: string; provider: string; trainingType: string; startDate: string; endDate: string;
+  mode: string; location: string | null; estimatedCost: number; justification: string;
+};
+
+export function TrainingForm({ onDone, requestId, initial }: { onDone: Done; requestId?: number; initial?: TrainingInitial }) {
+  const [form, setForm] = useState({
+    programmeTitle: initial?.programmeTitle ?? "",
+    provider: initial?.provider ?? "",
+    trainingType: initial?.trainingType ?? "COURSE",
+    startDate: initial?.startDate ?? "",
+    endDate: initial?.endDate ?? "",
+    mode: initial?.mode ?? "ONLINE",
+    location: initial?.location ?? "",
+    estimatedCost: initial ? String(initial.estimatedCost) : "",
+    justification: initial?.justification ?? "",
+  });
+  const [files, setFiles] = useState<FileList | null>(null);
+  const { busy, error, run } = useSubmit(onDone);
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => submitForm("training", requestId, form, files));
+      }}
+    >
+      {error && <Alert>{error}</Alert>}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Programme title">
+          <Input required value={form.programmeTitle} onChange={(e) => setForm({ ...form, programmeTitle: e.target.value })} />
+        </Field>
+        <Field label="Provider">
+          <Input required value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} />
+        </Field>
+        <Field label="Type">
+          <Select value={form.trainingType} onChange={(e) => setForm({ ...form, trainingType: e.target.value })}>
+            {Object.entries(TRAINING_TYPES).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Online or on-site">
+          <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
+            <option value="ONLINE">Online</option>
+            <option value="ON_SITE">On-site</option>
+          </Select>
+        </Field>
+        <Field label="Start date">
+          <Input type="date" required min={todayYmd()} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value, endDate: form.endDate || e.target.value })} />
+        </Field>
+        <Field label="End date">
+          <Input type="date" required min={form.startDate || todayYmd()} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+        </Field>
+        {form.mode === "ON_SITE" && (
+          <Field label="Location">
+            <Input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+          </Field>
+        )}
+        <Field label="Estimated cost (PKR)">
+          <Input type="number" required min={0.01} step="0.01" value={form.estimatedCost} onChange={(e) => setForm({ ...form, estimatedCost: e.target.value })} />
+        </Field>
+      </div>
+      <Field label="Business justification">
+        <Textarea required value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} />
+      </Field>
+      <Field label="Quotation (optional)" hint="PDF, JPG or PNG, up to 10 MB each">
+        <Input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFiles(e.target.files)} />
+      </Field>
+      <p className="text-xs text-slate-500">Goes to your Line Manager, Head of Department and Finance.</p>
+      <Button type="submit" loading={busy}>{requestId ? "Resubmit" : "Submit training request"}</Button>
+    </form>
+  );
+}

@@ -18,6 +18,7 @@ import { deductLeave, evaluateLeave } from "../services/leave.js";
 import { computeStatus, getAttendanceRules, holidayMap } from "../services/attendance.js";
 import { letterPdf } from "../services/pdf.js";
 import { evaluateExpense, expenseChain, expenseClaimSchema, lineApproved, pkr, round2 } from "../services/expenses.js";
+import { evaluateTraining, trainingChain, trainingRules, trainingSchema, TRAINING_TYPE_LABELS } from "../services/training.js";
 import {
   advanceDue, approvedTotal, evaluateSettlement, evaluateTravel, KIND_LABELS, MODE_LABELS, SETTLEMENT_CHAIN, settlementLineSchema,
   settlementWindow, travelChain, travelInclude, travelRules, travelSchema, tripDays,
@@ -178,6 +179,7 @@ async function prepare(
   if (type === "TRAVEL_SETTLEMENT") return prepareSettlement(user, body, files, existingId);
   if (type === "ASSET_REQUEST") return prepareAssetRequest(body);
   if (type === "RESIGNATION") return prepareResignation(user, body, existingId);
+  if (type === "TRAINING") return prepareTraining(user, body, existingId);
 
   const input = parse(letterSchema, body);
   return {
@@ -265,6 +267,36 @@ async function prepareAssetRequest(body: unknown): Promise<Prepared> {
       const fields = { categoryId: category.id, reason: input.reason, neededBy: input.neededBy ? toDate(input.neededBy) : null };
       if (isUpdate) await tx.assetRequest.update({ where: { requestId }, data: fields });
       else await tx.assetRequest.create({ data: { requestId, ...fields } });
+    },
+  };
+}
+
+/** Training request: Line Manager → HOD → Finance (+ Management above the cost setting). */
+async function prepareTraining(user: AuthUser, body: unknown, existingId?: number): Promise<Prepared> {
+  const input = parse(trainingSchema, body);
+  const errors = evaluateTraining(input);
+  if (errors.length) throw new HttpError(400, errors.join("; "));
+  const rules = await trainingRules();
+  const needsManagement = rules.managementApprovalAbove != null && input.estimatedCost > rules.managementApprovalAbove;
+  const chain = await trainingChain(user.id, needsManagement);
+  return {
+    title: `Training Request · ${input.programmeTitle} (${TRAINING_TYPE_LABELS[input.trainingType]})`,
+    data: {},
+    chain,
+    persist: async (tx, requestId, isUpdate) => {
+      const fields = {
+        programmeTitle: input.programmeTitle,
+        provider: input.provider,
+        trainingType: input.trainingType,
+        startDate: toDate(input.startDate),
+        endDate: toDate(input.endDate),
+        mode: input.mode,
+        location: input.mode === "ON_SITE" ? input.location || null : null,
+        estimatedCost: input.estimatedCost,
+        justification: input.justification,
+      };
+      if (isUpdate) await tx.trainingRequest.update({ where: { requestId }, data: fields });
+      else await tx.trainingRequest.create({ data: { requestId, ...fields } });
     },
   };
 }
@@ -482,6 +514,7 @@ const TYPE_ROUTES: Record<string, RequestType> = {
   settlement: "TRAVEL_SETTLEMENT",
   asset: "ASSET_REQUEST",
   resignation: "RESIGNATION",
+  training: "TRAINING",
 };
 
 async function saveAttachments(tx: Tx, requestId: number, files: Express.Multer.File[]) {
@@ -700,6 +733,7 @@ const detailInclude = {
     },
   },
   resignation: true,
+  trainingRequest: true,
   exitCase: { select: { id: true } },
 } satisfies Prisma.RequestInclude;
 
@@ -830,6 +864,19 @@ requestsRouter.get("/:id", async (req, res) => {
           checkIn: minutesToHm(r.attendanceUpdateRequest.checkIn),
           checkOut: minutesToHm(r.attendanceUpdateRequest.checkOut),
           reason: r.attendanceUpdateRequest.reason,
+        }
+      : null,
+    training: r.trainingRequest
+      ? {
+          programmeTitle: r.trainingRequest.programmeTitle,
+          provider: r.trainingRequest.provider,
+          trainingType: r.trainingRequest.trainingType,
+          startDate: ymd(r.trainingRequest.startDate),
+          endDate: ymd(r.trainingRequest.endDate),
+          mode: r.trainingRequest.mode,
+          location: r.trainingRequest.location,
+          estimatedCost: Number(r.trainingRequest.estimatedCost),
+          justification: r.trainingRequest.justification,
         }
       : null,
     currentStepLabel: current?.label ?? null,

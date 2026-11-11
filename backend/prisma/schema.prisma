@@ -307,6 +307,7 @@ enum RequestType {
   PERFORMANCE_GOALS
   PERFORMANCE_REVIEW
   MANPOWER
+  TRAINING
 }
 
 enum RequestStatus {
@@ -352,6 +353,7 @@ model Request {
   scorecardGoals          Scorecard?               @relation("ScorecardGoals")
   scorecardReview         Scorecard?               @relation("ScorecardReview")
   requisition             Requisition?
+  trainingRequest         TrainingRequest?
 
   @@index([employeeId, status])
 }
@@ -1362,4 +1364,40 @@ model InterviewFeedback {
   recommendation String // HIRE, MAYBE or NO_HIRE
   comment        String
   createdAt      DateTime       @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Training request (Phase 3)
+// ---------------------------------------------------------------------------
+
+enum TrainingType {
+  COURSE
+  WORKSHOP
+  CONFERENCE
+  CERTIFICATION
+  OTHER
+}
+
+enum TrainingMode {
+  ONLINE
+  ON_SITE
+}
+
+/**
+ * Line Manager -> HOD -> Finance (+ Management above the estimated cost setting). The PDF's roles table
+ * only says Finance approves training; see DECISIONS.md for this chain to be confirmed with HR and Finance.
+ */
+model TrainingRequest {
+  id             Int          @id @default(autoincrement())
+  requestId      Int          @unique
+  request        Request      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  programmeTitle String
+  provider       String
+  trainingType   TrainingType
+  startDate      DateTime     @db.Date
+  endDate        DateTime     @db.Date
+  mode           TrainingMode
+  location       String? // required when mode is ON_SITE
+  estimatedCost  Decimal      @db.Decimal(12, 2)
+  justification  String
 }

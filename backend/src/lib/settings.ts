@@ -45,6 +45,8 @@ export const SETTING_DEFAULTS = {
   "hiring.minMonthsInRole": { value: "12", label: "Months in the current role before an employee can apply for an internal job" },
   "hiring.minPerformanceRating": { value: "0", label: "Minimum last performance rating to apply for an internal job (1-5, 0 = off)" },
   "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
+  // Training request (Phase 3): HR or Finance can change this. Empty means "off".
+  "training.managementApprovalAbove": { value: "", label: "Training programmes above this estimated cost also need Management/CEO approval (PKR, empty = off)", optional: true },
 } as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
@@ -56,7 +58,7 @@ export const isTextSetting = (key: SettingKey) => "text" in SETTING_DEFAULTS[key
 export const isBooleanSetting = (key: SettingKey) => "boolean" in SETTING_DEFAULTS[key];
 
 /** Settings Finance may change as well as HR. */
-export const FINANCE_SETTING_PREFIXES = ["expense.", "travel."];
+export const FINANCE_SETTING_PREFIXES = ["expense.", "travel.", "training."];
 
 /** A numeric setting, or null when it is empty (= no limit / off). */
 export function settingNumber(values: Record<SettingKey, string>, key: SettingKey) {

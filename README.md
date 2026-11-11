@@ -172,6 +172,14 @@ An employee no longer becomes confirmed automatically once their probation end d
 - **Confidentiality:** the Line Manager's notes and the confirm/extend history are visible to HR, Management and that employee's own Line Manager only. The employee sees their own status (confirmed / on probation, with the date) on their profile, read-only.
 - No new setting: probation length is still set per employee (*On probation until*, already a field); "due" is worked out from that date, not a separate number.
 
+## Training request
+
+Sidebar: *More requests → Request training*.
+
+- **Fields:** programme title, provider, type (course, workshop, conference, certification, other), start and end date, online or on-site (location required on-site), estimated cost in PKR, business justification and an optional quotation attachment.
+- **Chain:** Line Manager → Head of Department → Finance, with the same duplicate-step skipping and Management stand-in as other requests (a Line Manager who is also the HOD is asked once; a HOD's own request, or someone with no manager, goes to Management then Finance). The project overview's roles table only says Finance approves training, so this chain is proposed; see [DECISIONS.md](DECISIONS.md) for HR and Finance to confirm it.
+- **Cost threshold:** a setting (*Rules & settings*, off by default) adds a Management step above an estimated cost, the same rule as Expense Claim and Travel.
+
 ## Leave year-end
 
 Carry forward runs automatically at 00:05 on 1 January (Pakistan time) through the job queue. If the server is off at that moment, it runs once when the server starts again. HR can also run it from *Leave Types & Quotas*; running it again gives the same result, so it is safe to re-run after correcting last year's leave.

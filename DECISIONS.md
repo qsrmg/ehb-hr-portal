@@ -50,6 +50,13 @@ Tick each line and write the agreed value. Every item can be changed later in th
 | ☐ | Internal jobs: internal-only days / months in role to apply | 7 / 12 | |
 | ☐ | Internal jobs: minimum last performance rating | Off | |
 
+**Training**
+
+| ✓ | Setting | Now | Agreed |
+|---|---|---|---|
+| ☐ | Training approval chain (Line Manager → HOD → Finance): confirm with HR and Finance | Not in the PDF's roles table | |
+| ☐ | Cost above which Management also approves training | — (off) | |
+
 **Performance (Balanced Scorecard)**
 
 | ✓ | Setting | Now | Agreed |

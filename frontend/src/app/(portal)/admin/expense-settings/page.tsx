@@ -128,6 +128,7 @@ export default function ExpenseSettingsPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const expenseSettings = settings.data?.filter((s) => s.key.startsWith("expense."));
   const travelSettings = settings.data?.filter((s) => s.key.startsWith("travel."));
+  const trainingSettings = settings.data?.filter((s) => s.key.startsWith("training."));
   // Keyed by which settings exist (not their values), so saving does not rebuild the form and hide "Saved."
   const keyOf = (list: Setting[]) => list.map((s) => s.key).join(",");
 
@@ -156,7 +157,7 @@ export default function ExpenseSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Expense & travel settings" subtitle="Limits, rates and categories for expense claims and travel. HR and Finance can change these; changes are recorded in the audit log." />
+      <PageHeader title="Expense & travel settings" subtitle="Limits, rates and categories for expense claims, travel and training. HR and Finance can change these; changes are recorded in the audit log." />
       <Card title="Expense Claim rules">
         {settings.loading ? <Spinner /> : settings.error ? <Alert>{settings.error}</Alert> : expenseSettings && (
           <LimitsForm key={keyOf(expenseSettings)} settings={expenseSettings} onSaved={settings.reload} />
@@ -165,6 +166,11 @@ export default function ExpenseSettingsPage() {
       <Card title="Travel rules and rates">
         {settings.loading ? <Spinner /> : travelSettings && (
           <LimitsForm key={keyOf(travelSettings)} settings={travelSettings} onSaved={settings.reload} />
+        )}
+      </Card>
+      <Card title="Training rules">
+        {settings.loading ? <Spinner /> : trainingSettings && (
+          <LimitsForm key={keyOf(trainingSettings)} settings={trainingSettings} onSaved={settings.reload} />
         )}
       </Card>
       <Card title="Categories">

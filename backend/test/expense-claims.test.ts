@@ -380,7 +380,7 @@ describe("expense claims", () => {
       assert.equal((await api.call(token.fin!, "PUT", "/settings", { "attendance.lateAfter": "09:30" })).status, 403);
       assert.equal((await api.call(token.ali!, "PUT", "/settings", { "expense.maxPerClaim": "1" })).status, 403);
       const visible = (await api.call(token.fin!, "GET", "/settings")).data.map((s: { key: string }) => s.key);
-      assert.ok(visible.every((k: string) => k.startsWith("expense.") || k.startsWith("travel.")), "Finance sees expense and travel settings only");
+      assert.ok(visible.every((k: string) => k.startsWith("expense.") || k.startsWith("travel.") || k.startsWith("training.")), "Finance sees expense, travel and training settings only");
       assert.ok(visible.includes("travel.perDiemRate"));
     });
 

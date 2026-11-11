@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Alert, Button, Card, Field, Info, Input, LinkButton, PageHeader, Select, Spinner, StatusBadge, Textarea } from "@/components/ui";
-import { AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES, ResignationForm } from "@/components/RequestForms";
+import { AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES, ResignationForm, TrainingForm, TRAINING_TYPES } from "@/components/RequestForms";
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { ExpenseDetails, type ExpenseDetail } from "@/components/ExpenseDetails";
 import { TravelForm } from "@/components/TravelForm";
@@ -38,7 +38,13 @@ type Detail = {
   canReject?: boolean;
   performance: { scorecardId: number | null } | null;
   requisition: RequisitionInfo | null;
+  training: TrainingDetail | null;
 } & Partial<TravelFlags>;
+
+type TrainingDetail = {
+  programmeTitle: string; provider: string; trainingType: string; startDate: string; endDate: string;
+  mode: string; location: string | null; estimatedCost: number; justification: string;
+};
 
 type RequisitionInfo = {
   id: number; title: string; department: string; headcount: number; grade: string | null; employmentType: string; reportsTo: string | null;
@@ -143,6 +149,7 @@ export default function RequestDetailPage() {
           {r.type === "TRAVEL" && r.travel && <TravelForm requestId={r.id} initial={r.travel} onDone={resubmitted} />}
           {r.resignation && <ResignationForm requestId={r.id} initial={r.resignation} onDone={resubmitted} />}
           {r.type === "ASSET_REQUEST" && r.assetRequest && <AssetRequestForm requestId={r.id} initial={r.assetRequest} onDone={resubmitted} />}
+          {r.type === "TRAINING" && r.training && <TrainingForm requestId={r.id} initial={r.training} onDone={resubmitted} />}
           {r.type === "TRAVEL_SETTLEMENT" && r.settlement && r.expense && (
             <SettlementForm
               requestId={r.id}
@@ -212,6 +219,16 @@ export default function RequestDetailPage() {
                   <Info label="Letter type" value={LETTER_TYPES[r.data.letterType ?? ""]} />
                   <Info label="Addressed to" value={r.data.addressedTo} />
                   <div className="sm:col-span-2"><Info label="Purpose" value={r.data.purpose} /></div>
+                </>
+              )}
+              {r.training && (
+                <>
+                  <Info label="Programme" value={`${r.training.programmeTitle} (${TRAINING_TYPES[r.training.trainingType]})`} />
+                  <Info label="Provider" value={r.training.provider} />
+                  <Info label="Dates" value={`${fmtDate(r.training.startDate)} to ${fmtDate(r.training.endDate)}`} />
+                  <Info label="Location" value={r.training.mode === "ONLINE" ? "Online" : r.training.location} />
+                  <Info label="Estimated cost" value={`PKR ${fmtMoney(r.training.estimatedCost)}`} />
+                  <div className="sm:col-span-2"><Info label="Business justification" value={r.training.justification} /></div>
                 </>
               )}
             </dl>
