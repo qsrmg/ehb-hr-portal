@@ -6,11 +6,24 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, Check, Eye, EyeOff, Info, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { HR_EMAIL } from "@/components/icons";
-import { HeroBackground } from "@/components/landing/HeroVisuals";
+import { LoginAnalyticsScene } from "@/components/login3d/LoginAnalyticsScene";
+import { WelcomeHeading } from "@/components/WelcomeHeading";
 import { useAuth } from "@/lib/auth";
 
 // Sign-in page: EHB story on the left, the sign-in card on the right (stacked on phones).
 // Uses the existing login (POST /auth/login) and shows the server's error messages unchanged.
+
+/** A soft, light decoration for the (now white) hero panel, kept local to this page so the landing
+ * page's dark HeroBackground is unaffected. */
+function LightHeroBackdrop() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="anim-drift will-change-transform absolute -left-16 -top-10 h-[380px] w-[380px] rounded-full bg-primary/20 blur-2xl" />
+      <div className="anim-drift-2 will-change-transform absolute -bottom-20 -right-10 h-[320px] w-[320px] rounded-full bg-sun/20 blur-2xl" />
+      <div className="absolute inset-0 opacity-[.05] [background-image:linear-gradient(#94a3b8_1px,transparent_1px),linear-gradient(90deg,#94a3b8_1px,transparent_1px)] [background-size:64px_64px] [mask-image:radial-gradient(75%_70%_at_50%_40%,#000,transparent)]" />
+    </div>
+  );
+}
 
 const POINTS = [
   ["Attendance and leave", "in a few clicks"],
@@ -39,7 +52,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState(false);
   const form = useRef<HTMLFormElement>(null);
+  // Set once sign-in succeeds, so the redirect effect below leaves the navigation to the success animation instead.
+  const justSignedIn = useRef(false);
 
   // A failed attempt gives the card a short shake (restarted on every attempt; off with reduced motion).
   useEffect(() => {
@@ -51,7 +67,7 @@ export default function LoginPage() {
   }, [attempt]);
 
   useEffect(() => {
-    if (user) router.replace(user.mustChangePassword ? "/change-password" : "/dashboard");
+    if (user && !justSignedIn.current) router.replace(user.mustChangePassword ? "/change-password" : "/dashboard");
   }, [user, router]);
 
   const submit = async (e: React.FormEvent) => {
@@ -66,11 +82,20 @@ export default function LoginPage() {
     }
     setBusy(true);
     try {
-      await login(email.trim(), password);
+      const me = await login(email.trim(), password);
+      const dest = me.mustChangePassword ? "/change-password" : "/dashboard";
+      // The success check and page fade are purely cosmetic and skipped under reduced motion, so this
+      // never slows down the sign-in itself: the only difference is how soon the page navigates away.
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        router.replace(dest);
+        return;
+      }
+      justSignedIn.current = true;
+      setSuccess(true);
+      window.setTimeout(() => router.replace(dest), 280);
     } catch (err) {
       setError((err as Error).message);
       setAttempt((n) => n + 1);
-    } finally {
       setBusy(false);
     }
   };
@@ -82,57 +107,49 @@ export default function LoginPage() {
   const icon = "pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 transition-colors duration-200 peer-focus:text-primary";
 
   return (
-    <div className="grid min-h-full flex-1 bg-ink-950 font-display text-white lg:grid-cols-[1.1fr_1fr]">
+    <div className={`grid min-h-full flex-1 bg-white font-display text-ink-950 transition-opacity duration-300 lg:grid-cols-[1.1fr_1fr] ${success ? "opacity-0" : "opacity-100"}`}>
       {/* EHB story */}
-      <section className="relative isolate flex flex-col overflow-hidden px-5 py-6 sm:px-10 lg:min-h-screen lg:px-14 lg:py-10">
-        <HeroBackground />
+      <section className="relative isolate flex flex-col overflow-hidden bg-white px-5 py-6 sm:px-10 lg:min-h-screen lg:px-14 lg:py-10">
+        <LightHeroBackdrop />
         <div className="anim-fade-up relative flex items-center justify-between gap-4">
-          <Link href="/" aria-label="EHB HR Portal home" className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sun"><Logo size="lg" /></Link>
-          <Link href="/" className="group inline-flex items-center gap-2 rounded-md text-sm font-semibold text-white/85 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-sun">
+          <Link href="/" aria-label="EHB HR Portal home" className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sun">
+            <span className="block rounded-lg ring-1 ring-slate-200 shadow-sm"><Logo size="lg" /></span>
+          </Link>
+          <Link href="/" className="group inline-flex items-center gap-2 rounded-md text-sm font-semibold text-slate-600 transition-colors hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-sun">
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" /> Back to home
           </Link>
         </div>
-        <div className="relative my-auto max-w-xl py-8 lg:py-16">
-          <p className="anim-fade-up inline-flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.2em] text-sun" style={{ "--i": 1 } as React.CSSProperties}>
+        <div className="relative my-auto mx-auto max-w-xl py-8 text-ink-950 lg:py-16">
+          <p className="anim-fade-up inline-flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.2em] text-slate-700" style={{ "--i": 1 } as React.CSSProperties}>
             <span className="h-1.5 w-1.5 rounded-full bg-sun" aria-hidden="true" />
             EHB Technologies | Human Resources
           </p>
-          <h1 className="anim-fade-up mt-5 text-balance text-[2.25rem] font-extrabold leading-[1.06] tracking-[-0.02em] sm:text-5xl" style={{ "--i": 2 } as React.CSSProperties}>
-            Welcome back to your <span className="bg-gradient-to-r from-sun to-[#ffd45c] bg-clip-text text-transparent">HR workspace.</span>
-          </h1>
-          <p className="anim-fade-up mt-5 max-w-md text-pretty text-lg leading-relaxed text-haze" style={{ "--i": 3 } as React.CSSProperties}>
+          <WelcomeHeading />
+          <p className="anim-fade-up mt-5 max-w-md text-pretty text-lg leading-relaxed text-slate-600" style={{ "--i": 3 } as React.CSSProperties}>
             Attendance, leave, pay slips and requests, together in one secure, connected place.
           </p>
           <ul className="mt-7 hidden space-y-3 sm:block">
             {POINTS.map(([strong, rest], i) => (
-              <li key={strong} className="anim-fade-up flex items-start gap-3 text-[15px]" style={{ "--i": 4 + i } as React.CSSProperties}>
-                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sun text-ink-950"><Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /></span>
-                <span><strong className="font-bold">{strong}</strong> <span className="text-haze">{rest}</span></span>
+              <li key={strong} className="anim-tick-pop flex items-start gap-3 text-[15px]" style={{ "--i": 4 + i } as React.CSSProperties}>
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sun text-ink-950"><Check className="anim-check-draw h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /></span>
+                <span><strong className="font-bold">{strong}</strong> <span className="text-slate-600">{rest}</span></span>
               </li>
             ))}
           </ul>
-          <div className="mt-10 hidden flex-wrap gap-3 lg:flex" aria-hidden="true">
-            {[["Today's attendance", "On Time · 09:12 AM"], ["Leave request", "Approved"]].map(([label, value], i) => (
-              <div key={label} className="anim-pop anim-float rounded-2xl border border-white/10 bg-white/[.06] px-4 py-3 backdrop-blur-md" style={{ "--i": i } as React.CSSProperties}>
-                <div className="text-xs text-white/75">{label}</div>
-                <div className="mt-1 text-lg font-bold">{value}</div>
-                <div className="text-xs text-haze">Demo preview</div>
-              </div>
-            ))}
-          </div>
+          <LoginAnalyticsScene className="mt-8 h-[320px] w-full max-w-md sm:h-[360px]" />
         </div>
-        <p className="relative hidden text-sm text-haze lg:block">EHB Technologies · Human Resources</p>
+        <p className="relative hidden text-sm text-slate-600 lg:block">EHB Technologies · Human Resources</p>
       </section>
 
       {/* Sign-in card */}
-      <section className="relative flex items-start justify-center px-4 pb-12 lg:items-center lg:border-l lg:border-white/[.06] lg:bg-ink-900/70 lg:px-10 lg:py-12">
+      <section className="relative flex items-start justify-center px-4 pb-12 lg:items-center lg:border-l lg:border-slate-200 lg:bg-slate-50 lg:px-10 lg:py-12">
         <div className="anim-rise w-full max-w-[440px]">
           <form
             ref={form}
             onSubmit={submit}
             noValidate
             aria-describedby={error ? "login-error" : undefined}
-            className="rounded-3xl bg-mist p-6 text-ink-950 shadow-[0_40px_90px_-40px_rgba(0,0,0,.9)] ring-1 ring-white/10 sm:p-9"
+            className="rounded-3xl bg-white p-6 text-ink-950 shadow-[0_30px_70px_-40px_rgba(16,31,58,.35)] ring-1 ring-slate-900/5 motion-safe:transition-[transform,box-shadow] motion-safe:duration-300 motion-safe:focus-within:-translate-y-1 motion-safe:focus-within:shadow-[0_40px_90px_-40px_rgba(16,31,58,.45)] sm:p-9"
           >
             <span className="block h-1 w-10 rounded-full bg-sun" aria-hidden="true" />
             <h2 className="mt-5 text-3xl font-extrabold tracking-tight">Sign in</h2>
@@ -175,14 +192,14 @@ export default function LoginPage() {
                 type="button" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword} aria-label={showPassword ? "Hide the characters" : "Show the characters"}
                 className="absolute right-1.5 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-primary"
               >
-                {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                {showPassword ? <EyeOff key="off" className="anim-icon-fade h-5 w-5" aria-hidden="true" /> : <Eye key="on" className="anim-icon-fade h-5 w-5" aria-hidden="true" />}
               </button>
             </div>
             {fieldErrors.password && <p id="login-password-error" className="anim-fade-up mt-1.5 text-sm font-medium text-red-700">{fieldErrors.password}</p>}
 
             <div className={`grid transition-[grid-template-rows] duration-300 ${forgot ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
               <div className="min-h-0 overflow-hidden">
-                <p id="forgot-help" className="mt-3 flex items-start gap-2 rounded-xl bg-white px-3.5 py-3 text-sm text-slate-700 ring-1 ring-slate-200" hidden={!forgot}>
+                <p id="forgot-help" className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 px-3.5 py-3 text-sm text-slate-700 ring-1 ring-slate-200" hidden={!forgot}>
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                   <span>Forgot your password? Ask HR to reset it: <a href={`mailto:${HR_EMAIL}`} className="font-semibold text-primary underline-offset-2 hover:underline">{HR_EMAIL}</a></span>
                 </p>
@@ -191,10 +208,10 @@ export default function LoginPage() {
 
             <button
               type="submit" disabled={busy} aria-busy={busy}
-              className="group mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-base font-bold text-white shadow-[0_14px_34px_-14px_rgba(37,99,235,.95)] transition duration-200 hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-[0_18px_38px_-14px_rgba(37,99,235,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:translate-y-0 disabled:cursor-wait disabled:opacity-80"
+              className="anim-sheen group relative mt-7 inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-primary py-3.5 text-base font-bold text-white shadow-[0_14px_34px_-14px_rgba(37,99,235,.95)] transition duration-200 hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-[0_18px_38px_-14px_rgba(37,99,235,1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-safe:active:scale-[0.98] disabled:translate-y-0 disabled:cursor-wait disabled:opacity-80"
             >
-              {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Lock className="h-5 w-5" aria-hidden="true" />}
-              {busy ? "Signing in…" : "Sign in securely"}
+              {success ? <Check className="h-5 w-5" aria-hidden="true" /> : busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Lock className="h-5 w-5" aria-hidden="true" />}
+              {success ? "Signed in" : busy ? "Signing in…" : "Sign in securely"}
             </button>
 
             <p className="mt-7 flex items-center gap-2 border-t border-slate-200 pt-5 text-sm text-slate-600">
