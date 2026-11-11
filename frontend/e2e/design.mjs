@@ -10,7 +10,7 @@ const BASE = env.E2E_BASE_URL ?? "http://localhost:3000";
 const PASSWORD = env.E2E_PASSWORD ?? "Password@123";
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../test-screenshots/design");
 fs.mkdirSync(OUT, { recursive: true });
-for (const f of fs.readdirSync(OUT)) if (/\.(png|json)$/.test(f)) fs.rmSync(path.join(OUT, f));
+for (const f of fs.readdirSync(OUT)) if (/\.(png|json|webm)$/.test(f)) fs.rmSync(path.join(OUT, f));
 
 const WIDTHS = [{ name: "1366", width: 1366, height: 900 }, { name: "375", width: 375, height: 812, isMobile: true, hasTouch: true }];
 const browser = await chromium.launch();
@@ -245,9 +245,13 @@ async function apiAs(email) {
   };
 }
 
-/** Text elements whose contrast with the colour actually behind them (all layers blended) is below 4.5:1. */
-const lowContrast = (p) =>
-  p.evaluate(() => {
+/**
+ * Text elements whose contrast with the colour actually behind them (all layers blended) is below 4.5:1.
+ * `root` scopes the search (default "main", the signed-in layout's landmark); the sign-in page has no
+ * <main>, so its own check passes "body" instead.
+ */
+const lowContrast = (p, root = "main") =>
+  p.evaluate((root) => {
     const parse = (c) => {
       const m = c.match(/rgba?\(([^)]+)\)/);
       if (!m) return null;
@@ -269,10 +273,14 @@ const lowContrast = (p) =>
       return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
     };
     const bad = [];
-    for (const el of document.querySelectorAll("main td, main th, main input, main select, main textarea, main label, main button, main [role=alert], main [role=status], main h1, main h2, main p, main a, main dd, main dt, main li, main span")) {
+    const tags = ["td", "th", "input", "select", "textarea", "label", "button", "[role=alert]", "[role=status]", "h1", "h2", "p", "a", "dd", "dt", "li", "span"];
+    for (const el of document.querySelectorAll(tags.map((t) => `${root} ${t}`).join(", "))) {
       if (!el.offsetParent || el.disabled || !el.textContent.trim() && !["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName)) continue;
       if (el.closest("[aria-hidden=true]")) continue;
       const st = getComputedStyle(el);
+      // Gradient "clip-text" accents (e.g. the sign-in headline) report a transparent `color`; the real
+      // colour comes from the background gradient, which this check cannot see. Checked separately instead.
+      if (st.webkitBackgroundClip === "text" || st.backgroundClip === "text") continue;
       const fg = parse(st.color);
       if (!fg) continue;
       const bg = background(el);
@@ -281,7 +289,7 @@ const lowContrast = (p) =>
       if (ratio < 4.5) bad.push(`${el.tagName.toLowerCase()} "${(el.value || el.textContent).trim().slice(0, 40)}" ${ratio.toFixed(2)}:1`);
     }
     return [...new Set(bad)];
-  });
+  }, root);
 
 await step("pages", "10 most-used signed-in pages in the dark theme: screenshots at 1366px, text contrast at least 4.5:1", async (check) => {
   // A leave request from Ali waiting with Hamza, so the request page shows the approver's decision form.
@@ -337,6 +345,93 @@ await step("pages", "10 most-used signed-in pages in the dark theme: screenshots
   }
   if (problems.length) throw new Error(`Low contrast — ${problems.join(" | ")}`);
 });
+
+// ---------- Sign-in page motion: runs under no-preference, silent under reduce, at both widths ----------
+await step(
+  "motion-login",
+  "Sign-in page motion: animations run (no-preference) and are silent (reduce) at 1366/375px, contrast and no sideways scroll hold either way",
+  async (check) => {
+    for (const vp of WIDTHS) {
+      // no-preference: animations run, settle, contrast still holds, no sideways scroll; video the 1366px run.
+      const recordVideo = vp.name === "1366" ? { dir: OUT, size: { width: vp.width, height: vp.height } } : undefined;
+      const liveContext = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height }, isMobile: vp.isMobile, hasTouch: vp.hasTouch,
+        timezoneId: "Asia/Karachi", reducedMotion: "no-preference", recordVideo,
+      });
+      let video = null;
+      try {
+        const p = await liveContext.newPage();
+        p.setDefaultTimeout(15000);
+        video = p.video();
+        await p.goto(`${BASE}/login`);
+        await p.getByRole("heading", { name: "Sign in" }).waitFor();
+        await p.waitForTimeout(400); // entrance animations under way
+        const runningSoonAfterLoad = await p.evaluate(() => document.getAnimations().length);
+        if (runningSoonAfterLoad === 0) throw new Error(`${vp.name}px, no-preference: no animations are running shortly after load`);
+        check(`${vp.name}px, no-preference: ${runningSoonAfterLoad} animation(s) running shortly after load`);
+        if (vp.name === "1366") await p.waitForTimeout(2600); // let the video also catch the ambient drift/float/sweep loops
+        await noSideScroll(p, `Sign-in (no-preference) at ${vp.name}px`);
+        await p.waitForTimeout(vp.name === "1366" ? 200 : 1800); // let entrance settle before the screenshot
+        await shot(p, `login-motion-settled-${vp.name}`);
+        const bad = await lowContrast(p, "body");
+        if (bad.length) throw new Error(`${vp.name}px, no-preference: low contrast — ${bad.slice(0, 5).join("; ")}`);
+        check(`${vp.name}px, no-preference: all text at least 4.5:1 after settling`);
+        // The "HR workspace." accent is gradient clip-text (its own `color` is transparent, invisible to the
+        // generic check above, and the rendered gradient is reported back in lab(), not rgb(), so it cannot be
+        // reliably parsed from the DOM either). Confirm the element is present and still uses this known
+        // gradient, then check its two Tailwind stop colours (amber-700 and amber-800) against white directly.
+        const hasAccent = await p.evaluate(() =>
+          [...document.querySelectorAll("h1 span")].some(
+            (e) =>
+              e.textContent.trim() === "HR workspace." &&
+              (getComputedStyle(e).webkitBackgroundClip === "text" || getComputedStyle(e).backgroundClip === "text") &&
+              getComputedStyle(e).backgroundImage !== "none",
+          ),
+        );
+        if (!hasAccent) throw new Error(`${vp.name}px: could not find the "HR workspace." gradient accent`);
+        const lum = ({ r, g, b }) => {
+          const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+          return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+        };
+        const ratioVsWhite = (c) => (1.0 + 0.05) / (lum(c) + 0.05);
+        // amber-700 #b45309 and amber-800 #92400e, the gradient's `from`/`to` classes in login/page.tsx.
+        const stops = [{ name: "amber-700", c: { r: 180, g: 83, b: 9 } }, { name: "amber-800", c: { r: 146, g: 64, b: 14 } }];
+        const ratios = stops.map((s) => ({ ...s, ratio: ratioVsWhite(s.c) }));
+        const worst = ratios.reduce((min, s) => Math.min(min, s.ratio), Infinity);
+        if (worst < 4.5) throw new Error(`${vp.name}px: "HR workspace." gradient stop is only ${worst.toFixed(2)}:1 against white — ${JSON.stringify(ratios)}`);
+        check(`${vp.name}px: "HR workspace." gradient (amber-700/amber-800) is at least ${worst.toFixed(2)}:1 against white`);
+      } finally {
+        await liveContext.close();
+      }
+      if (video) {
+        await video.saveAs(path.join(OUT, "login-motion.webm"));
+        check("Video of the live run saved: test-screenshots/design/login-motion.webm");
+      }
+
+      // reduce: nothing animates, the page stays fully usable and readable.
+      const reducedContext = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height }, isMobile: vp.isMobile, hasTouch: vp.hasTouch,
+        timezoneId: "Asia/Karachi", reducedMotion: "reduce",
+      });
+      try {
+        const p = await reducedContext.newPage();
+        p.setDefaultTimeout(15000);
+        await p.goto(`${BASE}/login`);
+        await p.getByRole("heading", { name: "Sign in" }).waitFor();
+        await p.waitForTimeout(500);
+        const running = await p.evaluate(() => document.getAnimations().length);
+        if (running !== 0) throw new Error(`${vp.name}px, reduce: ${running} animation(s) still running`);
+        check(`${vp.name}px, reduce: no animations running`);
+        await noSideScroll(p, `Sign-in (reduce) at ${vp.name}px`);
+        const bad = await lowContrast(p, "body");
+        if (bad.length) throw new Error(`${vp.name}px, reduce: low contrast — ${bad.slice(0, 5).join("; ")}`);
+        check(`${vp.name}px, reduce: all text at least 4.5:1`);
+      } finally {
+        await reducedContext.close();
+      }
+    }
+  },
+);
 
 await browser.close();
 fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify({ ranAt: new Date().toISOString(), results }, null, 2));

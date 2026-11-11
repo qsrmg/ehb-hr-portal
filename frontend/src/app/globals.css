@@ -204,6 +204,54 @@ body {
   .anim-shake {
     animation: shake 0.4s ease-in-out;
   }
+
+  /* Sign-in hero: a second, slower drift path for the two background orbs, an underline that draws in
+     under the headline's accent words, and a small scale-pop for the tick list (see login/page.tsx). */
+  .anim-drift-2 {
+    animation: drift-2 32s ease-in-out infinite alternate;
+    animation-delay: -6s;
+  }
+  .anim-underline {
+    animation: underline-draw 0.6s cubic-bezier(0.22, 1, 0.36, 1) 1.1s both;
+  }
+  .anim-tick-pop {
+    animation: tick-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+  }
+  .anim-check-draw {
+    stroke-dasharray: 24;
+    animation: check-draw 0.35s ease-out both;
+    animation-delay: calc(var(--i, 0) * 90ms + 500ms);
+  }
+  /* A soft light band sweeping across a card every few seconds (demo preview cards). */
+  .anim-sweep::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 55%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    transform: translateX(-170%);
+    animation: sweep-move 6.5s ease-in-out infinite;
+    animation-delay: 2.5s;
+  }
+  /* A light sheen that sweeps across the submit button on hover. */
+  .anim-sheen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    transform: translateX(-180%) skewX(-15deg);
+    transition: transform 0.6s ease;
+  }
+  .anim-sheen:hover::before,
+  .anim-sheen:focus-visible::before {
+    transform: translateX(280%) skewX(-15deg);
+  }
+  /* A quick cross-fade when the eye icon swaps (show / hide password). */
+  .anim-icon-fade {
+    animation: icon-fade 0.16s ease-out both;
+  }
 }
 
 @keyframes fade-up {
@@ -232,6 +280,30 @@ body {
 @keyframes glint {
   0%, 100% { opacity: 0.35; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
+}
+@keyframes drift-2 {
+  from { transform: translate3d(3%, 4%, 0) scale(1.05); }
+  to { transform: translate3d(-3%, -3%, 0) scale(1); }
+}
+@keyframes underline-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes tick-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes check-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes sweep-move {
+  0%, 15% { transform: translateX(-170%); }
+  45%, 100% { transform: translateX(220%); }
+}
+@keyframes icon-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes shake {
   0%, 100% { transform: none; }
