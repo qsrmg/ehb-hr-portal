@@ -1,8 +1,16 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import { MONTHS } from "../lib/dates.js";
 
 const NAVY = "#1e3a5c";
 const MUTED = "#5b6573";
+
+// backend/assets/ehb-logo.png sits next to src/ (and dist/ once built), so this path resolves the same
+// way in development (tsx, running from src/) and in production (node, running from dist/).
+const LOGO_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/ehb-logo.png");
+const LOGO = fs.existsSync(LOGO_PATH) ? fs.readFileSync(LOGO_PATH) : null;
 
 function render(build: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -18,6 +26,15 @@ function render(build: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
 
 function header(doc: PDFKit.PDFDocument, title: string, subtitle?: string) {
   doc.rect(0, 0, doc.page.width, 90).fill(NAVY);
+  if (LOGO) {
+    // A white tile for the logo, the same treatment as the signed-in app's sidebar and sign-in page.
+    const tileWidth = 110;
+    const tileHeight = 46;
+    const tileX = doc.page.width - 50 - tileWidth;
+    const tileY = 22;
+    doc.roundedRect(tileX, tileY, tileWidth, tileHeight, 6).fill("#ffffff");
+    doc.image(LOGO, tileX + 10, tileY + 11, { width: tileWidth - 20 });
+  }
   doc.fillColor("#ffffff").fontSize(10).text("EHB TECHNOLOGIES (PVT.) LTD  ·  HUMAN RESOURCES", 50, 28);
   doc.fontSize(20).font("Helvetica-Bold").text(title, 50, 46);
   doc.font("Helvetica").fillColor("#000000");
