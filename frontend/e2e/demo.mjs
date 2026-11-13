@@ -44,6 +44,11 @@ const snap = async (page, name) => {
   await page.screenshot({ path: path.join(OUT, `${String(shot).padStart(2, "0")}-${name}.png`), fullPage: true });
 };
 const visible = (page, text, opts = {}) => page.getByText(text, opts).first().waitFor();
+/** A dashboard KPI card's number counts up from 0 over ~1.2s (see CountUp); wait for it to settle before reading. */
+const kpiText = async (page, label) => {
+  await page.waitForTimeout(1300);
+  return (await page.locator("a", { hasText: label }).innerText()).replace(/\s+/g, " ").trim();
+};
 const go = async (page, url, heading) => {
   await page.goto(`${BASE}${url}`);
   await page.getByRole("heading", { name: heading }).first().waitFor();
@@ -78,9 +83,9 @@ await step("1.1", "Landing page and sign-in", async (check) => {
 await step("1.2", "Ali: dashboard, attendance, leave, pay slips, policies, inventory", async (check) => {
   await as("ali", async (page) => {
     await visible(page, "My pending requests");
-    const pending = await page.locator("a", { hasText: "My pending requests" }).innerText();
-    if (!/\b2\b/.test(pending)) throw new Error(`Expected 2 pending requests, got: ${pending.replace(/\s+/g, " ")}`);
-    await visible(page, "Leave balances");
+    const pending = await kpiText(page, "My pending requests");
+    if (!/\b2\b/.test(pending)) throw new Error(`Expected 2 pending requests, got: ${pending}`);
+    await visible(page, "Leave balance");
     await visible(page, "Pay slips");
     await snap(page, "ali-dashboard");
     check("Dashboard: 2 pending requests (casual leave and expense claim), balances, pay slip");
@@ -103,11 +108,13 @@ await step("1.2", "Ali: dashboard, attendance, leave, pay slips, policies, inven
 // ---------------- Part 2: Manager (Hamza) ----------------
 await step("2.1", "Hamza: 2 tasks waiting; approves Ali's leave from the dashboard and the expense claim", async (check) => {
   await as("hamza", async (page) => {
-    const tasks = await page.locator("a", { hasText: "Waiting for your approval" }).innerText();
-    if (!/\b2\s*tasks/.test(tasks)) throw new Error(`Expected 2 tasks, got: ${tasks.replace(/\s+/g, " ")}`);
+    const tasks = await kpiText(page, "Waiting for your approval");
+    if (!/\b2\b/.test(tasks) || !tasks.includes("Needs your decision")) throw new Error(`Expected 2 tasks needing a decision, got: ${tasks}`);
     await snap(page, "hamza-dashboard");
     await page.getByRole("button", { name: "Approve", exact: true }).first().click();
-    await page.getByText(/^1\s*task/).first().waitFor();
+    let after = "";
+    for (let i = 0; i < 10 && !/\b1\b/.test(after); i++) after = await kpiText(page, "Waiting for your approval");
+    if (!/\b1\b/.test(after)) throw new Error(`Expected 1 task left, got: ${after}`);
     check("Casual leave approved from the dashboard; 1 task left");
     await go(page, "/approvals", "Approvals");
     await page.getByRole("link", { name: /Expense Claim/ }).first().click();

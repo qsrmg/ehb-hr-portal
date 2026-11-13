@@ -2,7 +2,9 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
-import { FINANCE_SETTING_PREFIXES, getSettings, isBooleanSetting, isOptionalSetting, isTextSetting, SETTING_DEFAULTS, type SettingKey } from "../lib/settings.js";
+import {
+  FINANCE_SETTING_PREFIXES, getSettings, isBooleanSetting, isOptionalSetting, isRoleSetting, isTextSetting, listSettingValues, ROLE_VALUES, SETTING_DEFAULTS, type SettingKey,
+} from "../lib/settings.js";
 import { toDate, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
@@ -67,11 +69,19 @@ adminRouter.put("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
     const value = raw.trim();
     const isTime = SETTING_DEFAULTS[key as SettingKey].value.includes(":");
     const emptyAllowed = value === "" && isOptionalSetting(key as SettingKey);
-    if (isTextSetting(key as SettingKey)) {
+    const list = listSettingValues(key as SettingKey);
+    if (emptyAllowed) {
+      // Empty is always the safe "off" state; no further validation.
+    } else if (isRoleSetting(key as SettingKey)) {
+      if (!(ROLE_VALUES as readonly string[]).includes(value)) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: use one of ${ROLE_VALUES.join(", ")}, or leave it empty`);
+    } else if (list) {
+      const codes = value.split(",").map((v) => v.trim().toUpperCase()).filter(Boolean);
+      if (!codes.length || codes.some((c) => !list.includes(c))) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: use ${list.join(", ")}, comma-separated`);
+    } else if (isTextSetting(key as SettingKey)) {
       if (value.length < 2 || value.length > 40) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter a name of 2 to 40 characters`);
     } else if (isBooleanSetting(key as SettingKey)) {
       if (value !== "0" && value !== "1") throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: on or off`);
-    } else if (!emptyAllowed && (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value))) {
+    } else if (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value)) {
       throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter ${isTime ? "a time as HH:MM" : "a number"}`);
     }
     if (before[key as SettingKey] !== value) changes[key] = { from: before[key as SettingKey], to: value };

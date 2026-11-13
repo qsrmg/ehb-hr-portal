@@ -7,16 +7,47 @@ import { hasRole, useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { fmtDate } from "@/lib/format";
 
-type Doc = { id: number; title: string; description: string | null; category: "POLICY" | "HR_FORM"; fileName: string; size: number; createdAt: string; uploadedBy: string };
+type Doc = {
+  id: number; title: string; description: string | null; category: "POLICY" | "HR_FORM"; fileName: string; size: number; createdAt: string; uploadedBy: string;
+  requiresAcknowledgement: boolean; acknowledgedAt: string | null;
+};
+
+type Acknowledgements = { acknowledged: { id: number; fullName: string; code: string; acknowledgedAt: string }[]; outstanding: { id: number; fullName: string; code: string }[] };
+
+/** HR sees who still has not acknowledged a document that requires it. */
+function AcknowledgementsPanel({ doc }: { doc: Doc }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useApi<Acknowledgements>(open ? `/documents/${doc.id}/acknowledgements` : null);
+  return (
+    <div className="mt-1">
+      <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)}>
+        {open ? "Hide" : "Who has not acknowledged?"}
+      </Button>
+      {open && data && (
+        <div className="mt-2 text-xs text-slate-600">
+          <div>{data.acknowledged.length} acknowledged, {data.outstanding.length} outstanding:</div>
+          {data.outstanding.length ? (
+            <ul className="mt-1 list-disc pl-4">
+              {data.outstanding.map((e) => <li key={e.id}>{e.fullName} ({e.code})</li>)}
+            </ul>
+          ) : (
+            <div className="mt-1">Everyone has acknowledged this document.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DocumentsPage() {
   const { user } = useAuth();
   const isHr = hasRole(user, "HR");
   const { data, loading, error, reload } = useApi<Doc[]>("/documents");
-  const [form, setForm] = useState({ title: "", description: "", category: "POLICY" });
+  const [form, setForm] = useState({ title: "", description: "", category: "POLICY", requiresAcknowledgement: false });
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [ackBusy, setAckBusy] = useState<number | null>(null);
 
   const upload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,10 +56,13 @@ export default function DocumentsPage() {
     setMsg(null);
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+      fd.append("title", form.title);
+      fd.append("description", form.description);
+      fd.append("category", form.category);
+      fd.append("requiresAcknowledgement", String(form.requiresAcknowledgement));
       fd.append("file", file);
       await post("/documents", fd);
-      setForm({ title: "", description: "", category: form.category });
+      setForm({ title: "", description: "", category: form.category, requiresAcknowledgement: false });
       setFile(null);
       (e.target as HTMLFormElement).reset();
       setMsg({ kind: "success", text: "Document uploaded." });
@@ -46,6 +80,16 @@ export default function DocumentsPage() {
     reload();
   };
 
+  const acknowledge = async (d: Doc) => {
+    setAckBusy(d.id);
+    try {
+      await post(`/documents/${d.id}/acknowledge`, {});
+      reload();
+    } finally {
+      setAckBusy(null);
+    }
+  };
+
   const section = (category: Doc["category"], title: string) => (
     <Card title={title}>
       <Table head={["Title", "Uploaded", ""]} empty="Nothing here yet.">
@@ -54,10 +98,23 @@ export default function DocumentsPage() {
             <Td>
               <div className="font-medium text-slate-900">{d.title}</div>
               {d.description && <div className="text-xs text-slate-500">{d.description}</div>}
+              {d.requiresAcknowledgement && (
+                <div className="mt-1 text-xs">
+                  {d.acknowledgedAt ? (
+                    <span className="text-emerald-700">Acknowledged on {fmtDate(d.acknowledgedAt)}</span>
+                  ) : (
+                    <span className="text-amber-700">You need to acknowledge this document</span>
+                  )}
+                </div>
+              )}
+              {isHr && d.requiresAcknowledgement && <AcknowledgementsPanel doc={d} />}
             </Td>
             <Td className="text-slate-500">{fmtDate(d.createdAt)}</Td>
             <Td className="text-right">
               <Button size="sm" variant="secondary" onClick={() => download(`/documents/${d.id}/download`, d.fileName)}>Download</Button>
+              {d.requiresAcknowledgement && !d.acknowledgedAt && (
+                <Button size="sm" loading={ackBusy === d.id} onClick={() => acknowledge(d)}>I have read this</Button>
+              )}
               {isHr && <Button size="sm" variant="ghost" className="text-red-600" onClick={() => remove(d)}>Delete</Button>}
             </Td>
           </tr>
@@ -88,6 +145,10 @@ export default function DocumentsPage() {
             </Field>
             <Field label="Description (optional)"><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
             <Field label="PDF file"><Input type="file" accept=".pdf" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={form.requiresAcknowledgement} onChange={(e) => setForm({ ...form, requiresAcknowledgement: e.target.checked })} />
+              Require every employee to acknowledge they have read this
+            </label>
             <div><Button type="submit" loading={busy}>Upload</Button></div>
           </form>
         </Card>

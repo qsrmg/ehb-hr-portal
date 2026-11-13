@@ -275,6 +275,27 @@ export function LetterForm({ onDone, requestId, initial }: { onDone: Done; reque
   );
 }
 
+export function AccommodationForm({ onDone, requestId, initial }: { onDone: Done; requestId?: number; initial?: { description: string } }) {
+  const [form, setForm] = useState({ description: initial?.description ?? "" });
+  const { busy, error, run } = useSubmit(onDone);
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => submitForm("religious-accommodation", requestId, form, null));
+      }}
+    >
+      {error && <Alert>{error}</Alert>}
+      <Field label="What are you asking for?" hint="Describe the accommodation you need. This is seen only by you and HR.">
+        <Textarea required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      </Field>
+      <p className="text-xs text-slate-500">Goes to HR only. Your Line Manager does not see this request.</p>
+      <Button type="submit" loading={busy}>{requestId ? "Resubmit" : "Send to HR"}</Button>
+    </form>
+  );
+}
+
 export const TRAINING_TYPES: Record<string, string> = {
   COURSE: "Course",
   WORKSHOP: "Workshop",

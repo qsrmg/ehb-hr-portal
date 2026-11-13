@@ -44,7 +44,7 @@ const NAV: NavGroup[] = [
     title: "HR Admin",
     items: [
       { href: "/admin/employees", label: "Employees", icon: "users", show: any("HR", "MANAGEMENT", "FINANCE", "ADMIN") },
-      { href: "/admin/departments", label: "Departments", icon: "flow", show: any("HR") },
+      { href: "/admin/departments", label: "Departments", icon: "flow", show: any("HR", "HOD") },
       { href: "/admin/attendance", label: "Attendance import", icon: "clock", show: any("HR") },
       { href: "/admin/late-warnings", label: "Late warnings", icon: "bell", show: any("HR", "MANAGEMENT") },
       { href: "/admin/leave-types", label: "Leave types & quotas", icon: "calendar", show: any("HR") },

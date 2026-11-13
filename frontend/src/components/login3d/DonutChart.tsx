@@ -2,8 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Text } from "@react-three/drei";
 import * as THREE from "three";
+import { textTexture } from "./textTexture";
 
 export type DonutSlice = { label: string; value: number; color: string };
 
@@ -50,6 +50,8 @@ function Slice({ startAngle, endAngle, color, reduced, delay }: { startAngle: nu
   const sweep = (endAngle - startAngle) * Math.max(0.0001, progress);
   const geometry = useMemo(() => sliceGeometry(startAngle, startAngle + sweep), [startAngle, sweep]);
   const mid = startAngle + (endAngle - startAngle) / 2;
+  const pct = Math.round(((endAngle - startAngle) / (2 * Math.PI)) * 100);
+  const pctTexture = useMemo(() => textTexture(`${pct}%`, "#1b2430", { widthPx: 256, heightPx: 256, fontPx: 96 }), [pct]);
 
   return (
     <mesh
@@ -79,9 +81,10 @@ function Slice({ startAngle, endAngle, color, reduced, delay }: { startAngle: nu
             <circleGeometry args={[0.15, 24]} />
             <meshBasicMaterial color="#ffffff" transparent opacity={0.92} toneMapped={false} />
           </mesh>
-          <Text position={[0, 0, 0.01]} fontSize={0.15} color="#1b2430" anchorX="center" anchorY="middle">
-            {Math.round(((endAngle - startAngle) / (2 * Math.PI)) * 100)}%
-          </Text>
+          <mesh position={[0, 0, 0.01]}>
+            <planeGeometry args={[0.28, 0.28]} />
+            <meshBasicMaterial map={pctTexture} transparent toneMapped={false} />
+          </mesh>
         </group>
       )}
     </mesh>

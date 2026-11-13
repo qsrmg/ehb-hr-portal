@@ -5,6 +5,7 @@ import { sendDueReminders } from "./reminders.js";
 import { yearEndCarryForward } from "../services/leave.js";
 import { deactivateDueExits } from "../services/exits.js";
 import { notifyProbationDue } from "../services/probation.js";
+import { notifyAssetVerificationDue } from "../services/assets.js";
 
 // Background jobs run on pg-boss, which keeps its queue in the same PostgreSQL database (schema "pgboss").
 const EMAIL_QUEUE = "email";
@@ -12,6 +13,7 @@ const REMINDER_QUEUE = "approval-reminders";
 export const CARRY_FORWARD_QUEUE = "leave-carry-forward";
 const EXIT_DEACTIVATION_QUEUE = "exit-deactivation";
 const PROBATION_DUE_QUEUE = "probation-due";
+const ASSET_VERIFICATION_QUEUE = "asset-verification-due";
 /** 00:05 on 1 January, company time. */
 export const CARRY_FORWARD_CRON = "5 0 1 1 *";
 
@@ -69,6 +71,14 @@ export async function startQueue(opts: QueueOptions = {}) {
     await instance.work(PROBATION_DUE_QUEUE, async () => {
       const count = await notifyProbationDue();
       if (count) console.log(`[probation] notified for ${count} confirmation(s) due`);
+    });
+
+    // Daily: Admin is reminded to start an asset verification round (assets.auditReminderMonths setting).
+    await instance.createQueue(ASSET_VERIFICATION_QUEUE, { retryLimit: 3, retryDelay: 300 });
+    await instance.schedule(ASSET_VERIFICATION_QUEUE, "15 0 * * *", null, { tz: env.APP_TIMEZONE, missed: "once" });
+    await instance.work(ASSET_VERIFICATION_QUEUE, async () => {
+      const count = await notifyAssetVerificationDue();
+      if (count) console.log("[assets] asset verification round reminder sent");
     });
   }
   boss = instance;

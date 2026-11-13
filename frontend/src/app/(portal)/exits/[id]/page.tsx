@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Alert, Button, Card, Field, Info, Input, PageHeader, Select, Spinner, StatusBadge, Table, Td, Textarea } from "@/components/ui";
 import { download, patch, post } from "@/lib/api";
+import { hasRole, useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtDateTime, fmtMoney, todayYmd } from "@/lib/format";
 
@@ -29,7 +30,11 @@ type ExitCase = {
   completed: { at: string; by: string | null } | null;
   cancelled: { at: string; by: string | null; reason: string | null } | null;
   clearanceCards: CardData[];
-  assets: { cleared: boolean; outstanding: Outstanding[]; pendingDecisions: { incidentId: number; tag: string; name: string; type: string; status: string }[]; recoveries?: { tag: string; name: string; amount: number }[]; recoveryTotal?: number } | null;
+  assets: {
+    cleared: boolean; outstanding: Outstanding[]; pendingDecisions: { incidentId: number; tag: string; name: string; type: string; status: string }[];
+    retained: { assignmentId: number; tag: string; name: string; retainedBy: string; note: string | null }[];
+    recoveries?: { tag: string; name: string; amount: number }[]; recoveryTotal?: number;
+  } | null;
   handover: Handover | null;
   settlement: { items: SettlementItem[]; net: number | null; settledOn: string | null; method: string | null; reference: string | null; note: string | null; by: string | null; at: string } | null;
   settlementDone: boolean;
@@ -69,9 +74,26 @@ function useAction(onDone: () => Promise<void>) {
   return { busy, error, run };
 }
 
+/** Management only: authorises in writing that the employee keeps this item past their exit (A10/A14). */
+function RetainAction({ assignmentId, onDone }: { assignmentId: number; onDone: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const { busy, error, run } = useAction(onDone);
+  if (!open) return <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>Retain in writing</Button>;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <Input placeholder="Reason, in writing" value={note} onChange={(e) => setNote(e.target.value)} className="w-56" />
+      <Button size="sm" loading={busy === "retain"} onClick={() => run("retain", () => post(`/assets/assignments/${assignmentId}/retain`, { note }))}>Authorise</Button>
+      {error && <span className="text-xs text-red-600">{error}</span>}
+    </div>
+  );
+}
+
 function ClearanceCard({ caseId, card, assets, onChanged }: { caseId: number; card: CardData; assets: ExitCase["assets"]; onChanged: () => Promise<void> }) {
+  const { user } = useAuth();
   const [comment, setComment] = useState("");
   const { busy, error, run } = useAction(onChanged);
+  const isMgmt = hasRole(user, "MANAGEMENT");
   return (
     <div className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200" data-area={card.area}>
       <div className="flex items-center justify-between gap-2">
@@ -84,10 +106,18 @@ function ClearanceCard({ caseId, card, assets, onChanged }: { caseId: number; ca
       {card.area === "IT_ADMIN" && card.status !== "CLEARED" && assets && (
         <div className="mt-2 text-xs">
           {assets.outstanding.length ? (
-            <ul className="space-y-0.5 text-amber-800">{assets.outstanding.map((o) => <li key={o.assignmentId}>{o.action}: {o.name} ({o.tag})</li>)}</ul>
+            <ul className="space-y-1 text-amber-800">
+              {assets.outstanding.map((o) => (
+                <li key={o.assignmentId}>
+                  {o.action}: {o.name} ({o.tag})
+                  {isMgmt && <RetainAction assignmentId={o.assignmentId} onDone={onChanged} />}
+                </li>
+              ))}
+            </ul>
           ) : (
             <p className="text-emerald-700">All company items returned, written off or with a recovery set.</p>
           )}
+          {assets.retained.length > 0 && <p className="mt-1 text-slate-600">Retained with Management&apos;s authorisation: {assets.retained.map((r) => `${r.name} (${r.tag})`).join(", ")}.</p>}
           {assets.pendingDecisions.length > 0 && <p className="mt-1 text-amber-800">{assets.pendingDecisions.length} incident(s) still wait for an HR or Management decision.</p>}
         </div>
       )}

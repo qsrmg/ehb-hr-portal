@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Alert, Button, Card, Field, Info, Input, LinkButton, PageHeader, Select, Spinner, StatusBadge, Textarea } from "@/components/ui";
-import { AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES, ResignationForm, TrainingForm, TRAINING_TYPES } from "@/components/RequestForms";
+import { AccommodationForm, AttendanceUpdateForm, LeaveForm, LetterForm, LETTER_TYPES, ResignationForm, TrainingForm, TRAINING_TYPES } from "@/components/RequestForms";
 import { ExpenseForm } from "@/components/ExpenseForm";
 import { ExpenseDetails, type ExpenseDetail } from "@/components/ExpenseDetails";
 import { TravelForm } from "@/components/TravelForm";
@@ -150,6 +150,7 @@ export default function RequestDetailPage() {
           {r.resignation && <ResignationForm requestId={r.id} initial={r.resignation} onDone={resubmitted} />}
           {r.type === "ASSET_REQUEST" && r.assetRequest && <AssetRequestForm requestId={r.id} initial={r.assetRequest} onDone={resubmitted} />}
           {r.type === "TRAINING" && r.training && <TrainingForm requestId={r.id} initial={r.training} onDone={resubmitted} />}
+          {r.type === "RELIGIOUS_ACCOMMODATION" && <AccommodationForm requestId={r.id} initial={{ description: r.data.description ?? "" }} onDone={resubmitted} />}
           {r.type === "TRAVEL_SETTLEMENT" && r.settlement && r.expense && (
             <SettlementForm
               requestId={r.id}
@@ -220,6 +221,9 @@ export default function RequestDetailPage() {
                   <Info label="Addressed to" value={r.data.addressedTo} />
                   <div className="sm:col-span-2"><Info label="Purpose" value={r.data.purpose} /></div>
                 </>
+              )}
+              {r.type === "RELIGIOUS_ACCOMMODATION" && (
+                <div className="sm:col-span-2"><Info label="Description" value={r.data.description} /></div>
               )}
               {r.training && (
                 <>

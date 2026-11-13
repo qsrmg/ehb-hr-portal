@@ -2,9 +2,10 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { RoundedBox, Text } from "@react-three/drei";
+import { RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { iconTexture } from "./iconTexture";
+import { textTexture } from "./textTexture";
 
 const MAX_TILT = THREE.MathUtils.degToRad(8);
 
@@ -61,6 +62,7 @@ export function ServiceCard3D({ icon, label, tone, position, floatSpeed, floatPh
   });
 
   const texture = useMemo(() => iconTexture(icon, tone), [icon, tone]);
+  const labelTexture = useMemo(() => textTexture(label, "#1b2430", { widthPx: 512, heightPx: 192, fontPx: 64 }), [label]);
 
   return (
     <group ref={group} position={position} scale={0}>
@@ -97,9 +99,10 @@ export function ServiceCard3D({ icon, label, tone, position, floatSpeed, floatPh
         <planeGeometry args={[0.24, 0.24]} />
         <meshBasicMaterial map={texture} transparent toneMapped={false} />
       </mesh>
-      <Text position={[0, -0.14, 0.08]} fontSize={0.082} color="#1b2430" anchorX="center" anchorY="middle" maxWidth={0.68} textAlign="center">
-        {label}
-      </Text>
+      <mesh position={[0, -0.14, 0.08]}>
+        <planeGeometry args={[0.66, 0.25]} />
+        <meshBasicMaterial map={labelTexture} transparent toneMapped={false} />
+      </mesh>
     </group>
   );
 }

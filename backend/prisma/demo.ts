@@ -231,14 +231,16 @@ async function seed() {
     doc.fillColor("#000").fontSize(20).text(title).moveDown().fontSize(11).text(body, { lineGap: 4 });
     doc.end();
   });
-  for (const [file, title, category, body] of [
-    ["leave-policy.pdf", "Leave Policy", "POLICY", "Annual, casual and sick leave, notice periods and carry forward. Sample text for the demo; HR uploads the approved policy before go-live."],
-    ["attendance-policy.pdf", "Attendance Policy", "POLICY", "Arrival after 9:25 AM is Late. 6 hours or more is Present; 4 to under 6 hours is Half Day; under 4 hours is Absent. Three late arrivals in a month raise a warning to HR. A missed punch is fixed with an Attendance Update within 7 days."],
-    ["travel-policy.pdf", "Travel and Expense Policy", "POLICY", "Business travel within Pakistan, advances, settlements and local expense claims. Sample text for the demo."],
-    ["expense-claim-form.pdf", "Expense Claim Form (paper backup)", "HR_FORM", "Use the portal for expense claims; this form is a paper backup."],
+  for (const [file, title, category, body, requiresAcknowledgement] of [
+    ["leave-policy.pdf", "Leave Policy", "POLICY", "Annual, casual and sick leave, notice periods and carry forward. Sample text for the demo; HR uploads the approved policy before go-live.", false],
+    ["attendance-policy.pdf", "Attendance Policy", "POLICY", "Arrival after 9:25 AM is Late. 6 hours or more is Present; 4 to under 6 hours is Half Day; under 4 hours is Absent. Three late arrivals in a month raise a warning to HR. A missed punch is fixed with an Attendance Update within 7 days.", false],
+    ["travel-policy.pdf", "Travel and Expense Policy", "POLICY", "Business travel within Pakistan, advances, settlements and local expense claims. Sample text for the demo.", false],
+    ["assets-policy.pdf", "Employee Assets Management Policy", "POLICY", "Issuance, use, protection, maintenance, return and management of EHB-owned assets. Effective 5 October 2026, next review December 2027. Sample text for the demo.", true],
+    ["cyber-security-incident-response-policy.pdf", "Cyber Security Incident Response Policy", "POLICY", "For employees, interns and contractors. Version 1.0, effective 5 October 2026. Sample text for the demo; HR uploads the approved policy before go-live.", true],
+    ["expense-claim-form.pdf", "Expense Claim Form (paper backup)", "HR_FORM", "Use the portal for expense claims; this form is a paper backup.", false],
   ] as const) {
     const size = await pdf(path.join(docsDir, file), title, body);
-    await prisma.document.create({ data: { title, category, fileName: file, path: `documents/${file}`, mimeType: "application/pdf", size, uploadedById: id.ayesha! } });
+    await prisma.document.create({ data: { title, category, fileName: file, path: `documents/${file}`, mimeType: "application/pdf", size, uploadedById: id.ayesha!, requiresAcknowledgement } });
   }
 
   // ---------------------------------------------------------------------------

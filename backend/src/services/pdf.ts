@@ -177,6 +177,54 @@ export function letterPdf(opts: {
   });
 }
 
+const CONDITION_WORDS: Record<string, string> = { NEW: "New", GOOD: "Good", FAIR: "Fair", DAMAGED: "Damaged" };
+
+/**
+ * Employee Assets Management Policy A3: Asset Handover / Acknowledgement Form, generated for an item
+ * issued to an employee. The employee's electronic confirmation (confirmedAt) is the signature; the
+ * cost is never shown here (it is restricted to Admin, Finance and Management elsewhere).
+ */
+export function assetHandoverPdf(opts: {
+  reference: string; date: string;
+  employee: { fullName: string; code: string };
+  asset: { tag: string; name: string; category: string; serialNumber: string | null };
+  condition: string;
+  accessories: { name: string; quantity: number }[];
+  issuedBy: string;
+  confirmedAt: Date | null;
+}) {
+  return render((doc) => {
+    header(doc, "Asset Handover / Acknowledgement Form");
+    doc.fontSize(10).fillColor(MUTED).text(`Ref: ${opts.reference}`).text(`Date: ${opts.date}`).moveDown();
+    doc.fillColor("#000000");
+    keyValues(doc, [
+      ["Employee", `${opts.employee.fullName}${opts.employee.code ? ` (${opts.employee.code})` : ""}`],
+      ["Asset tag", opts.asset.tag],
+      ["Item", opts.asset.name],
+      ["Category", opts.asset.category],
+      ["Serial / account", opts.asset.serialNumber ?? "-"],
+      ["Condition on issue", CONDITION_WORDS[opts.condition] ?? opts.condition],
+      ["Issued by", opts.issuedBy],
+    ]);
+    if (opts.accessories.length) {
+      doc.font("Helvetica-Bold").fontSize(10).text("Accessories issued with this item").font("Helvetica").moveDown(0.2);
+      for (const a of opts.accessories) doc.fontSize(10).text(`• ${a.name}${a.quantity > 1 ? ` x${a.quantity}` : ""}`);
+      doc.moveDown();
+    }
+    doc.font("Helvetica-Bold").fontSize(10).text("Employee responsibility").font("Helvetica").moveDown(0.2);
+    doc.fontSize(10).text(
+      "By accepting this item, I confirm receipt in the condition stated above, together with any accessories listed. "
+      + "I will use it for legitimate business purposes, take reasonable precautions against loss, theft, damage or unauthorised access, "
+      + "and not transfer, exchange or lend it to another employee without prior authorisation from the relevant department. "
+      + "I will report any loss, theft or damage to my Line Manager and IT/Admin immediately, and return the item (or, for access and accounts, allow it to be revoked) "
+      + "on transfer or when I leave the company, in reasonable working condition allowing for normal wear and tear. "
+      + "This acknowledgement is in accordance with the Employee Assets Management Policy.",
+      { align: "justify", lineGap: 3 },
+    ).moveDown();
+    doc.font("Helvetica-Bold").text(opts.confirmedAt ? `Acknowledged electronically on ${opts.confirmedAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Awaiting the employee's electronic confirmation in My Inventory").font("Helvetica");
+  });
+}
+
 export const EXIT_LETTERS = { EXPERIENCE: "Experience Letter", RELIEVING: "Relieving Letter" } as const;
 export type ExitLetterKind = keyof typeof EXIT_LETTERS;
 

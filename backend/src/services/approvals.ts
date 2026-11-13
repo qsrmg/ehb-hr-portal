@@ -32,6 +32,7 @@ export const TYPE_LABELS: Record<RequestType, string> = {
   PERFORMANCE_REVIEW: "Performance Review",
   MANPOWER: "Manpower Requisition",
   TRAINING: "Training Request",
+  RELIGIOUS_ACCOMMODATION: "Religious Accommodation Request",
 };
 
 /**

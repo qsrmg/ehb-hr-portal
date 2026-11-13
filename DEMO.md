@@ -42,7 +42,7 @@ The demo dates follow the day you load the data, so load it on the day.
 3. **Attendance** (sidebar). The month day by day. Point out the **Half Day**, and say: "a missed punch is fixed with an Attendance Update within 7 days; the machine record is never overwritten."
 4. **Apply for leave** (dashboard button). Choose *Annual Leave* and pick two days next month. The form counts working days, skips weekends and holidays, and checks the balance and notice period. **Don't submit.**
 5. **Pay slips & tax.** Download a pay slip PDF. Mention the yearly tax statement (July to June).
-6. **Policies and documents.** Four sample policies; HR uploads the real ones.
+6. **Policies and documents.** Six sample policies and forms, including the Employee Assets Management Policy and the Cyber Security Incident Response Policy, both requiring acknowledgement; HR uploads the real ones.
 7. **My inventory.** His laptop and email account, issued by Admin.
 
 ## Part 2: The manager (4 minutes), login `hamza@ehb.demo`
@@ -63,7 +63,7 @@ The demo dates follow the day you load the data, so load it on the day.
 ## Part 4: Phase 2 in 5 minutes
 
 1. **Expense Claim**, login `bilal@ehb.demo`. **Approvals** → Ali's claim → **Approve**, then **Mark as paid**. Finance can reduce or reject single lines.
-2. **Travel**, login `usman@ehb.demo`. **Travel** (HR Admin menu): Omar's trip to Karachi is approved and waiting to be booked. Then **Assets**: the register of laptops and accounts, with tags and warranty dates.
+2. **Travel**, login `usman@ehb.demo`. **Travel** (HR Admin menu): Omar's trip to Karachi is approved and waiting to be booked. Then **Assets**: the register of laptops and accounts, with tags and warranty dates, the asset Handover / Acknowledgement Form (no cost shown), and the Verification tab for a physical audit round.
 3. **Resignation & exit clearance**, login `ayesha@ehb.demo`. **Exit clearance** → **Zainab Hussain**.
    - Hamza has already cleared his part ("Handover to Ali completed").
    - IT / Admin can't clear until her laptop and email account are returned.

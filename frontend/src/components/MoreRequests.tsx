@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/requests/new/travel", label: "Request travel" },
   { href: "/requests/new/asset", label: "Request an asset" },
   { href: "/requests/new/training", label: "Request training" },
+  { href: "/requests/new/religious-accommodation", label: "Religious accommodation (confidential)" },
   { href: "/requests", label: "All my requests" },
 ];
 

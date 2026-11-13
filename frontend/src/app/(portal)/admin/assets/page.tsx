@@ -15,7 +15,9 @@ type Row = { id: number; tag: string; name: string; category: string; kind: stri
 type IncidentRow = { id: number; type: string; status: string; description: string; createdAt: string; employee: { fullName: string; code: string } | null; reportedBy: string; recoveryAmount: number | null; recoveryNote: string | null; asset: { id: number; tag: string; name: string; category: string } };
 type RequestRow = { requestId: number; employee: { fullName: string; code: string }; category: { name: string }; reason: string; neededBy: string | null; approvedAt: string };
 type ImportResult = { rowsRead: number; created: { tag: string; name: string; assignedTo: string | null }[]; skipped: { row: number; reason: string }[] };
-type View = "register" | "awaiting" | "requests" | "incidents" | "recoveries" | "categories" | "import";
+type View = "register" | "awaiting" | "requests" | "incidents" | "recoveries" | "categories" | "verification" | "import";
+type RoundRow = { id: number; scope: string; department: string | null; category: string | null; dueDate: string; createdBy: string; createdAt: string; closedAt: string | null; total: number; confirmed: number; discrepancies: number };
+type Department = { id: number; name: string };
 
 function Register({ view, isAdmin }: { view: "register" | "awaiting"; isAdmin: boolean }) {
   const router = useRouter();
@@ -148,13 +150,18 @@ function Requests() {
   );
 }
 
+const TRANSFER_ROLES = ["", "ADMIN", "HR", "FINANCE", "MANAGEMENT", "LINE_MANAGER", "HOD"] as const;
+
 function CategoryCard({ category, onSaved }: { category: AssetCategory; onSaved: () => void }) {
   const [c, setC] = useState(category);
   const [msg, setMsg] = useState<string | null>(null);
   const dirty = JSON.stringify(c) !== JSON.stringify(category);
   const save = async () => {
     try {
-      await put(`/assets/categories/${c.id}`, { name: c.name, mustReturnOnExit: c.mustReturnOnExit, active: c.active, sortOrder: c.sortOrder, kind: c.kind });
+      await put(`/assets/categories/${c.id}`, {
+        name: c.name, mustReturnOnExit: c.mustReturnOnExit, active: c.active, sortOrder: c.sortOrder, kind: c.kind,
+        dataBearing: c.dataBearing, transferAuthorisingRole: c.transferAuthorisingRole || null,
+      });
       setMsg("Saved");
       onSaved();
     } catch (e) {
@@ -177,6 +184,12 @@ function CategoryCard({ category, onSaved }: { category: AssetCategory; onSaved:
         {msg && <span role="status" className={`text-sm ${msg === "Saved" ? "text-emerald-700" : "text-red-600"}`}>{msg}</span>}
         <Button size="sm" disabled={!dirty} onClick={save}>Save</Button>
       </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={c.dataBearing} onChange={(e) => { setC({ ...c, dataBearing: e.target.checked }); setMsg(null); }} />Can hold company data</label>
+      <Field label="Authorising role for transfers" hint="Empty = Admin">
+        <Select value={c.transferAuthorisingRole ?? ""} onChange={(e) => { setC({ ...c, transferAuthorisingRole: e.target.value || null }); setMsg(null); }}>
+          {TRANSFER_ROLES.map((r) => <option key={r} value={r}>{r || "Admin (default)"}</option>)}
+        </Select>
+      </Field>
     </div>
   );
 }
@@ -188,7 +201,7 @@ function Categories() {
   if (loading) return <Spinner />;
   return (
     <div className="space-y-2">
-      <p className="text-sm text-slate-600">Exit clearance waits for items in categories marked “Must be returned on exit”. Access & accounts items are revoked instead of returned.</p>
+      <p className="text-sm text-slate-600">Exit clearance waits for items in categories marked “Must be returned on exit”. Access & accounts items are revoked instead of returned. “Can hold company data” also notifies IT/Security when one is reported lost, stolen or damaged (Rules & settings).</p>
       {data?.map((c) => <CategoryCard key={c.id} category={c} onSaved={reload} />)}
       <form
         className="flex flex-wrap items-end gap-3 pt-3"
@@ -229,6 +242,88 @@ function Import() {
   );
 }
 
+function NewRound({ onCreated }: { onCreated: () => void }) {
+  const depts = useApi<Department[]>("/departments");
+  const categories = useApi<AssetCategory[]>("/assets/categories");
+  const [form, setForm] = useState({ scope: "ALL", departmentId: "", categoryId: "", dueDate: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      className="grid gap-3 rounded-md p-3 ring-1 ring-slate-200 sm:grid-cols-2 lg:grid-cols-4"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        try {
+          await post("/assets/verification-rounds", {
+            scope: form.scope, dueDate: form.dueDate,
+            ...(form.scope === "DEPARTMENT" ? { departmentId: Number(form.departmentId) } : {}),
+            ...(form.scope === "CATEGORY" ? { categoryId: Number(form.categoryId) } : {}),
+          });
+          setForm({ scope: "ALL", departmentId: "", categoryId: "", dueDate: "" });
+          onCreated();
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {error && <div className="sm:col-span-2 lg:col-span-4"><Alert>{error}</Alert></div>}
+      <Field label="Scope">
+        <Select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}>
+          <option value="ALL">Everyone</option>
+          <option value="DEPARTMENT">One department</option>
+          <option value="CATEGORY">One category</option>
+        </Select>
+      </Field>
+      {form.scope === "DEPARTMENT" && (
+        <Field label="Department">
+          <Select required value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
+            <option value="">Choose…</option>
+            {depts.data?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
+        </Field>
+      )}
+      {form.scope === "CATEGORY" && (
+        <Field label="Category">
+          <Select required value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+            <option value="">Choose…</option>
+            {categories.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        </Field>
+      )}
+      <Field label="Due date"><Input type="date" required value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></Field>
+      <div><Button type="submit" loading={busy}>Start round</Button></div>
+    </form>
+  );
+}
+
+function Verification() {
+  const { data, loading, reload } = useApi<RoundRow[]>("/assets/verification-rounds");
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">A physical audit: each holder confirms their items from My Inventory. It never blocks login or exit clearance.</p>
+      <NewRound onCreated={reload} />
+      {loading ? <Spinner /> : (
+        <Table head={["Scope", "Due", "Started by", "Confirmed", "Discrepancies", "Status"]} empty="No verification rounds yet.">
+          {data?.map((r) => (
+            <tr key={r.id}>
+              <Td>{r.scope === "ALL" ? "Everyone" : r.scope === "DEPARTMENT" ? `Department: ${r.department}` : `Category: ${r.category}`}</Td>
+              <Td>{fmtDate(r.dueDate)}</Td>
+              <Td>{r.createdBy}</Td>
+              <Td>{r.confirmed} / {r.total}</Td>
+              <Td>{r.discrepancies || "—"}</Td>
+              <Td>{r.closedAt ? <StatusBadge status="CLOSED" /> : <StatusBadge status="PENDING" label="Open" />}</Td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </div>
+  );
+}
+
 export default function AssetsPage() {
   const { user } = useAuth();
   const isAdmin = hasRole(user, "ADMIN");
@@ -239,7 +334,7 @@ export default function AssetsPage() {
     ...(isAdmin ? [{ value: "requests" as const, label: "Requests to fulfil" }] : []),
     { value: "incidents", label: "Damage & loss" },
     { value: "recoveries", label: "Recoveries" },
-    ...(isAdmin ? [{ value: "categories" as const, label: "Categories" }, { value: "import" as const, label: "Import" }] : []),
+    ...(isAdmin ? [{ value: "categories" as const, label: "Categories" }, { value: "verification" as const, label: "Verification" }, { value: "import" as const, label: "Import" }] : []),
   ];
   return (
     <div className="space-y-6">
@@ -251,6 +346,7 @@ export default function AssetsPage() {
         {view === "incidents" && <Incidents view="open" />}
         {view === "recoveries" && <Incidents view="recoveries" />}
         {view === "categories" && <Categories />}
+        {view === "verification" && <Verification />}
         {view === "import" && <Import />}
       </Card>
     </div>

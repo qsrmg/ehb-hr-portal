@@ -116,12 +116,14 @@ describe("My Inventory (assets)", () => {
       assert.equal((await as("sara").get(`/assets/clearance/${id.ali}`)).status, 403);
     });
 
-    test("transfer to another employee keeps the history", async () => {
-      assert.equal((await as("usman").post(`/assets/${laptop.id}/transfer`, { assigneeType: "EMPLOYEE", employeeId: id.sara })).status, 200);
+    test("transfer to another employee keeps the history, with the authorisation recorded", async () => {
+      assert.equal((await as("usman").post(`/assets/${laptop.id}/transfer`, { assigneeType: "EMPLOYEE", employeeId: id.sara })).status, 400, "authorisation is required");
+      assert.equal((await as("usman").post(`/assets/${laptop.id}/transfer`, { assigneeType: "EMPLOYEE", employeeId: id.sara, authorisationNote: "Approved by Admin: Ali moving to a new project" })).status, 200);
       const d = (await as("usman").get(`/assets/${laptop.id}`)).data;
       assert.equal(d.assignments.length, 2);
       assert.match(d.current.assignee, /Sara Javed/);
-      assert.equal(d.assignments[1].returnNote, "Transferred");
+      assert.match(d.assignments[1].returnNote, /Transferred: Approved by Admin/);
+      assert.match(d.current.authorisationNote, /Approved by Admin/);
       assert.equal(d.current.confirmedAt, null, "the new holder confirms");
     });
 
@@ -209,10 +211,10 @@ describe("My Inventory (assets)", () => {
 
     test("only HR sets a recovery (more than 0); it clears exit and goes to Finance", async () => {
       const incident = (await as("fin").get("/assets/incidents?view=open")).data.find((i: { asset: { tag: string } }) => i.asset.tag === laptop.tag);
-      assert.equal((await as("usman").post(`/assets/incidents/${incident.id}/recovery`, { amount: 45000, note: "Depreciated value" })).status, 403);
-      assert.equal((await as("fin").post(`/assets/incidents/${incident.id}/recovery`, { amount: 45000, note: "Depreciated value" })).status, 403);
-      assert.equal((await as("hr").post(`/assets/incidents/${incident.id}/recovery`, { amount: 0, note: "No charge" })).status, 400, "no-charge needs a Management write-off");
-      assert.equal((await as("hr").post(`/assets/incidents/${incident.id}/recovery`, { amount: 45000, note: "Depreciated value" })).status, 200);
+      assert.equal((await as("usman").post(`/assets/incidents/${incident.id}/recovery`, { finding: "NEGLIGENCE", amount: 45000, note: "Depreciated value" })).status, 403);
+      assert.equal((await as("fin").post(`/assets/incidents/${incident.id}/recovery`, { finding: "NEGLIGENCE", amount: 45000, note: "Depreciated value" })).status, 403);
+      assert.equal((await as("hr").post(`/assets/incidents/${incident.id}/recovery`, { finding: "NEGLIGENCE", amount: 0, note: "No charge" })).status, 400, "no-charge needs a Management write-off");
+      assert.equal((await as("hr").post(`/assets/incidents/${incident.id}/recovery`, { finding: "NEGLIGENCE", amount: 45000, note: "Depreciated value" })).status, 200);
       const c = await clearance("ali");
       assert.equal(c.cleared, true);
       assert.equal(c.recoveryTotal, 45000);

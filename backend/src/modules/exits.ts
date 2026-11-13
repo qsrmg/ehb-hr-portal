@@ -204,7 +204,7 @@ exitsRouter.get("/:id", async (req, res) => {
         canClear: open && area !== "FINANCE" && canClear(user, c, x),
       };
     }),
-    assets: assets && { cleared: assets.cleared, outstanding: assets.outstanding, pendingDecisions: assets.pendingDecisions, recoveries: money ? assets.recoveries : undefined, recoveryTotal: money ? assets.recoveryTotal : undefined },
+    assets: assets && { cleared: assets.cleared, outstanding: assets.outstanding, pendingDecisions: assets.pendingDecisions, retained: assets.retained, recoveries: money ? assets.recoveries : undefined, recoveryTotal: money ? assets.recoveryTotal : undefined },
     handover,
     settlement: money && c.settledAt
       ? {

@@ -10,16 +10,20 @@ import { currentUser, requireAuth, requireRole } from "../middleware/auth.js";
 export const documentsRouter = Router();
 documentsRouter.use(requireAuth);
 
+const bool = z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean());
+
 documentsRouter.get("/", async (req, res) => {
+  const user = currentUser(req);
   const category = req.query.category === "POLICY" || req.query.category === "HR_FORM" ? req.query.category : undefined;
   const rows = await prisma.document.findMany({
     where: category ? { category } : {},
     orderBy: [{ category: "asc" }, { title: "asc" }],
-    include: { uploadedBy: { select: { fullName: true } } },
+    include: { uploadedBy: { select: { fullName: true } }, acknowledgements: { where: { employeeId: user.id }, select: { acknowledgedAt: true } } },
   });
   res.json(rows.map((d) => ({
     id: d.id, title: d.title, description: d.description, category: d.category, fileName: d.fileName,
     size: d.size, createdAt: d.createdAt, uploadedBy: d.uploadedBy.fullName,
+    requiresAcknowledgement: d.requiresAcknowledgement, acknowledgedAt: d.acknowledgements[0]?.acknowledgedAt ?? null,
   })));
 });
 
@@ -27,6 +31,7 @@ const schema = z.object({
   title: z.string().trim().min(2, "Give the document a title"),
   description: z.string().trim().optional(),
   category: z.enum(["POLICY", "HR_FORM"]),
+  requiresAcknowledgement: bool.optional().default(false),
 });
 
 documentsRouter.post("/", requireRole("HR"), documentUpload.single("file"), async (req, res) => {
@@ -43,7 +48,7 @@ documentsRouter.post("/", requireRole("HR"), documentUpload.single("file"), asyn
       fileName: file.originalname, path: relativeUploadPath(file.path), mimeType: file.mimetype, size: file.size, uploadedById: user.id,
     },
   });
-  await audit(user.id, "CREATE", "Document", doc.id, { title: doc.title });
+  await audit(user.id, "CREATE", "Document", doc.id, { title: doc.title, requiresAcknowledgement: doc.requiresAcknowledgement });
   res.status(201).json({ id: doc.id });
 });
 
@@ -53,6 +58,37 @@ documentsRouter.get("/:id/download", async (req, res) => {
   const file = absoluteUploadPath(doc.path);
   if (!fs.existsSync(file)) throw new HttpError(404, "File is missing from storage");
   res.download(file, doc.fileName);
+});
+
+// Dress Code Policy design 1: a timestamped acknowledgement, no login blocking. Submitting again is a no-op.
+documentsRouter.post("/:id/acknowledge", async (req, res) => {
+  const user = currentUser(req);
+  const id = Number(req.params.id);
+  const doc = await prisma.document.findUnique({ where: { id } });
+  if (!doc) throw new HttpError(404, "Document not found");
+  const ack = await prisma.documentAcknowledgement.upsert({
+    where: { documentId_employeeId: { documentId: id, employeeId: user.id } },
+    create: { documentId: id, employeeId: user.id },
+    update: {},
+  });
+  await audit(user.id, "ACKNOWLEDGE", "Document", id);
+  res.json({ ok: true, acknowledgedAt: ack.acknowledgedAt });
+});
+
+// HR sees who has not yet acknowledged a document that requires it.
+documentsRouter.get("/:id/acknowledgements", requireRole("HR"), async (req, res) => {
+  const id = Number(req.params.id);
+  const doc = await prisma.document.findUnique({ where: { id } });
+  if (!doc) throw new HttpError(404, "Document not found");
+  const [acknowledged, employees] = await Promise.all([
+    prisma.documentAcknowledgement.findMany({ where: { documentId: id }, include: { employee: { select: { id: true, fullName: true, code: true } } }, orderBy: { acknowledgedAt: "asc" } }),
+    prisma.employee.findMany({ where: { status: "ACTIVE" }, select: { id: true, fullName: true, code: true }, orderBy: { fullName: "asc" } }),
+  ]);
+  const ackedIds = new Set(acknowledged.map((a) => a.employeeId));
+  res.json({
+    acknowledged: acknowledged.map((a) => ({ id: a.employee.id, fullName: a.employee.fullName, code: a.employee.code, acknowledgedAt: a.acknowledgedAt })),
+    outstanding: employees.filter((e) => !ackedIds.has(e.id)),
+  });
 });
 
 documentsRouter.delete("/:id", requireRole("HR"), async (req, res) => {

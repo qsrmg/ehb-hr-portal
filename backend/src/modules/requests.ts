@@ -74,6 +74,11 @@ const letterSchema = z.object({
   purpose: z.string().trim().min(3, "Give the purpose of the letter"),
 });
 
+// Dress Code Policy D4: goes to HR only. The request text is enough; the religion itself is never stored.
+const accommodationSchema = z.object({
+  description: z.string().trim().min(5, "Describe the accommodation you are asking for"),
+});
+
 type Prepared = {
   title: string;
   data: Prisma.InputJsonValue;
@@ -180,6 +185,16 @@ async function prepare(
   if (type === "ASSET_REQUEST") return prepareAssetRequest(body);
   if (type === "RESIGNATION") return prepareResignation(user, body, existingId);
   if (type === "TRAINING") return prepareTraining(user, body, existingId);
+
+  if (type === "RELIGIOUS_ACCOMMODATION") {
+    const input = parse(accommodationSchema, body);
+    return {
+      title: "Religious accommodation request",
+      data: { description: input.description },
+      chain: [{ label: "HR", approver: "HR" }],
+      persist: async () => {},
+    };
+  }
 
   const input = parse(letterSchema, body);
   return {
@@ -515,6 +530,7 @@ const TYPE_ROUTES: Record<string, RequestType> = {
   asset: "ASSET_REQUEST",
   resignation: "RESIGNATION",
   training: "TRAINING",
+  "religious-accommodation": "RELIGIOUS_ACCOMMODATION",
 };
 
 async function saveAttachments(tx: Tx, requestId: number, files: Express.Multer.File[]) {
@@ -674,14 +690,19 @@ requestsRouter.get("/approvals", async (req, res) => {
   res.json(steps.map((s) => ({ ...summarize(s.request), pendingSince: s.pendingSince })));
 });
 
-// HR / Management overview of all requests
+// HR / Management overview of all requests. Religious accommodation requests (highly confidential) never
+// appear here for Management: only HR sees them, and only on their own approval queue or the employee's own list.
 requestsRouter.get("/", async (req, res) => {
   const user = currentUser(req);
   if (!hasRole(user, "HR", "MANAGEMENT")) throw new HttpError(403, "You do not have access to this");
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const rows = await prisma.request.findMany({
-    where: { ...(status ? { status: status as never } : {}), ...(type ? { type: type as never } : {}) },
+    where: {
+      ...(status ? { status: status as never } : {}),
+      ...(type ? { type: type as never } : {}),
+      ...(hasRole(user, "HR") ? {} : { AND: [{ type: { not: "RELIGIOUS_ACCOMMODATION" } }] }),
+    },
     include: listInclude,
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -742,13 +763,15 @@ type Detail = Prisma.RequestGetPayload<{ include: typeof detailInclude }>;
 async function loadForUser(id: number, user: AuthUser): Promise<Detail> {
   const r = await prisma.request.findUnique({ where: { id }, include: detailInclude });
   if (!r) throw new HttpError(404, "Request not found");
-  const allowed =
-    r.employeeId === user.id ||
-    hasRole(user, "HR", "MANAGEMENT") ||
-    r.employee.managerId === user.id ||
-    r.steps.some((s) => s.approverId === user.id || s.actedById === user.id || (s.approverRole && hasRole(user, s.approverRole))) ||
-    // Admin books trips; Finance pays advances and settlements.
-    ((r.type === "TRAVEL" || r.type === "TRAVEL_SETTLEMENT") && hasRole(user, "ADMIN", "FINANCE"));
+  // Highly confidential (Dress Code Policy D4): the employee and HR only, never Management or the Line Manager.
+  const allowed = r.type === "RELIGIOUS_ACCOMMODATION"
+    ? r.employeeId === user.id || hasRole(user, "HR")
+    : r.employeeId === user.id ||
+      hasRole(user, "HR", "MANAGEMENT") ||
+      r.employee.managerId === user.id ||
+      r.steps.some((s) => s.approverId === user.id || s.actedById === user.id || (s.approverRole && hasRole(user, s.approverRole))) ||
+      // Admin books trips; Finance pays advances and settlements.
+      ((r.type === "TRAVEL" || r.type === "TRAVEL_SETTLEMENT") && hasRole(user, "ADMIN", "FINANCE"));
   if (!allowed) throw new HttpError(403, "You do not have access to this request");
   return r;
 }
@@ -818,6 +841,9 @@ requestsRouter.get("/:id", async (req, res) => {
   const hidden = attachmentsHidden(r, user);
   if (hidden === false && r.attachments.length && r.type === "LEAVE" && r.leaveRequest?.leaveType.code === "SL" && r.employeeId !== user.id) {
     await audit(user.id, "VIEW_SENSITIVE", "MedicalDocument", r.id);
+  }
+  if (r.type === "RELIGIOUS_ACCOMMODATION" && r.employeeId !== user.id) {
+    await audit(user.id, "VIEW_SENSITIVE", "ReligiousAccommodationRequest", r.id);
   }
   res.json({
     id: r.id,

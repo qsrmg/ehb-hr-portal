@@ -2,11 +2,43 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Alert, Button, Card, Field, Info, Select, Spinner, StatusBadge, Table, Td } from "@/components/ui";
+import { Alert, Button, Card, Field, Info, Input, Select, Spinner, StatusBadge, Table, Td } from "@/components/ui";
 import { post } from "@/lib/api";
+import { hasRole, useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import type { Clearance } from "@/lib/assets";
+
+/** Management only: authorises in writing that the employee keeps this item past their exit (A10/A14). */
+function RetainAction({ assignmentId, onDone }: { assignmentId: number; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!open) return <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>Retain in writing</Button>;
+  return (
+    <form
+      className="mt-1 flex flex-wrap items-center gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        try {
+          await post(`/assets/assignments/${assignmentId}/retain`, { note });
+          onDone();
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <Input required placeholder="Reason, in writing" value={note} onChange={(e) => setNote(e.target.value)} className="w-56" />
+      <Button size="sm" type="submit" loading={busy}>Authorise</Button>
+      {error && <span className="text-xs text-red-600">{error}</span>}
+    </form>
+  );
+}
 
 export type AssetRequestDetail = {
   categoryId: number; category: string; reason: string; neededBy: string | null;
@@ -64,13 +96,15 @@ export function AssetRequestPanel({ requestId, detail, canFulfil, onChanged }: {
 
 /** Exit clearance for assets (HR / Admin view on the employee page). */
 export function AssetClearanceCard({ employeeId }: { employeeId: number }) {
-  const { data, loading, error } = useApi<Clearance>(`/assets/clearance/${employeeId}`);
+  const { user } = useAuth();
+  const { data, loading, error, reload } = useApi<Clearance>(`/assets/clearance/${employeeId}`);
   if (loading) return <Card title="Asset clearance"><Spinner /></Card>;
   if (error || !data) return null;
+  const isMgmt = hasRole(user, "MANAGEMENT");
   return (
     <Card title="Asset clearance" actions={<StatusBadge status={data.cleared ? "APPROVED" : "PENDING"} label={data.cleared ? "Cleared" : `Blocked: ${data.outstanding.length} item(s)`} />}>
       {data.outstanding.length > 0 ? (
-        <Table head={["Item", "Tag", "Category", "Since", "Needed"]}>
+        <Table head={["Item", "Tag", "Category", "Since", "Needed", ...(isMgmt ? [""] : [])]}>
           {data.outstanding.map((o) => (
             <tr key={o.assignmentId}>
               <Td><Link href={`/admin/assets/${o.assetId}`} className="text-accent hover:underline">{o.name}</Link></Td>
@@ -78,14 +112,18 @@ export function AssetClearanceCard({ employeeId }: { employeeId: number }) {
               <Td>{o.category}</Td>
               <Td>{fmtDate(o.issuedAt)}</Td>
               <Td>{o.action}</Td>
+              {isMgmt && <Td><RetainAction assignmentId={o.assignmentId} onDone={reload} /></Td>}
             </tr>
           ))}
         </Table>
       ) : (
         <p className="text-sm text-slate-600">No returnable items or accounts outstanding.</p>
       )}
-      {data.recoveries.length > 0 && (
-        <p className="mt-3 text-sm text-red-700">Recoveries for the final settlement: PKR {fmtMoney(data.recoveryTotal)} ({data.recoveries.map((r) => `${r.name} ${r.tag}`).join(", ")}).</p>
+      {data.retained.length > 0 && (
+        <p className="mt-2 text-sm text-slate-600">Retained with Management&apos;s written authorisation: {data.retained.map((r) => `${r.name} (${r.tag}, by ${r.retainedBy})`).join(", ")}.</p>
+      )}
+      {data.recoveries && data.recoveries.length > 0 && (
+        <p className="mt-3 text-sm text-red-700">Recoveries for the final settlement: PKR {fmtMoney(data.recoveryTotal ?? 0)} ({data.recoveries.map((r) => `${r.name} ${r.tag}`).join(", ")}).</p>
       )}
       {data.pendingDecisions.length > 0 && (
         <p className="mt-2 text-sm text-amber-800">Waiting for an HR recovery or Management write-off: {data.pendingDecisions.map((p) => `${p.name} (${p.tag})`).join(", ")}.</p>
@@ -99,7 +137,7 @@ export function AssetClearanceCard({ employeeId }: { employeeId: number }) {
 
 /** Line manager: what the team holds. */
 export function TeamAssets() {
-  const { data, loading } = useApi<{ id: number; employee: { fullName: string; code: string }; issuedAt: string; confirmedAt: string | null; asset: { tag: string; name: string; category: string; status: string } }[]>("/assets/team");
+  const { data, loading } = useApi<{ id: number; employee: { fullName: string; code: string }; issuedAt: string; confirmedAt: string | null; asset: { tag: string; name: string; category: string; status: string }; hasOpenIncident: boolean }[]>("/assets/team");
   if (loading) return <Spinner />;
   return (
     <Table head={["Employee", "Item", "Tag", "Category", "Since", "Status"]} empty="Your team has no company items issued.">
@@ -110,7 +148,8 @@ export function TeamAssets() {
           <Td className="font-mono text-xs">{r.asset.tag}</Td>
           <Td>{r.asset.category}</Td>
           <Td>{fmtDate(r.issuedAt)}</Td>
-          <Td><StatusBadge status={r.asset.status} />{!r.confirmedAt && <div className="text-xs text-amber-800">not confirmed</div>}</Td>
+          {/* The Line Manager sees that a report exists, never the recovery amount (Employee Assets Management Policy A6). */}
+          <Td><StatusBadge status={r.asset.status} />{!r.confirmedAt && <div className="text-xs text-amber-800">not confirmed</div>}{r.hasOpenIncident && <div className="text-xs text-red-700">damage or loss reported</div>}</Td>
         </tr>
       ))}
     </Table>

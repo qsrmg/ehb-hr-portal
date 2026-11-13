@@ -75,6 +75,12 @@ export default function ProfilePage() {
           />
           <Info label="Roles" value={data.roles.map((r) => ROLE_LABELS[r]).join(", ")} />
         </dl>
+        {data.department?.dressCodeNotes && (
+          <div className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
+            <span className="font-medium text-slate-700">Dress code notes for {data.department.name}: </span>
+            {data.department.dressCodeNotes}
+          </div>
+        )}
       </Card>
 
       <Card title="Contact details">

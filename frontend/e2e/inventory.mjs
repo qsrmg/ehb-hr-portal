@@ -222,13 +222,14 @@ await step(5, "HR: Sara's clearance blocked; recovery screen shows purchase cost
 
     await page.goto(`${BASE}/admin/assets/${ctx.laptop.id}`);
     if ((await card(page, "Details").innerText()).includes("Cost")) throw new Error("HR can see the cost in the item details");
-    const form = action(page, "Set a recovery amount (HR)");
+    const form = action(page, "Decide a recovery (HR)");
     await form.getByText(/Purchase cost:\s*PKR 285,000/).waitFor();
     check("Recovery screen shows the purchase cost (PKR 285,000) and date; item details still hide the cost");
     s(await snap(page, "step5-recovery-form-with-cost"));
+    await dropdown(form, "Finding").selectOption("NEGLIGENCE");
     await form.getByLabel(/Amount \(PKR\)/).fill("45000");
     await form.getByLabel("Reason").fill("Depreciated value, 3 years old");
-    await form.getByRole("button", { name: "Set recovery" }).click();
+    await form.getByRole("button", { name: "Save decision" }).click();
     await visible(page, /Recovery PKR 45,000 set by Ayesha Siddiqui/);
     const after = await clearanceText(page);
     if (!/Recoveries for the final settlement: PKR 45,000/.test(after)) throw new Error("Recovery not shown on the clearance card");
@@ -388,6 +389,35 @@ await step(12, "Ali's line manager sees his monitor under Team → Assets, witho
     if (/PKR|\bCost\b/.test(await page.locator("main").innerText())) throw new Error("Costs are visible to the line manager");
     check(`${ctx.lineManager} sees Ali's monitor, no cost shown`);
     s(await snap(page, "step12-team-assets"));
+  });
+});
+
+// ---------- 13. Handover form and accessories (Employee Assets Management Policy) ----------
+await step(13, "Admin issues a laptop with accessories, downloads the handover form, then returns it with one accessory missing", async ({ check, shot: s }) => {
+  await as("admin@ehb.local", async (page) => {
+    ctx.handoverLaptop = await addAsset(page, { category: "Laptop", name: `ThinkPad T14 ${RUN}`, serial: `TP-${RUN}` });
+    const issue = action(page, "Issue");
+    await dropdown(issue, "Issue to").selectOption("EMPLOYEE");
+    await selectByText(dropdown(issue, "Employee"), "Sara Javed");
+    await issue.getByLabel(/^Accessories/).fill("Charger\nCase");
+    await issue.getByRole("button", { name: "Issue item" }).click();
+    await visible(page, /With\s+Sara Javed/);
+    check("Issued with accessories: Charger, Case");
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      card(page, "History").getByRole("button", { name: "Handover form" }).click(),
+    ]);
+    if (!/^handover-/.test(download.suggestedFilename())) throw new Error(`Unexpected handover form filename ${download.suggestedFilename()}`);
+    check("Handover / Acknowledgement Form downloaded");
+    s(await snap(page, "step13-handover-downloaded"));
+
+    const ret = action(page, "Record return");
+    await ret.getByLabel("Case").uncheck();
+    await ret.getByRole("button", { name: "Record return" }).click();
+    await visible(page, /Missing at return: Case/);
+    check("Returned with Case marked missing; the return screen warns about it");
+    s(await snap(page, "step13-missing-accessory"));
   });
 });
 

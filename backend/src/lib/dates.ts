@@ -9,6 +9,8 @@ export const isYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isN
 
 export const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
 
+export const addMonths = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, d.getUTCDate()));
+
 export const isWeekend = (d: Date) => d.getUTCDay() === 0 || d.getUTCDay() === 6;
 
 /** Parts of "now" in the company timezone. */

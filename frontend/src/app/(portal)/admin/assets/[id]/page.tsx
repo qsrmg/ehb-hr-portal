@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Alert, Button, Card, Field, Info, Input, PageHeader, Select, Spinner, StatusBadge, Table, Td, Textarea } from "@/components/ui";
-import { patch, post } from "@/lib/api";
+import { download, patch, post } from "@/lib/api";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtDateTime, fmtMoney, todayYmd } from "@/lib/format";
-import { CONDITIONS, INCIDENT_TYPES, type AssetDetail, type Incident } from "@/lib/assets";
+import { CONDITIONS, DISPOSAL_REASONS, INCIDENT_TYPES, RECOVERY_FINDINGS, type AssetDetail, type Incident } from "@/lib/assets";
 
 type Person = { id: number; fullName: string; code: string };
 type Dept = { id: number; name: string };
@@ -87,17 +87,25 @@ const assigneeBody = (v: { assigneeType: string; employeeId: string; departmentI
   ...(v.assigneeType === "EMPLOYEE" ? { employeeId: Number(v.employeeId) } : v.assigneeType === "DEPARTMENT" ? { departmentId: Number(v.departmentId) } : { location: v.location }),
 });
 
-function AdminActions({ asset, reload }: { asset: AssetDetail; reload: () => void }) {
+/** "Charger" or "Bag x2", one per line. */
+function parseAccessories(text: string) {
+  return text.split("\n").map((l) => l.trim()).filter(Boolean).map((line) => {
+    const m = /^(.*?)(?:\s*x\s*(\d+))?$/i.exec(line);
+    return { name: (m?.[1] || line).trim(), quantity: m?.[2] ? Number(m[2]) : 1 };
+  });
+}
+
+function AdminActions({ asset, reload, onReturned }: { asset: AssetDetail; reload: () => void; onReturned: (missing: { name: string }[]) => void }) {
   const people = useApi<Person[]>("/employees");
   const depts = useApi<Dept[]>("/departments");
   const blankAssignee = { assigneeType: "EMPLOYEE", employeeId: "", departmentId: "", location: "" };
-  const [issue, setIssue] = useState({ ...blankAssignee, condition: asset.condition, note: "" });
-  const [transfer, setTransfer] = useState({ ...blankAssignee, condition: asset.condition });
-  const [ret, setRet] = useState({ condition: asset.condition, note: "" });
+  const [issue, setIssue] = useState({ ...blankAssignee, condition: asset.condition, note: "", accessories: "" });
+  const [transfer, setTransfer] = useState({ ...blankAssignee, condition: asset.condition, authorisationNote: "" });
+  const [ret, setRet] = useState({ condition: asset.condition, note: "", accessories: (asset.current?.accessories ?? []).map((a) => ({ id: a.id, name: a.name, returned: true })) });
   const [repair, setRepair] = useState({ vendor: "", sentOn: todayYmd(), note: "" });
   const [repairBack, setRepairBack] = useState({ returnedOn: todayYmd(), cost: "", condition: "GOOD" });
   const [incident, setIncident] = useState({ type: "DAMAGED", description: "" });
-  const [retire, setRetire] = useState("");
+  const [retire, setRetire] = useState({ note: "", disposalReason: "DISPOSED", replacedByTag: "" });
   const access = asset.category.kind === "ACCESS";
   const openRepair = asset.repairs.find((r) => !r.returnedOn);
   const p = people.data ?? [];
@@ -107,21 +115,38 @@ function AdminActions({ asset, reload }: { asset: AssetDetail; reload: () => voi
     <Card title="Admin actions">
       <div className="grid gap-4 lg:grid-cols-2">
         {asset.status === "IN_STOCK" && (
-          <Action title={access ? "Grant access" : "Issue"} submitLabel={access ? "Grant access" : "Issue item"} onSubmit={async () => { await post(`/assets/${asset.id}/issue`, { ...assigneeBody(issue), condition: issue.condition, note: issue.note }); reload(); }}>
+          <Action title={access ? "Grant access" : "Issue"} submitLabel={access ? "Grant access" : "Issue item"} onSubmit={async () => { await post(`/assets/${asset.id}/issue`, { ...assigneeBody(issue), condition: issue.condition, note: issue.note, accessories: parseAccessories(issue.accessories) }); reload(); }}>
             <AssigneeFields value={issue} onChange={(v) => setIssue({ ...issue, ...v })} people={p} depts={d} />
             {!access && <ConditionSelect value={issue.condition} onChange={(v) => setIssue({ ...issue, condition: v })} />}
             <Field label="Note (optional)"><Input value={issue.note} onChange={(e) => setIssue({ ...issue, note: e.target.value })} /></Field>
+            {!access && <Field label="Accessories (one per line, e.g. Charger or Bag x2)" hint="Printed on the handover form; checked off at return"><Textarea rows={2} value={issue.accessories} onChange={(e) => setIssue({ ...issue, accessories: e.target.value })} /></Field>}
           </Action>
         )}
         {asset.current && (
-          <Action title={access ? "Revoke access" : "Record return"} submitLabel={access ? "Revoke" : "Record return"} onSubmit={async () => { await post(`/assets/${asset.id}/return`, ret); reload(); }}>
+          <Action title={access ? "Revoke access" : "Record return"} submitLabel={access ? "Revoke" : "Record return"} onSubmit={async () => {
+            const result = await post<{ missingAccessories: { name: string }[] }>(`/assets/${asset.id}/return`, { condition: ret.condition, note: ret.note, accessories: ret.accessories.map((a) => ({ id: a.id, returned: a.returned })) });
+            onReturned(result.missingAccessories);
+            reload();
+          }}>
             {!access && <ConditionSelect label="Condition on return" value={ret.condition} onChange={(v) => setRet({ ...ret, condition: v })} />}
             <Field label="Note (optional)"><Input value={ret.note} onChange={(e) => setRet({ ...ret, note: e.target.value })} /></Field>
+            {ret.accessories.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-sm text-slate-600">Accessories returned</div>
+                {ret.accessories.map((a, i) => (
+                  <label key={a.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={a.returned} onChange={(e) => setRet({ ...ret, accessories: ret.accessories.map((x, j) => (j === i ? { ...x, returned: e.target.checked } : x)) })} />
+                    {a.name}
+                  </label>
+                ))}
+              </div>
+            )}
           </Action>
         )}
         {asset.status === "ISSUED" && (
-          <Action title="Transfer to someone else" submitLabel="Transfer" onSubmit={async () => { await post(`/assets/${asset.id}/transfer`, { ...assigneeBody(transfer), condition: transfer.condition }); reload(); }}>
+          <Action title="Transfer to someone else" submitLabel="Transfer" onSubmit={async () => { await post(`/assets/${asset.id}/transfer`, { ...assigneeBody(transfer), condition: transfer.condition, authorisationNote: transfer.authorisationNote }); reload(); }}>
             <AssigneeFields value={transfer} onChange={(v) => setTransfer({ ...transfer, ...v })} people={p} depts={d} />
+            <Field label="Authorisation" hint="Who authorised this transfer and why (Employee Assets Management Policy A9)"><Input required value={transfer.authorisationNote} onChange={(e) => setTransfer({ ...transfer, authorisationNote: e.target.value })} /></Field>
           </Action>
         )}
         {asset.status === "IN_STOCK" && !access && (
@@ -154,8 +179,14 @@ function AdminActions({ asset, reload }: { asset: AssetDetail; reload: () => voi
           </Action>
         )}
         {asset.status === "IN_STOCK" && (
-          <Action title="Retire" submitLabel="Retire item" danger onSubmit={async () => { await post(`/assets/${asset.id}/retire`, { note: retire }); reload(); }}>
-            <Field label="Reason"><Input required value={retire} onChange={(e) => setRetire(e.target.value)} placeholder="e.g. Beyond repair" /></Field>
+          <Action title="Retire" submitLabel="Retire item" danger onSubmit={async () => { await post(`/assets/${asset.id}/retire`, retire); reload(); }}>
+            <Field label="Reason"><Input required value={retire.note} onChange={(e) => setRetire({ ...retire, note: e.target.value })} placeholder="e.g. Beyond repair" /></Field>
+            <Field label="Disposal / replacement status">
+              <Select value={retire.disposalReason} onChange={(e) => setRetire({ ...retire, disposalReason: e.target.value })}>
+                {Object.entries(DISPOSAL_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </Select>
+            </Field>
+            {retire.disposalReason === "REPLACED" && <Field label="Replaced by asset tag"><Input required value={retire.replacedByTag} onChange={(e) => setRetire({ ...retire, replacedByTag: e.target.value })} /></Field>}
           </Action>
         )}
       </div>
@@ -175,46 +206,100 @@ function RecoveryCost({ incidentId }: { incidentId: number }) {
   );
 }
 
+/** A police-report style attachment: upload (Admin/HR/Management/the employee) or download if one exists. */
+function AttachmentBox({ incident, reload }: { incident: Incident; reload: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      {incident.hasAttachment && <Button size="sm" variant="ghost" onClick={() => download(`/assets/incidents/${incident.id}/attachment`, "attachment")}>Download attachment</Button>}
+      <label className="cursor-pointer text-accent hover:underline">
+        {busy ? "Uploading…" : incident.hasAttachment ? "Replace attachment" : "Attach a file (e.g. police report)"}
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="hidden"
+          disabled={busy}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setBusy(true);
+            setError(null);
+            try {
+              const fd = new FormData();
+              fd.append("file", file);
+              await post(`/assets/incidents/${incident.id}/attachment`, fd);
+              reload();
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </label>
+      {error && <span className="text-red-600">{error}</span>}
+    </div>
+  );
+}
+
 function IncidentActions({ incident, reload }: { incident: Incident; reload: () => void }) {
   const { user } = useAuth();
   const [type, setType] = useState(incident.type);
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
+  const [finding, setFinding] = useState("NEGLIGENCE");
   const isAdmin = hasRole(user, "ADMIN");
   const isHr = hasRole(user, "HR");
   const isMgmt = hasRole(user, "MANAGEMENT");
-  const decidable = ["RECORDED", "RECOVERY_SET"].includes(incident.status) && incident.type !== "NOT_WORKING";
+  const decidable = ["RECORDED", "RECOVERY_PENDING_APPROVAL", "RECOVERY_SET"].includes(incident.status) && incident.type !== "NOT_WORKING";
+  // Finance can view this page's incidents too, but never the attachment (same rule as the backend).
+  const canAttach = isAdmin || isHr || isMgmt;
   return (
-    <div className="mt-2 grid gap-3 lg:grid-cols-2">
-      {isAdmin && incident.status === "REPORTED" && (
-        <>
-          <Action title="Record this report" submitLabel="Record" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/record`, { type, note }); reload(); }}>
-            <Field label="Confirmed as">
-              <Select value={type} onChange={(e) => setType(e.target.value)}>
-                {Object.entries(INCIDENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}{k === "NOT_WORKING" ? " (handled by repair, no charge)" : ""}</option>)}
-              </Select>
-            </Field>
-            <Field label="Note (optional)"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+    <div className="mt-2 space-y-3">
+      {incident.policeReportSuggested && !incident.hasAttachment && <Alert kind="warning">A police report is recommended for this type of report.</Alert>}
+      {canAttach && <AttachmentBox incident={incident} reload={reload} />}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {isAdmin && incident.status === "REPORTED" && (
+          <>
+            <Action title="Record this report" submitLabel="Record" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/record`, { type, note }); reload(); }}>
+              <Field label="Confirmed as">
+                <Select value={type} onChange={(e) => setType(e.target.value)}>
+                  {Object.entries(INCIDENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}{k === "NOT_WORKING" ? " (handled by repair, no charge)" : ""}</option>)}
+                </Select>
+              </Field>
+              <Field label="Note (optional)"><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+            </Action>
+            <Action title="Close without action" submitLabel="Close report" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/close`, { note }); reload(); }}>
+              <Field label="Why"><Input required value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Fixed on the spot" /></Field>
+            </Action>
+          </>
+        )}
+        {isHr && decidable && incident.status !== "RECOVERY_PENDING_APPROVAL" && incident.employee && (
+          <Action title={incident.status === "RECOVERY_SET" ? "Change the recovery (HR)" : "Decide a recovery (HR)"} submitLabel="Save decision" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/recovery`, { finding, amount: finding === "WEAR_AND_TEAR" ? undefined : Number(amount), note }); reload(); }}>
+              <RecoveryCost incidentId={incident.id} />
+              <Field label="Finding">
+                <Select value={finding} onChange={(e) => setFinding(e.target.value)}>
+                  {Object.entries(RECOVERY_FINDINGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </Select>
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {finding !== "WEAR_AND_TEAR" && <Field label="Amount (PKR)" hint="Finance deducts it in the final settlement; above the Rules & settings threshold also needs Management approval"><Input type="number" min="1" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>}
+                <Field label="Reason"><Input required value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+              </div>
           </Action>
-          <Action title="Close without action" submitLabel="Close report" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/close`, { note }); reload(); }}>
-            <Field label="Why"><Input required value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Fixed on the spot" /></Field>
+        )}
+        {isMgmt && incident.status === "RECOVERY_PENDING_APPROVAL" && (
+          <Action title="Approve recovery (Management)" submitLabel="Approve" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/recovery/approve`, {}); reload(); }}>
+            <p className="text-sm text-slate-600">PKR {fmtMoney(incident.recoveryAmount)} proposed by {incident.recoverySetBy}: {incident.recoveryNote}</p>
           </Action>
-        </>
-      )}
-      {isHr && decidable && incident.employee && (
-        <Action title={incident.status === "RECOVERY_SET" ? "Change the recovery (HR)" : "Set a recovery amount (HR)"} submitLabel="Set recovery" onSubmit={async () => { await post(`/assets/incidents/${incident.id}/recovery`, { amount: Number(amount), note }); reload(); }}>
-            <RecoveryCost incidentId={incident.id} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Amount (PKR)" hint="Finance deducts it in the final settlement"><Input type="number" min="1" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-              <Field label="Reason"><Input required value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-            </div>
-        </Action>
-      )}
-      {isMgmt && decidable && (
-        <Action title="Write off (Management)" submitLabel="Write off" danger onSubmit={async () => { await post(`/assets/incidents/${incident.id}/write-off`, { note }); reload(); }}>
-          <Field label="Reason"><Input required value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-        </Action>
-      )}
+        )}
+        {isMgmt && decidable && (
+          <Action title="Write off (Management)" submitLabel="Write off" danger onSubmit={async () => { await post(`/assets/incidents/${incident.id}/write-off`, { note }); reload(); }}>
+            <Field label="Reason"><Input required value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          </Action>
+        )}
+      </div>
     </div>
   );
 }
@@ -247,6 +332,10 @@ export default function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { data: a, loading, error, reload } = useApi<AssetDetail>(`/assets/${id}`);
+  // Kept here, not inside AdminActions: that component remounts (its key changes) the moment a return
+  // succeeds, which would wipe this state before the warning had a chance to be seen. Shown only while
+  // the item is still unissued (current is empty), so it reads as stale once it is issued again.
+  const [missing, setMissing] = useState<{ name: string }[] | null>(null);
   if (loading && !a) return <Spinner />;
   if (error || !a) return <Alert>{error}</Alert>;
   const isAdmin = hasRole(user, "ADMIN");
@@ -263,6 +352,9 @@ export default function AssetDetailPage() {
         <StatusBadge status={a.status} />
         {a.current && <span className="text-sm text-slate-600">With <strong>{a.current.assignee}</strong> since {fmtDate(a.current.issuedAt)}{!a.current.confirmedAt && " · awaiting their confirmation"}</span>}
       </div>
+      {missing && missing.length > 0 && !a.current && (
+        <Alert kind="warning">Missing at return: {missing.map((x) => x.name).join(", ")}. Record damage or loss below if a recovery is needed.</Alert>
+      )}
 
       <Card title="Details" actions={isAdmin ? <EditDetails key={JSON.stringify(a)} asset={a} reload={reload} /> : undefined}>
         <dl className="grid gap-4 sm:grid-cols-3">
@@ -272,11 +364,12 @@ export default function AssetDetailPage() {
           <Info label="Purchase date" value={a.purchaseDate ? fmtDate(a.purchaseDate) : null} />
           {a.cost !== undefined && <Info label="Cost" value={a.cost != null ? `PKR ${fmtMoney(a.cost)}` : null} />}
           <Info label="Warranty until" value={a.warrantyUntil ? fmtDate(a.warrantyUntil) : null} />
+          {a.disposalReason && <Info label="Disposal / replacement" value={`${DISPOSAL_REASONS[a.disposalReason]}${a.disposalDate ? ` on ${fmtDate(a.disposalDate)}` : ""}`} />}
           {a.notes && <div className="sm:col-span-3"><Info label="Notes" value={<span className="whitespace-pre-line">{a.notes}</span>} /></div>}
         </dl>
       </Card>
 
-      {isAdmin && <AdminActions key={`${a.status}-${a.current?.id ?? 0}`} asset={a} reload={reload} />}
+      {isAdmin && <AdminActions key={`${a.status}-${a.current?.id ?? 0}`} asset={a} reload={reload} onReturned={setMissing} />}
 
       <Card title={`Damage & loss (${a.incidents.length})`}>
         {!a.incidents.length ? <p className="text-sm text-slate-500">None recorded.</p> : (
@@ -290,7 +383,13 @@ export default function AssetDetailPage() {
                 </div>
                 <p className="mt-1 text-sm text-slate-700">{i.description}</p>
                 {i.adminNote && <p className="text-xs text-slate-500">Admin ({i.recordedBy}): {i.adminNote}</p>}
-                {i.recoveryAmount != null && <p className="text-sm text-red-700">Recovery PKR {fmtMoney(i.recoveryAmount)} set by {i.recoverySetBy}: {i.recoveryNote}</p>}
+                {i.finding && <p className="text-xs text-slate-500">Finding: {RECOVERY_FINDINGS[i.finding] ?? i.finding}</p>}
+                {i.recoveryAmount != null && (
+                  <p className="text-sm text-red-700">
+                    Recovery PKR {fmtMoney(i.recoveryAmount)} {i.status === "RECOVERY_PENDING_APPROVAL" ? "proposed" : "set"} by {i.recoverySetBy}: {i.recoveryNote}
+                    {i.recoveryApprovedBy && ` · approved by ${i.recoveryApprovedBy}`}
+                  </p>
+                )}
                 {i.writeOffNote && <p className="text-sm text-slate-700">Written off by {i.writtenOffBy}: {i.writeOffNote}</p>}
                 <IncidentActions key={`${i.id}-${i.status}`} incident={i} reload={reload} />
               </li>
@@ -317,7 +416,7 @@ export default function AssetDetailPage() {
       )}
 
       <Card title="History">
-        <Table head={["With", "Issued", "Confirmed", access ? "Revoked" : "Returned", "Condition out / in", "Notes"]} empty="Never issued.">
+        <Table head={["With", "Issued", "Confirmed", access ? "Revoked" : "Returned", "Condition out / in", "Notes", ""]} empty="Never issued.">
           {a.assignments.map((h) => (
             <tr key={h.id} className="align-top">
               <Td className="whitespace-normal">{h.assignee}{h.requestId && <div className="text-xs"><Link href={`/requests/${h.requestId}`} className="text-accent hover:underline">Request #{h.requestId}</Link></div>}</Td>
@@ -325,7 +424,11 @@ export default function AssetDetailPage() {
               <Td>{h.confirmedAt ? fmtDate(h.confirmedAt) : <span className="text-xs text-amber-800">not yet</span>}</Td>
               <Td>{h.returnedAt ? <>{fmtDate(h.returnedAt)}<div className="text-xs text-slate-500">to {h.receivedBy}</div></> : "—"}</Td>
               <Td>{CONDITIONS[h.conditionOut]}{h.conditionIn && ` / ${CONDITIONS[h.conditionIn]}`}</Td>
-              <Td className="whitespace-normal text-xs text-slate-600">{[h.issueNote, h.returnNote].filter(Boolean).join(" · ") || "—"}</Td>
+              <Td className="whitespace-normal text-xs text-slate-600">
+                {[h.issueNote, h.authorisationNote && `Authorised: ${h.authorisationNote}`, h.returnNote].filter(Boolean).join(" · ") || "—"}
+                {h.accessories.length > 0 && <div>Accessories: {h.accessories.map((x) => `${x.name}${x.quantity > 1 ? ` x${x.quantity}` : ""}${h.returnedAt ? (x.returned ? "" : " (missing)") : ""}`).join(", ")}</div>}
+              </Td>
+              <Td>{h.employee && <Button size="sm" variant="ghost" onClick={() => download(`/assets/assignments/${h.id}/handover`, `handover-${a.tag}.pdf`)}>Handover form</Button>}</Td>
             </tr>
           ))}
         </Table>

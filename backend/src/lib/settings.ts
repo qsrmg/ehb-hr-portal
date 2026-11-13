@@ -1,5 +1,8 @@
 import { prisma } from "./prisma.js";
 
+/** Report types a police report can be required for ("not working" is handled by repair, never police). */
+const INCIDENT_LIST_VALUES = ["DAMAGED", "LOST"] as const;
+
 // Every quota, limit and day count is a setting HR can change without new development.
 export const SETTING_DEFAULTS = {
   "attendance.lateAfter": { value: "09:25", label: "Arrival after this time is Late (HH:MM)" },
@@ -47,7 +50,14 @@ export const SETTING_DEFAULTS = {
   "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
   // Training request (Phase 3): HR or Finance can change this. Empty means "off".
   "training.managementApprovalAbove": { value: "", label: "Training programmes above this estimated cost also need Management/CEO approval (PKR, empty = off)", optional: true },
-} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean }>;
+  // Employee Assets Management Policy / Cyber Security Incident Response Policy: left open by the policy,
+  // so these are HR-editable settings, empty (off) by default. See DECISIONS.md.
+  "assets.recoveryApprovalThreshold": { value: "", label: "Asset recoveries above this amount also need Management approval (PKR, empty = off)", optional: true },
+  "assets.cyberSecurityNotifyRole": { value: "", label: "Role also notified when a data-bearing asset is reported lost, stolen or damaged (one of: EMPLOYEE, LINE_MANAGER, HOD, HR, FINANCE, ADMIN, MANAGEMENT; empty = off)", optional: true, role: true },
+  "assets.auditReminderMonths": { value: "", label: "Remind Admin to start an asset verification round every this many months (empty = no reminder)", optional: true },
+  "assets.policeReportRequiredTypes": { value: "", label: "Report types that should have a police report attached, comma-separated (DAMAGED, LOST; empty = HR or Admin decide case by case)", optional: true, list: INCIDENT_LIST_VALUES },
+  "assets.recoveryMethod": { value: "", label: "How asset recovery amounts are worked out, shown for reference on the recovery form (empty = Finance enters the amount by hand; the portal has no depreciation formula)", optional: true, text: true },
+} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean; role?: boolean; list?: readonly string[] }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 
@@ -56,6 +66,12 @@ export const isOptionalSetting = (key: SettingKey) => "optional" in SETTING_DEFA
 export const isTextSetting = (key: SettingKey) => "text" in SETTING_DEFAULTS[key];
 /** Settings that are an on/off switch, stored as "1" or "0" rather than shown as a number. */
 export const isBooleanSetting = (key: SettingKey) => "boolean" in SETTING_DEFAULTS[key];
+/** Settings whose value must be one of the Role enum names, or empty. */
+export const isRoleSetting = (key: SettingKey) => "role" in SETTING_DEFAULTS[key];
+/** Settings whose value is a comma-separated list drawn from a fixed set of codes, or empty. */
+export const listSettingValues = (key: SettingKey) => (SETTING_DEFAULTS[key] as { list?: readonly string[] }).list;
+
+export const ROLE_VALUES = ["EMPLOYEE", "LINE_MANAGER", "HOD", "HR", "FINANCE", "ADMIN", "MANAGEMENT"] as const;
 
 /** Settings Finance may change as well as HR. */
 export const FINANCE_SETTING_PREFIXES = ["expense.", "travel.", "training."];

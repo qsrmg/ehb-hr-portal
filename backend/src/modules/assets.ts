@@ -1,19 +1,26 @@
+import fs from "node:fs";
 import { Router } from "express";
 import ExcelJS from "exceljs";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
 import { employeeIdsWithRole, notify } from "../lib/notify.js";
-import { sheetUpload } from "../lib/upload.js";
+import { sheetUpload, attachmentUpload, absoluteUploadPath, relativeUploadPath, removeFiles } from "../lib/upload.js";
 import { readSheet, pickString, parseSheetDate, parseSheetNumber } from "../lib/sheet.js";
 import { todayYmd, toDate, ymd } from "../lib/dates.js";
+import { getSettings, settingNumber, ROLE_VALUES } from "../lib/settings.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, teamIds, type AuthUser } from "../middleware/auth.js";
 import {
-  assetClearance, assetInclude, assigneeLabel, canSeeCost, canSeeRegister, nextAssetTag, serializeAsset, serializeAssignment, serializeIncident,
+  assetClearance, assetClearanceFor, assetInclude, assigneeLabel, canSeeCost, canSeeIncidentAttachment, canSeeRecoveryAmount, canSeeRegister,
+  nextAssetTag, notifyRecoverySet, serializeAsset, serializeAssignment, serializeIncident,
 } from "../services/assets.js";
 import { pkr } from "../services/expenses.js";
-import type { AssetCondition, Prisma } from "../generated/prisma/client.js";
+import { assetHandoverPdf } from "../services/pdf.js";
+import type { AssetCondition, Prisma, Role } from "../generated/prisma/client.js";
+
+const RECOVERY_FINDINGS = ["NEGLIGENCE", "MISUSE", "UNAUTHORISED_USE", "PROCEDURE_VIOLATION", "WEAR_AND_TEAR"] as const;
+const DISPOSAL_REASONS = ["DISPOSED", "SOLD", "REPLACED", "WRITTEN_OFF"] as const;
 
 export const assetsRouter = Router();
 assetsRouter.use(requireAuth);
@@ -51,6 +58,11 @@ const categorySchema = z.object({
   name: z.string().trim().min(2, "Give the category a name").max(60),
   kind: z.enum(["PHYSICAL", "ACCESS"]).optional(),
   mustReturnOnExit: z.boolean().optional(),
+  // Cyber Security Incident Response Policy: categories that can hold company data also notify
+  // assets.cyberSecurityNotifyRole when one is reported lost, stolen or damaged.
+  dataBearing: z.boolean().optional(),
+  // A9: who may authorise a transfer of this category; empty means Admin.
+  transferAuthorisingRole: z.enum(ROLE_VALUES).nullable().optional(),
   active: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
@@ -159,29 +171,52 @@ assetsRouter.get("/mine", async (req, res) => {
       receivedBy: { select: { fullName: true } },
       request: { select: { requestId: true } },
       incidents: { orderBy: { createdAt: "desc" } },
+      accessories: true,
     },
     orderBy: { issuedAt: "desc" },
   });
+  // A13: items waiting for this employee's confirmation in an open verification round.
+  const pending = await prisma.assetVerificationItem.findMany({
+    where: { assignmentId: { in: rows.map((a) => a.id) }, confirmedAt: null, round: { closedAt: null } },
+    select: { id: true, assignmentId: true, round: { select: { dueDate: true } } },
+  });
+  const pendingByAssignment = new Map(pending.map((p) => [p.assignmentId, { itemId: p.id, dueDate: ymd(p.round.dueDate) }]));
   res.json(rows.map((a) => ({
     ...serializeAssignment(a),
     asset: { id: a.asset.id, tag: a.asset.tag, name: a.asset.name, serialNumber: a.asset.serialNumber, category: a.asset.category.name, kind: a.asset.category.kind, status: a.asset.status, warrantyUntil: a.asset.warrantyUntil ? ymd(a.asset.warrantyUntil) : null },
     incidents: a.incidents.map((i) => ({ id: i.id, type: i.type, status: i.status, description: i.description, createdAt: i.createdAt, recoveryAmount: i.recoveryAmount == null ? null : Number(i.recoveryAmount), recoveryNote: i.recoveryNote, writeOffNote: i.writeOffNote })),
+    pendingVerification: pendingByAssignment.get(a.id) ?? null,
   })));
 });
 
-// A line manager sees what their team holds (no cost values)
+// A line manager sees what their team holds (no cost values, no recovery amounts)
 assetsRouter.get("/team", async (req, res) => {
   const user = currentUser(req);
   const ids = await teamIds(user.id);
   const rows = await prisma.assetAssignment.findMany({
     where: { employeeId: { in: ids }, returnedAt: null },
-    include: { asset: { include: { category: true } }, employee: { select: { id: true, fullName: true, code: true } } },
+    include: { asset: { include: { category: true } }, employee: { select: { id: true, fullName: true, code: true } }, incidents: { select: { status: true } } },
     orderBy: [{ employeeId: "asc" }, { issuedAt: "asc" }],
   });
   res.json(rows.map((a) => ({
     id: a.id, employee: a.employee, issuedAt: a.issuedAt, confirmedAt: a.confirmedAt,
     asset: { tag: a.asset.tag, name: a.asset.name, category: a.asset.category.name, status: a.asset.status },
+    // A6: the team can see that something was reported, never the recovery amount.
+    hasOpenIncident: a.incidents.some((i) => i.status !== "CLOSED" && i.status !== "WRITTEN_OFF"),
   })));
+});
+
+// A10/A14: Management authorises in writing that the employee keeps this item past their exit.
+assetsRouter.post("/assignments/:id/retain", requireRole("MANAGEMENT"), async (req, res) => {
+  const user = currentUser(req);
+  const { note } = parse(z.object({ note: z.string().trim().min(3, "Give the reason in writing") }), req.body);
+  const a = await prisma.assetAssignment.findUnique({ where: { id: Number(req.params.id) }, include: { asset: true } });
+  if (!a || a.employeeId == null) throw new HttpError(404, "Item not found");
+  if (a.returnedAt) throw new HttpError(400, "This item has already been returned");
+  await prisma.assetAssignment.update({ where: { id: a.id }, data: { retainedById: user.id, retainedAt: new Date(), retainedNote: note } });
+  await audit(user.id, "UPDATE", "AssetAssignment", a.id, { retained: note });
+  await notify([a.employeeId], `Retained with authorisation: ${a.asset.name} (${a.asset.tag})`, `Management has authorised you to keep ${a.asset.name}, tag ${a.asset.tag}: ${note}.`, "/inventory");
+  res.json({ ok: true });
 });
 
 assetsRouter.get("/clearance/:employeeId", async (req, res) => {
@@ -190,7 +225,7 @@ assetsRouter.get("/clearance/:employeeId", async (req, res) => {
   const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { managerId: true } });
   if (!emp) throw new HttpError(404, "Employee not found");
   if (!(canSeeRegister(user) || user.id === employeeId || emp.managerId === user.id)) throw new HttpError(403, "You do not have access to this");
-  res.json(await assetClearance(employeeId));
+  res.json(assetClearanceFor(user, await assetClearance(employeeId)));
 });
 
 // ---------- Incidents, recoveries, requests to fulfil (lists) ----------
@@ -201,6 +236,7 @@ const incidentListInclude = {
   reportedBy: { select: { fullName: true } },
   recordedBy: { select: { fullName: true } },
   recoverySetBy: { select: { fullName: true } },
+  recoveryApprovedBy: { select: { fullName: true } },
   writtenOffBy: { select: { fullName: true } },
 } satisfies Prisma.AssetIncidentInclude;
 
@@ -209,9 +245,15 @@ assetsRouter.get("/incidents", async (req, res) => {
   assertRegister(user);
   const view = typeof req.query.view === "string" ? req.query.view : "open";
   const status: Prisma.AssetIncidentWhereInput =
-    view === "open" ? { status: { in: ["REPORTED", "RECORDED"] } } : view === "recoveries" ? { status: "RECOVERY_SET" } : {};
+    view === "open" ? { status: { in: ["REPORTED", "RECORDED", "RECOVERY_PENDING_APPROVAL"] } }
+    : view === "recoveries" ? { status: "RECOVERY_SET" }
+    : {};
   const rows = await prisma.assetIncident.findMany({ where: status, include: incidentListInclude, orderBy: { createdAt: "desc" }, take: 300 });
-  res.json(rows.map((i) => ({ ...serializeIncident(i), asset: { id: i.asset.id, tag: i.asset.tag, name: i.asset.name, category: i.asset.category.name } })));
+  const suggested = await policeReportSuggestedTypes();
+  res.json(withPoliceHint(rows.map((i) => ({
+    ...serializeIncident(i, canSeeRecoveryAmount(user, i.employeeId), canSeeIncidentAttachment(user, i.employeeId)),
+    asset: { id: i.asset.id, tag: i.asset.tag, name: i.asset.name, category: i.asset.category.name },
+  })), suggested));
 });
 
 assetsRouter.get("/requests", requireRole("ADMIN"), async (_req, res) => {
@@ -224,6 +266,56 @@ assetsRouter.get("/requests", requireRole("ADMIN"), async (_req, res) => {
     requestId: r.request.id, employee: r.request.employee, category: { id: r.category.id, name: r.category.name }, reason: r.reason,
     neededBy: r.neededBy ? ymd(r.neededBy) : null, approvedAt: r.request.updatedAt,
   })));
+});
+
+// ---------- A13: periodic physical audit (asset verification rounds) ----------
+// Registered here (a single path segment, like /incidents and /requests above), not after the generic
+// /:id route further down, which would otherwise swallow "/verification-rounds" as an asset id.
+
+const verificationRoundSchema = z.object({
+  scope: z.enum(["ALL", "DEPARTMENT", "CATEGORY"]),
+  departmentId: z.coerce.number().int().optional(),
+  categoryId: z.coerce.number().int().optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a due date"),
+});
+
+assetsRouter.get("/verification-rounds", async (req, res) => {
+  assertRegister(currentUser(req));
+  const rounds = await prisma.assetVerificationRound.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { department: { select: { name: true } }, category: { select: { name: true } }, createdBy: { select: { fullName: true } }, items: { select: { confirmedAt: true, discrepancyNote: true } } },
+  });
+  res.json(rounds.map((r) => ({
+    id: r.id, scope: r.scope, department: r.department?.name ?? null, category: r.category?.name ?? null, dueDate: ymd(r.dueDate),
+    createdBy: r.createdBy.fullName, createdAt: r.createdAt, closedAt: r.closedAt,
+    total: r.items.length, confirmed: r.items.filter((i) => i.confirmedAt).length, discrepancies: r.items.filter((i) => i.discrepancyNote).length,
+  })));
+});
+
+assetsRouter.post("/verification-rounds", requireRole("ADMIN"), async (req, res) => {
+  const user = currentUser(req);
+  const input = parse(verificationRoundSchema, req.body);
+  if (input.scope === "DEPARTMENT" && !input.departmentId) throw new HttpError(400, "Choose a department");
+  if (input.scope === "CATEGORY" && !input.categoryId) throw new HttpError(400, "Choose a category");
+  const assignments = await prisma.assetAssignment.findMany({
+    where: {
+      returnedAt: null, assigneeType: "EMPLOYEE",
+      ...(input.scope === "DEPARTMENT" ? { employee: { departmentId: input.departmentId } } : {}),
+      ...(input.scope === "CATEGORY" ? { asset: { categoryId: input.categoryId } } : {}),
+    },
+    select: { id: true, employeeId: true },
+  });
+  const round = await prisma.$transaction(async (tx) => {
+    const r = await tx.assetVerificationRound.create({
+      data: { scope: input.scope, departmentId: input.departmentId ?? null, categoryId: input.categoryId ?? null, dueDate: toDate(input.dueDate), createdById: user.id },
+    });
+    if (assignments.length) await tx.assetVerificationItem.createMany({ data: assignments.map((a) => ({ roundId: r.id, assignmentId: a.id })) });
+    return r;
+  });
+  await audit(user.id, "CREATE", "AssetVerificationRound", round.id, { scope: input.scope, items: assignments.length });
+  const employeeIds = [...new Set(assignments.map((a) => a.employeeId).filter((id): id is number => id != null))];
+  await notify(employeeIds, "Please confirm your company items", `Admin started an asset verification round, due ${input.dueDate}. Open My Inventory and confirm the items listed there are in your possession and in the condition shown.`, "/inventory");
+  res.status(201).json({ id: round.id, items: assignments.length });
 });
 
 // ---------- Template and import ----------
@@ -342,10 +434,19 @@ assetsRouter.post("/import", requireRole("ADMIN"), sheetUpload.single("file"), a
 
 // ---------- One asset ----------
 
+/** A6: advisory only, never blocking — HR or Admin decide case by case when the setting is empty. */
+async function policeReportSuggestedTypes() {
+  const settings = await getSettings();
+  const value = settings["assets.policeReportRequiredTypes"];
+  return new Set(value ? value.split(",").map((v) => v.trim().toUpperCase()) : []);
+}
+const withPoliceHint = <T extends { type: string }>(rows: T[], suggested: Set<string>) => rows.map((r) => ({ ...r, policeReportSuggested: suggested.has(r.type) }));
+
 assetsRouter.get("/:id", async (req, res) => {
   const user = currentUser(req);
   assertRegister(user);
-  res.json(serializeAsset(await loadAsset(Number(req.params.id)), user));
+  const asset = serializeAsset(await loadAsset(Number(req.params.id)), user);
+  res.json({ ...asset, incidents: withPoliceHint(asset.incidents, await policeReportSuggestedTypes()) });
 });
 
 assetsRouter.patch("/:id", requireRole("ADMIN"), async (req, res) => {
@@ -358,6 +459,8 @@ assetsRouter.patch("/:id", requireRole("ADMIN"), async (req, res) => {
   res.json(serializeAsset(await loadAsset(id), user));
 });
 
+const accessoriesSchema = z.array(z.object({ name: z.string().trim().min(1).max(60), quantity: z.coerce.number().int().min(1).max(99).default(1) })).max(20).optional();
+
 const issueSchema = z.object({
   assigneeType: z.enum(["EMPLOYEE", "DEPARTMENT", "LOCATION"]).default("EMPLOYEE"),
   employeeId: z.coerce.number().int().optional(),
@@ -366,6 +469,11 @@ const issueSchema = z.object({
   condition: z.enum(CONDITIONS).optional(),
   note: z.string().trim().max(300).optional(),
   requestId: z.coerce.number().int().optional(),
+  // A3/A9: required only on transfer (see transferSchema); carried as an optional field so issueAsset()
+  // can store it on the new assignment either way.
+  authorisationNote: optionalText,
+  // A11/A13: accessories issued with the item, checked off at return.
+  accessories: accessoriesSchema,
 });
 
 /** Creates the assignment row; the asset must be in stock. Used by issue and transfer. */
@@ -399,9 +507,13 @@ async function issueAsset(tx: Prisma.TransactionClient, asset: Awaited<ReturnTyp
   const assignment = await tx.assetAssignment.create({
     data: {
       assetId: asset.id, assigneeType: input.assigneeType, employeeId, departmentId, location, issuedById: user.id,
-      conditionOut: input.condition ?? asset.condition, issueNote: input.note || null, confirmedAt: autoConfirm ? new Date() : null,
+      conditionOut: input.condition ?? asset.condition, issueNote: input.note || null, authorisationNote: input.authorisationNote ?? null,
+      confirmedAt: autoConfirm ? new Date() : null,
     },
   });
+  if (input.accessories?.length) {
+    await tx.assetAccessory.createMany({ data: input.accessories.map((a) => ({ assignmentId: assignment.id, name: a.name, quantity: a.quantity })) });
+  }
   await tx.asset.update({ where: { id: asset.id }, data: { status: "ISSUED", ...(input.condition ? { condition: input.condition } : {}) } });
   if (assetRequestId) await tx.assetRequest.update({ where: { id: assetRequestId }, data: { assignmentId: assignment.id } });
   return { assignment, employeeId, autoConfirm, requestId: input.requestId ?? null };
@@ -429,7 +541,12 @@ assetsRouter.post("/:id/issue", requireRole("ADMIN"), async (req, res) => {
   res.json(serializeAsset(await loadAsset(asset.id), user));
 });
 
-const returnSchema = z.object({ condition: z.enum(CONDITIONS).optional(), note: z.string().trim().max(300).optional() });
+const returnSchema = z.object({
+  condition: z.enum(CONDITIONS).optional(),
+  note: z.string().trim().max(300).optional(),
+  // A11/A13: which issued accessories came back; anything left out, or marked false, is missing.
+  accessories: z.array(z.object({ id: z.coerce.number().int(), returned: z.boolean() })).max(20).optional(),
+});
 
 /** Return (or, for access & accounts, revoke). The asset goes back into stock with the condition seen on return. */
 async function closeAssignment(tx: Prisma.TransactionClient, asset: Awaited<ReturnType<typeof loadAsset>>, user: AuthUser, condition: AssetCondition, note: string | null) {
@@ -440,42 +557,77 @@ async function closeAssignment(tx: Prisma.TransactionClient, asset: Awaited<Retu
   return open;
 }
 
+/** Marks which accessories of a closed assignment came back; returns the ones still missing. */
+async function settleAccessories(assignmentId: number, reported?: { id: number; returned: boolean }[]) {
+  if (reported?.length) {
+    await prisma.$transaction(reported.map((a) => prisma.assetAccessory.updateMany({ where: { id: a.id, assignmentId }, data: { returned: a.returned } })));
+  }
+  const rows = await prisma.assetAccessory.findMany({ where: { assignmentId } });
+  return rows.filter((a) => !a.returned).map((a) => ({ id: a.id, name: a.name, quantity: a.quantity }));
+}
+
 assetsRouter.post("/:id/return", requireRole("ADMIN"), async (req, res) => {
   const user = currentUser(req);
   const input = parse(returnSchema, req.body);
   const asset = await loadAsset(Number(req.params.id));
   const open = await prisma.$transaction((tx) => closeAssignment(tx, asset, user, input.condition ?? asset.condition, input.note || null));
+  const missingAccessories = await settleAccessories(open.id, input.accessories);
   const access = asset.category.kind === "ACCESS";
-  await audit(user.id, "UPDATE", "Asset", asset.id, { [access ? "revoked" : "returned"]: open.id, condition: input.condition });
+  await audit(user.id, "UPDATE", "Asset", asset.id, { [access ? "revoked" : "returned"]: open.id, condition: input.condition, missingAccessories: missingAccessories.map((a) => a.name) });
   if (open.employeeId) {
     await notify([open.employeeId], access ? `Access revoked: ${asset.name}` : `Return recorded: ${asset.name} (${asset.tag})`, access ? `${asset.name} has been revoked.` : `Admin recorded that you returned ${asset.name}, tag ${asset.tag}.`, "/inventory");
   }
-  res.json(serializeAsset(await loadAsset(asset.id), user));
+  res.json({ ...serializeAsset(await loadAsset(asset.id), user), missingAccessories });
 });
 
-assetsRouter.post("/:id/transfer", requireRole("ADMIN"), async (req, res) => {
+const transferSchema = issueSchema.omit({ requestId: true, accessories: true }).extend({
+  // A3/A9: no transfer to another employee without authorisation from the relevant department.
+  authorisationNote: z.string().trim().min(3, "Give the reason this transfer is authorised"),
+});
+
+/** A9: who may authorise a transfer of this category; empty on the category means Admin. */
+const transferAuthorisingRole = (category: { transferAuthorisingRole: Role | null }): Role => category.transferAuthorisingRole ?? "ADMIN";
+
+// No requireRole middleware: the authorising role is per category (assets.ts AssetCategory.transferAuthorisingRole).
+assetsRouter.post("/:id/transfer", async (req, res) => {
   const user = currentUser(req);
-  const input = parse(issueSchema.omit({ requestId: true }), req.body);
+  const input = parse(transferSchema, req.body);
   const asset = await loadAsset(Number(req.params.id));
+  const role = transferAuthorisingRole(asset.category);
+  if (!hasRole(user, role)) throw new HttpError(403, `Only ${role.replace("_", " ")} can authorise a transfer of ${asset.category.name}`);
   if (asset.status !== "ISSUED") throw new HttpError(400, "Only issued items can be transferred");
+  const openAccessories = asset.assignments.find((a) => !a.returnedAt)?.accessories ?? [];
   const result = await prisma.$transaction(async (tx) => {
-    const from = await closeAssignment(tx, asset, user, input.condition ?? asset.condition, "Transferred");
+    const from = await closeAssignment(tx, asset, user, input.condition ?? asset.condition, `Transferred: ${input.authorisationNote}`);
     const fresh = await tx.asset.findUniqueOrThrow({ where: { id: asset.id }, include: assetInclude });
-    return { from, ...(await issueAsset(tx, fresh, input, user)) };
+    // Accessories travel with the item; the receiving employee checks them off again at their own return.
+    return { from, ...(await issueAsset(tx, fresh, { ...input, accessories: openAccessories.map((a) => ({ name: a.name, quantity: a.quantity })) }, user)) };
   });
-  await audit(user.id, "UPDATE", "Asset", asset.id, { transferredFrom: result.from.id, to: result.assignment.id });
+  await audit(user.id, "UPDATE", "Asset", asset.id, { transferredFrom: result.from.id, to: result.assignment.id, authorisationNote: input.authorisationNote });
   if (result.from.employeeId) await notify([result.from.employeeId], `Item transferred: ${asset.name} (${asset.tag})`, `${asset.name}, tag ${asset.tag}, is no longer issued to you.`, "/inventory");
   await afterIssue(asset, result);
   res.json(serializeAsset(await loadAsset(asset.id), user));
 });
 
+const retireSchema = z.object({
+  note: z.string().trim().min(3, "Give a reason"),
+  // A13: disposal or replacement status.
+  disposalReason: z.enum(DISPOSAL_REASONS),
+  replacedByTag: z.string().trim().max(40).optional(),
+});
+
 assetsRouter.post("/:id/retire", requireRole("ADMIN"), async (req, res) => {
   const user = currentUser(req);
-  const { note } = parse(z.object({ note: z.string().trim().min(3, "Give a reason") }), req.body);
+  const input = parse(retireSchema, req.body);
   const asset = await loadAsset(Number(req.params.id));
   if (asset.status !== "IN_STOCK") throw new HttpError(400, "Only items in stock can be retired");
-  await prisma.asset.update({ where: { id: asset.id }, data: { status: "RETIRED", notes: [asset.notes, `Retired: ${note}`].filter(Boolean).join("\n") } });
-  await audit(user.id, "UPDATE", "Asset", asset.id, { retired: note });
+  if (input.disposalReason === "REPLACED" && !input.replacedByTag) throw new HttpError(400, "Enter the tag of the asset that replaces it");
+  const note = input.disposalReason === "REPLACED" && input.replacedByTag ? `${input.note} (replaced by ${input.replacedByTag})` : input.note;
+  await prisma.asset.update({
+    where: { id: asset.id },
+    data: { status: "RETIRED", disposalReason: input.disposalReason, disposalDate: toDate(todayYmd()), notes: [asset.notes, `Retired: ${note}`].filter(Boolean).join("\n") },
+  });
+  await audit(user.id, "UPDATE", "Asset", asset.id, { retired: note, disposalReason: input.disposalReason });
   res.json(serializeAsset(await loadAsset(asset.id), user));
 });
 
@@ -548,7 +700,28 @@ assetsRouter.post("/assignments/:id/report", async (req, res) => {
     data: { assetId: a.assetId, assignmentId: a.id, employeeId: user.id, type: input.type, status: "REPORTED", description: input.description, reportedById: user.id },
   });
   await audit(user.id, "CREATE", "AssetIncident", incident.id, { type: input.type });
-  await notify(await employeeIdsWithRole("ADMIN"), `Problem reported: ${a.asset.name} (${a.asset.tag})`, `${user.fullName} reported ${a.asset.name}, tag ${a.asset.tag}, as ${TYPE_WORDS[input.type]}: ${input.description}`, `/admin/assets/${a.assetId}`);
+  // A6: the Line Manager and Admin/IT are notified at once.
+  const emp = await prisma.employee.findUnique({ where: { id: user.id }, select: { managerId: true } });
+  await notify(
+    [...(await employeeIdsWithRole("ADMIN")), ...(emp?.managerId ? [emp.managerId] : [])],
+    `Problem reported: ${a.asset.name} (${a.asset.tag})`,
+    `${user.fullName} reported ${a.asset.name}, tag ${a.asset.tag}, as ${TYPE_WORDS[input.type]}: ${input.description}`,
+    `/admin/assets/${a.assetId}`,
+  );
+  // Cyber Security Incident Response Policy: a data-bearing device also notifies IT/Security, without
+  // the employee's own description (that stays with HR/Admin; the portal does not run the investigation).
+  if (a.asset.category.dataBearing) {
+    const settings = await getSettings();
+    const role = settings["assets.cyberSecurityNotifyRole"];
+    if (role) {
+      await notify(
+        await employeeIdsWithRole(role as Role),
+        `Data-bearing asset ${TYPE_WORDS[input.type]}: ${a.asset.name} (${a.asset.tag})`,
+        `${a.asset.name}, tag ${a.asset.tag}, a ${a.asset.category.name.toLowerCase()}, was reported ${TYPE_WORDS[input.type]}. This is a system notification only; the cyber security incident itself is handled outside the portal.`,
+        `/admin/assets/${a.assetId}`,
+      );
+    }
+  }
   res.status(201).json({ id: incident.id });
 });
 
@@ -624,11 +797,13 @@ assetsRouter.post("/incidents/:id/close", requireRole("ADMIN"), async (req, res)
  * What HR needs to decide a fair recovery: the item's purchase cost and date. HR sees costs only here,
  * for an incident waiting for (or having) their decision; every other view hides costs from HR.
  */
+const RECOVERABLE_STATUSES = ["RECORDED", "RECOVERY_PENDING_APPROVAL", "RECOVERY_SET"] as const;
+
 assetsRouter.get("/incidents/:id/recovery-context", requireRole("HR"), async (req, res) => {
   const user = currentUser(req);
   const i = await prisma.assetIncident.findUnique({ where: { id: Number(req.params.id) }, include: { asset: { include: { category: true } } } });
   if (!i) throw new HttpError(404, "Incident not found");
-  if (!["RECORDED", "RECOVERY_SET"].includes(i.status) || i.type === "NOT_WORKING") throw new HttpError(400, "Cost details are shown only while a recovery can be set");
+  if (!(RECOVERABLE_STATUSES as readonly string[]).includes(i.status) || i.type === "NOT_WORKING") throw new HttpError(400, "Cost details are shown only while a recovery can be set");
   await audit(user.id, "VIEW_SENSITIVE", "AssetCost", i.assetId, { incidentId: i.id, reason: "recovery decision" });
   res.json({
     incidentId: i.id,
@@ -640,18 +815,66 @@ assetsRouter.get("/incidents/:id/recovery-context", requireRole("HR"), async (re
   });
 });
 
+const recoverySchema = z
+  .object({
+    // A6: the finding behind the recovery; WEAR_AND_TEAR is not negligence, so it is never recovered.
+    finding: z.enum(RECOVERY_FINDINGS),
+    amount: z.coerce.number().min(0).optional(),
+    note: z.string().trim().min(3, "Give the reason"),
+  })
+  .refine((v) => v.finding === "WEAR_AND_TEAR" || (v.amount != null && v.amount > 0), {
+    message: "Enter the amount to recover (use a Management write-off for no charge)",
+    path: ["amount"],
+  });
+
 assetsRouter.post("/incidents/:id/recovery", requireRole("HR"), async (req, res) => {
   const user = currentUser(req);
-  const input = parse(z.object({ amount: z.coerce.number().positive("Enter the amount to recover (use a Management write-off for no charge)"), note: z.string().trim().min(3, "Give the reason") }), req.body);
+  const input = parse(recoverySchema, req.body);
   const i = await loadIncident(Number(req.params.id));
-  if (!["RECORDED", "RECOVERY_SET"].includes(i.status) || i.type === "NOT_WORKING") throw new HttpError(400, "A recovery can be set on recorded damage or loss");
+  if (!(RECOVERABLE_STATUSES as readonly string[]).includes(i.status) || i.type === "NOT_WORKING") throw new HttpError(400, "A recovery can be set on recorded damage or loss");
   if (i.employeeId === user.id) throw new HttpError(403, "You cannot decide a recovery for yourself");
   if (!i.employeeId) throw new HttpError(400, "Nobody held this item, so there is no one to recover from");
-  const amount = Math.round(input.amount * 100) / 100;
-  await prisma.assetIncident.update({ where: { id: i.id }, data: { status: "RECOVERY_SET", recoveryAmount: amount, recoverySetById: user.id, recoverySetAt: new Date(), recoveryNote: input.note } });
-  await audit(user.id, "UPDATE", "AssetIncident", i.id, { recovery: amount, note: input.note });
-  await notify([i.employeeId], `Recovery set: ${i.asset.name} (${i.asset.tag})`, `HR set a recovery of ${pkr(amount)} for ${i.asset.name}: ${input.note}. Finance will deduct it in your final settlement.`, "/inventory");
-  await notify(await employeeIdsWithRole("FINANCE"), `Asset recovery for final settlement: ${pkr(amount)}`, `HR set a recovery of ${pkr(amount)} for ${i.asset.name}, tag ${i.asset.tag}: ${input.note}.`, `/admin/assets/${i.assetId}`);
+
+  if (input.finding === "WEAR_AND_TEAR") {
+    // Not negligence: the report is closed directly, with no recovery and nothing for Management to approve.
+    await prisma.assetIncident.update({
+      where: { id: i.id },
+      data: { status: "CLOSED", finding: "WEAR_AND_TEAR", recoveryAmount: null, recoverySetById: user.id, recoverySetAt: new Date(), recoveryNote: input.note, recoveryApprovedById: null, recoveryApprovedAt: null },
+    });
+    await audit(user.id, "UPDATE", "AssetIncident", i.id, { finding: "WEAR_AND_TEAR", note: input.note });
+    await notify([i.employeeId], `No recovery: ${i.asset.name} (${i.asset.tag})`, `HR found that this was wear and tear, not negligence: ${input.note}. No recovery applies.`, "/inventory");
+    return res.json({ ok: true });
+  }
+
+  const amount = Math.round(input.amount! * 100) / 100;
+  const settings = await getSettings();
+  const threshold = settingNumber(settings, "assets.recoveryApprovalThreshold");
+  const needsApproval = threshold != null && amount > threshold;
+  await prisma.assetIncident.update({
+    where: { id: i.id },
+    data: {
+      status: needsApproval ? "RECOVERY_PENDING_APPROVAL" : "RECOVERY_SET",
+      finding: input.finding, recoveryAmount: amount, recoverySetById: user.id, recoverySetAt: new Date(), recoveryNote: input.note,
+      recoveryApprovedById: null, recoveryApprovedAt: null,
+    },
+  });
+  await audit(user.id, "UPDATE", "AssetIncident", i.id, { recovery: amount, finding: input.finding, note: input.note, needsApproval });
+  if (needsApproval) {
+    await notify(await employeeIdsWithRole("MANAGEMENT"), `Recovery awaiting approval: ${pkr(amount)}`, `HR proposed a recovery of ${pkr(amount)} for ${i.asset.name}, tag ${i.asset.tag} (above the Rules & settings threshold): ${input.note}.`, `/admin/assets/${i.assetId}`);
+  } else {
+    await notifyRecoverySet({ ...i, recoveryNote: input.note }, amount);
+  }
+  res.json({ ok: true, needsApproval });
+});
+
+// Management confirms a recovery that was above the assets.recoveryApprovalThreshold setting
+assetsRouter.post("/incidents/:id/recovery/approve", requireRole("MANAGEMENT"), async (req, res) => {
+  const user = currentUser(req);
+  const i = await loadIncident(Number(req.params.id));
+  if (i.status !== "RECOVERY_PENDING_APPROVAL") throw new HttpError(400, "This recovery is not waiting for approval");
+  await prisma.assetIncident.update({ where: { id: i.id }, data: { status: "RECOVERY_SET", recoveryApprovedById: user.id, recoveryApprovedAt: new Date() } });
+  await audit(user.id, "UPDATE", "AssetIncident", i.id, { recoveryApproved: Number(i.recoveryAmount) });
+  await notifyRecoverySet(i, Number(i.recoveryAmount));
   res.json({ ok: true });
 });
 
@@ -659,13 +882,111 @@ assetsRouter.post("/incidents/:id/write-off", requireRole("MANAGEMENT"), async (
   const user = currentUser(req);
   const { note } = parse(z.object({ note: z.string().trim().min(3, "Give the reason") }), req.body);
   const i = await loadIncident(Number(req.params.id));
-  if (!["RECORDED", "RECOVERY_SET"].includes(i.status) || i.type === "NOT_WORKING") throw new HttpError(400, "Only recorded damage or loss can be written off");
+  if (!(RECOVERABLE_STATUSES as readonly string[]).includes(i.status) || i.type === "NOT_WORKING") throw new HttpError(400, "Only recorded damage or loss can be written off");
   if (i.employeeId === user.id) throw new HttpError(403, "You cannot write off an item you were responsible for");
-  await prisma.assetIncident.update({ where: { id: i.id }, data: { status: "WRITTEN_OFF", writtenOffById: user.id, writtenOffAt: new Date(), writeOffNote: note, recoveryAmount: null } });
+  const hadRecovery = i.status === "RECOVERY_SET" || i.status === "RECOVERY_PENDING_APPROVAL";
+  await prisma.assetIncident.update({ where: { id: i.id }, data: { status: "WRITTEN_OFF", writtenOffById: user.id, writtenOffAt: new Date(), writeOffNote: note, recoveryAmount: null, recoveryApprovedById: null, recoveryApprovedAt: null } });
   if (i.type === "LOST") await prisma.asset.update({ where: { id: i.assetId }, data: { status: "RETIRED" } }).catch(() => {});
   await audit(user.id, "UPDATE", "AssetIncident", i.id, { writtenOff: note });
-  const recipients = [...(i.employeeId ? [i.employeeId] : []), ...(await employeeIdsWithRole("ADMIN")), ...(i.status === "RECOVERY_SET" ? await employeeIdsWithRole("FINANCE") : [])];
-  await notify(recipients, `Written off: ${i.asset.name} (${i.asset.tag})`, `Management wrote off ${i.asset.name}: ${note}.${i.status === "RECOVERY_SET" ? " The recovery amount no longer applies." : ""}`, `/admin/assets/${i.assetId}`);
+  const recipients = [...(i.employeeId ? [i.employeeId] : []), ...(await employeeIdsWithRole("ADMIN")), ...(hadRecovery ? await employeeIdsWithRole("FINANCE") : [])];
+  await notify(recipients, `Written off: ${i.asset.name} (${i.asset.tag})`, `Management wrote off ${i.asset.name}: ${note}.${hadRecovery ? " The recovery amount no longer applies." : ""}`, `/admin/assets/${i.assetId}`);
+  res.json({ ok: true });
+});
+
+// ---------- Incident attachment (e.g. a police report): employee, Admin, HR and Management only ----------
+
+assetsRouter.post("/incidents/:id/attachment", attachmentUpload.single("file"), async (req, res) => {
+  const user = currentUser(req);
+  const i = await loadIncident(Number(req.params.id));
+  if (!canSeeIncidentAttachment(user, i.employeeId)) { removeFiles(req.file ? [req.file] : []); throw new HttpError(403, "You do not have access to this report"); }
+  if (!req.file) throw new HttpError(400, "Choose a file to attach");
+  if (i.attachmentPath) fs.rm(absoluteUploadPath(i.attachmentPath), { force: true }, () => {});
+  await prisma.assetIncident.update({
+    where: { id: i.id },
+    data: { attachmentFileName: req.file.originalname, attachmentPath: relativeUploadPath(req.file.path), attachmentMimeType: req.file.mimetype, attachmentSize: req.file.size },
+  });
+  await audit(user.id, "UPDATE", "AssetIncident", i.id, { attached: req.file.originalname });
+  res.json({ ok: true });
+});
+
+assetsRouter.get("/incidents/:id/attachment", async (req, res) => {
+  const user = currentUser(req);
+  const i = await loadIncident(Number(req.params.id));
+  if (!canSeeIncidentAttachment(user, i.employeeId)) throw new HttpError(403, "You do not have access to this report");
+  if (!i.attachmentPath) throw new HttpError(404, "No file attached");
+  const file = absoluteUploadPath(i.attachmentPath);
+  if (!fs.existsSync(file)) throw new HttpError(404, "File is missing from storage");
+  res.download(file, i.attachmentFileName ?? "attachment");
+});
+
+// ---------- A3: Asset Handover / Acknowledgement Form ----------
+
+/** Admin, or the employee the item was issued to. Never shows the cost. */
+assetsRouter.get("/assignments/:id/handover", async (req, res) => {
+  const user = currentUser(req);
+  const a = await prisma.assetAssignment.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { asset: { include: { category: true } }, employee: { select: { fullName: true, code: true } }, issuedBy: { select: { fullName: true } }, accessories: true },
+  });
+  if (!a) throw new HttpError(404, "Item not found");
+  if (!(hasRole(user, "ADMIN") || a.employeeId === user.id)) throw new HttpError(403, "You do not have access to this item");
+  if (!a.employee) throw new HttpError(400, "The handover form is for items issued to an employee");
+  const pdf = await assetHandoverPdf({
+    reference: `EHB/AST/${a.id}`,
+    date: a.issuedAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+    employee: a.employee,
+    asset: { tag: a.asset.tag, name: a.asset.name, category: a.asset.category.name, serialNumber: a.asset.serialNumber },
+    condition: a.conditionOut,
+    accessories: a.accessories.map((x) => ({ name: x.name, quantity: x.quantity })),
+    issuedBy: a.issuedBy.fullName,
+    confirmedAt: a.confirmedAt,
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="handover-${a.asset.tag}.pdf"`);
+  res.send(pdf);
+});
+
+// ---------- A13: periodic physical audit (asset verification rounds) ----------
+
+assetsRouter.get("/verification-rounds/:id", async (req, res) => {
+  assertRegister(currentUser(req));
+  const round = await prisma.assetVerificationRound.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      department: { select: { name: true } }, category: { select: { name: true } }, createdBy: { select: { fullName: true } },
+      items: { include: { assignment: { include: { employee: { select: { fullName: true, code: true } }, asset: { select: { tag: true, name: true } } } } }, orderBy: { id: "asc" } },
+    },
+  });
+  if (!round) throw new HttpError(404, "Verification round not found");
+  res.json({
+    id: round.id, scope: round.scope, department: round.department?.name ?? null, category: round.category?.name ?? null,
+    dueDate: ymd(round.dueDate), createdBy: round.createdBy.fullName, createdAt: round.createdAt, closedAt: round.closedAt,
+    items: round.items.map((i) => ({
+      id: i.id, employee: i.assignment.employee, asset: i.assignment.asset, confirmedAt: i.confirmedAt, discrepancyNote: i.discrepancyNote,
+    })),
+  });
+});
+
+assetsRouter.post("/verification-rounds/:id/close", requireRole("ADMIN"), async (req, res) => {
+  const user = currentUser(req);
+  const round = await prisma.assetVerificationRound.findUnique({ where: { id: Number(req.params.id) } });
+  if (!round) throw new HttpError(404, "Verification round not found");
+  if (round.closedAt) throw new HttpError(400, "This round is already closed");
+  await prisma.assetVerificationRound.update({ where: { id: round.id }, data: { closedAt: new Date() } });
+  await audit(user.id, "UPDATE", "AssetVerificationRound", round.id, { closed: true });
+  res.json({ ok: true });
+});
+
+assetsRouter.post("/verification-items/:id/confirm", async (req, res) => {
+  const user = currentUser(req);
+  const { matches, note } = parse(z.object({ matches: z.boolean().default(true), note: z.string().trim().max(300).optional() }), req.body);
+  const item = await prisma.assetVerificationItem.findUnique({ where: { id: Number(req.params.id) }, include: { assignment: true, round: true } });
+  if (!item) throw new HttpError(404, "Item not found");
+  if (item.assignment.employeeId !== user.id) throw new HttpError(404, "Item not found in your inventory");
+  if (item.confirmedAt) throw new HttpError(400, "You have already confirmed this item");
+  if (item.round.closedAt) throw new HttpError(400, "This verification round is closed");
+  await prisma.assetVerificationItem.update({ where: { id: item.id }, data: { confirmedAt: new Date(), discrepancyNote: matches ? null : (note || "Does not match") } });
+  await audit(user.id, "UPDATE", "AssetVerificationItem", item.id, { matches });
   res.json({ ok: true });
 });
 

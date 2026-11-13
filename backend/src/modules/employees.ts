@@ -22,12 +22,12 @@ employeesRouter.use(requireAuth);
 const ROLES = ["EMPLOYEE", "LINE_MANAGER", "HOD", "HR", "FINANCE", "ADMIN", "MANAGEMENT"] as const;
 
 type EmployeeWithRelations = Employee & {
-  department: { id: number; name: string } | null;
+  department: { id: number; name: string; dressCodeNotes: string | null } | null;
   manager: { id: number; fullName: string; code: string } | null;
 };
 
 const withRelations = {
-  department: { select: { id: true, name: true } },
+  department: { select: { id: true, name: true, dressCodeNotes: true } },
   manager: { select: { id: true, fullName: true, code: true } },
 } satisfies Prisma.EmployeeInclude;
 

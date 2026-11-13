@@ -58,11 +58,15 @@ export function Reveal({
 
 /**
  * A number that counts up from zero when it scrolls into view. The server renders the final value, so it is
- * correct without JavaScript and for people who prefer reduced motion.
+ * correct without JavaScript and for people who prefer reduced motion. The count-up entrance plays only once;
+ * if `value` changes afterwards (e.g. a dashboard KPI after the user approves a request), it is applied
+ * straight away with no replayed animation, so the number never goes stale.
  */
 export function CountUp({ value, duration = 1200, className }: { value: number; duration?: number; className?: string }) {
   const [shown, setShown] = useState(value);
+  const animated = useRef(false);
   const ref = useOnVisible<HTMLSpanElement>(() => {
+    animated.current = true;
     if (value === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const start = performance.now();
     const tick = (now: number) => {
@@ -72,6 +76,9 @@ export function CountUp({ value, duration = 1200, className }: { value: number; 
     };
     requestAnimationFrame(tick);
   }, "0px");
+  useEffect(() => {
+    if (animated.current) setShown(value);
+  }, [value]);
   return (
     <span ref={ref} className={className}>
       {shown}
