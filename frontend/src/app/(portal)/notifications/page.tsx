@@ -33,7 +33,7 @@ export default function NotificationsPage() {
                   <div className="min-w-0">
                     <div className="text-sm text-slate-900">{n.title}</div>
                     <div className="text-sm font-normal text-slate-600">{n.body}</div>
-                    <div className="text-xs font-normal text-slate-400">{fmtDateTime(n.createdAt)}</div>
+                    <div className="text-xs font-normal text-slate-500">{fmtDateTime(n.createdAt)}</div>
                   </div>
                 </div>
               );

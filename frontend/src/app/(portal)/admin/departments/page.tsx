@@ -19,7 +19,7 @@ function DressCodeNotes({ d, canEdit, onSaved }: { d: Dept; canEdit: boolean; on
   if (!editing) {
     return (
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm text-slate-600">{d.dressCodeNotes || <span className="text-slate-400">No notes</span>}</p>
+        <p className="text-sm text-slate-600">{d.dressCodeNotes || <span className="text-slate-500">No notes</span>}</p>
         {canEdit && <Button variant="ghost" onClick={() => { setValue(d.dressCodeNotes ?? ""); setEditing(true); }}>Edit</Button>}
       </div>
     );

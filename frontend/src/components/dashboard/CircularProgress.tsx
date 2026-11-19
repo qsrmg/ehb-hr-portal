@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
  * of the stylesheet under prefers-reduced-motion, so there it jumps straight to the final ring with no motion.
  */
 export function CircularProgress({
-  percent, color, trackColor = "#e2e8f0", size = 96, strokeWidth = 10, centerLabel,
+  percent, color, trackColor = "var(--color-track)", size = 96, strokeWidth = 10, centerLabel,
 }: {
   percent: number;
   color: string;

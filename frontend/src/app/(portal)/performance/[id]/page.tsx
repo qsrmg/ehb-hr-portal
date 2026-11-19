@@ -73,10 +73,10 @@ function Stepper({ stage }: { stage: string }) {
     <ol className="flex flex-wrap gap-x-1 gap-y-2" aria-label="Progress">
       {STAGES.map((s, i) => (
         <li key={s} className="flex items-center gap-1">
-          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${i < at ? "bg-primary/25 text-white" : i === at ? "bg-sun text-ink-950" : "bg-white/5 text-slate-500"}`} aria-current={i === at ? "step" : undefined}>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${i < at ? "bg-primary/10 text-primary" : i === at ? "bg-sun text-ink-950" : "bg-slate-100 text-slate-500"}`} aria-current={i === at ? "step" : undefined}>
             {STAGE_SHORT[s]}
           </span>
-          {i < STAGES.length - 1 && <span aria-hidden="true" className="h-px w-3 bg-white/15" />}
+          {i < STAGES.length - 1 && <span aria-hidden="true" className="h-px w-3 bg-slate-200" />}
         </li>
       ))}
     </ol>
@@ -97,7 +97,7 @@ function SelfReview({ sc, onDone }: { sc: Scorecard; onDone: () => Promise<void>
       <div className="space-y-4">
         {sc.kpis.map((k, i) => (
           <div key={k.id} className="rounded-xl p-3 ring-1 ring-slate-200">
-            <div className="text-sm font-semibold text-white">{k.title} <span className="font-normal text-slate-500">· {k.perspectiveLabel} · {k.weight}% · target {k.target}</span></div>
+            <div className="text-sm font-semibold text-charcoal">{k.title} <span className="font-normal text-slate-500">· {k.perspectiveLabel} · {k.weight}% · target {k.target}</span></div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_14rem]">
               <Input aria-label={`Actual result for ${k.title}`} placeholder="Actual result" value={rows[i]!.actual} onChange={(e) => setRows(rows.map((r, j) => (j === i ? { ...r, actual: e.target.value } : r)))} />
               <RatingSelect label={`Your rating for ${k.title}`} labels={sc.scale.labels} value={rows[i]!.selfRating} onChange={(v) => setRows(rows.map((r, j) => (j === i ? { ...r, selfRating: v } : r)))} />
@@ -136,7 +136,7 @@ function ManagerReview({ sc, onDone }: { sc: Scorecard; onDone: () => Promise<vo
       <div className="space-y-4">
         {sc.kpis.map((k, i) => (
           <div key={k.id} className="rounded-xl p-3 ring-1 ring-slate-200">
-            <div className="text-sm font-semibold text-white">{k.title} <span className="font-normal text-slate-500">· {k.perspectiveLabel} · {k.weight}% · target {k.target}</span></div>
+            <div className="text-sm font-semibold text-charcoal">{k.title} <span className="font-normal text-slate-500">· {k.perspectiveLabel} · {k.weight}% · target {k.target}</span></div>
             <p className="mt-1 text-sm text-slate-600">Actual: {k.actual || "—"} · Self-rating: {k.selfRating ? `${k.selfRating} · ${sc.scale.labels[k.selfRating]}` : "—"}{k.selfComment ? ` · “${k.selfComment}”` : ""}</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
               <RatingSelect label={`Your rating for ${k.title}`} labels={sc.scale.labels} value={rows[i]!.managerRating} onChange={(v) => setRows(rows.map((r, j) => (j === i ? { ...r, managerRating: v } : r)))} />
@@ -146,7 +146,7 @@ function ManagerReview({ sc, onDone }: { sc: Scorecard; onDone: () => Promise<vo
         ))}
         {sc.selfComment && <Info label="Employee's overall comment" value={sc.selfComment} />}
         <Field label="Your overall comment"><Textarea value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
-        {preview && <p className="text-sm text-slate-600">Weighted score: <strong className="text-white">{preview.score.toFixed(2)}</strong> of 5 · {preview.band}</p>}
+        {preview && <p className="text-sm text-slate-600">Weighted score: <strong className="text-charcoal">{preview.score.toFixed(2)}</strong> of 5 · {preview.band}</p>}
         {error && <Alert>{error}</Alert>}
         {saved && <Alert kind="success">Draft saved.</Alert>}
         <div className="flex flex-wrap gap-2">
@@ -253,17 +253,17 @@ export default function ScorecardPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={sc.stage} label={sc.stageLabel} />
-        {sc.waitingFor && <span className="text-sm text-slate-600">Waiting for: <strong className="text-white">{sc.waitingFor}</strong></span>}
+        {sc.waitingFor && <span className="text-sm text-slate-600">Waiting for: <strong className="text-charcoal">{sc.waitingFor}</strong></span>}
         {sc.nextAction && <span className="rounded-full bg-sun px-2.5 py-0.5 text-xs font-bold text-ink-950">{sc.nextAction}</span>}
         {sc.cycle.status === "CLOSED" && <span className="text-sm text-slate-500">This cycle is closed.</span>}
       </div>
       <Stepper stage={sc.stage} />
 
       {resultShown && (
-        <section className="rounded-2xl bg-gradient-to-br from-primary/30 to-ink-800/80 p-6 ring-1 ring-primary/40" aria-label="Result">
+        <section className="rounded-2xl bg-gradient-to-br from-primary/10 to-blue-50 p-6 ring-1 ring-primary/30" aria-label="Result">
           <div className="text-sm text-slate-600">{sc.stage === "SIGN_OFF" ? "Score so far (not yet released)" : "Overall result"}</div>
           <div className="mt-1 flex flex-wrap items-baseline gap-3">
-            <span className="font-display text-5xl font-extrabold text-white">{sc.score!.toFixed(2)}</span>
+            <span className="font-display text-5xl font-extrabold text-charcoal">{sc.score!.toFixed(2)}</span>
             <span className="text-lg text-slate-600">of 5</span>
             <span className="rounded-full bg-sun px-3 py-1 text-sm font-bold text-ink-950">{sc.band}</span>
           </div>
@@ -278,7 +278,7 @@ export default function ScorecardPage() {
               {sc.kpis.map((k) => (
                 <tr key={k.id}>
                   <Td className="whitespace-normal">
-                    <div className="font-medium text-white">{k.title}</div>
+                    <div className="font-medium text-charcoal">{k.title}</div>
                     <div className="text-xs text-slate-500">{k.perspectiveLabel} · {k.measure}</div>
                     {(k.selfComment || k.managerComment) && (
                       <div className="mt-1 space-y-0.5 text-xs text-slate-600">
@@ -290,7 +290,7 @@ export default function ScorecardPage() {
                   <Td className="tabular-nums">{k.weight}%</Td>
                   <Td className="whitespace-normal">{k.target}</Td>
                   {showSelf && <><Td className="whitespace-normal">{k.actual ?? "—"}</Td><Td>{k.selfRating ?? "—"}</Td></>}
-                  {showFinal && <><Td>{k.managerRating ?? "—"}</Td><Td className="font-bold text-white">{k.finalRating ?? "—"}{k.finalRating !== k.managerRating && k.finalRating != null ? " *" : ""}</Td></>}
+                  {showFinal && <><Td>{k.managerRating ?? "—"}</Td><Td className="font-bold text-charcoal">{k.finalRating ?? "—"}{k.finalRating !== k.managerRating && k.finalRating != null ? " *" : ""}</Td></>}
                 </tr>
               ))}
             </Table>
@@ -356,7 +356,7 @@ export default function ScorecardPage() {
                 {sc.appeal.decidedAt && <Info label={`HR's decision (final) · ${sc.appeal.decidedBy} · ${fmtDateTime(sc.appeal.decidedAt)}`} value={`${sc.appeal.changed ? "Result changed. " : "Result kept. "}${sc.appeal.decision}`} />}
               </dl>
               {sc.can.decideAppeal && (
-                <div className="mt-5 space-y-5 border-t border-white/10 pt-4">
+                <div className="mt-5 space-y-5 border-t border-slate-200 pt-4">
                   <Calibrate sc={sc} onDone={reload} appeal />
                   <CommentAction label="HR's decision (final; sent to the employee)" button="Decide the appeal" required onSubmit={(d) => say("Appeal decided.")(post(`/performance/scorecards/${sc.id}/appeal/decide`, { decision: d }))} />
                 </div>
@@ -381,7 +381,7 @@ export default function ScorecardPage() {
               <ul className="space-y-2 text-sm">
                 {sc.adjustments.map((a, i) => (
                   <li key={i}>
-                    <span className="font-medium text-white">{a.kpi}</span>: {a.from} → {a.to} <span className="text-slate-500">({a.kind === "APPEAL" ? "appeal" : "calibration"} by {a.by}, {fmtDateTime(a.at)})</span>
+                    <span className="font-medium text-charcoal">{a.kpi}</span>: {a.from} → {a.to} <span className="text-slate-500">({a.kind === "APPEAL" ? "appeal" : "calibration"} by {a.by}, {fmtDateTime(a.at)})</span>
                     <div className="text-slate-600">“{a.reason}”</div>
                   </li>
                 ))}
@@ -414,7 +414,7 @@ export default function ScorecardPage() {
               </ul>
             )}
             {sc.can.checkIn && (
-              <div className="mt-4 border-t border-white/10 pt-4">
+              <div className="mt-4 border-t border-slate-200 pt-4">
                 <CommentAction label="Add a check-in note" button="Add note" required onSubmit={(c) => post(`/performance/scorecards/${sc.id}/check-ins`, { comment: c }).then(reload)} />
               </div>
             )}

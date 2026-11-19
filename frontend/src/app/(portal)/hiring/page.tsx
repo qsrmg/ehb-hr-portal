@@ -30,10 +30,10 @@ function Jobs() {
       {data.jobs.length === 0 ? <Empty>There are no open internal jobs right now.</Empty> : (
         <div className="grid gap-4 md:grid-cols-2">
           {data.jobs.map((j) => (
-            <Link key={j.id} href={`/hiring/jobs/${j.id}`} className="block rounded-2xl bg-ink-800/80 p-5 ring-1 ring-line/80 transition hover:-translate-y-0.5 hover:ring-white/30">
+            <Link key={j.id} href={`/hiring/jobs/${j.id}`} className="block rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <div className="font-display text-lg font-bold text-white">{j.title}</div>
+                  <div className="font-display text-lg font-bold text-charcoal">{j.title}</div>
                   <div className="text-sm text-slate-500">{j.department} · {TYPES[j.employmentType]}{j.headcount > 1 ? ` · ${j.headcount} positions` : ""}</div>
                 </div>
                 {j.myApplication && <StatusBadge status={j.myApplication.stage} label={`You: ${j.myApplication.stageLabel}`} />}
@@ -109,7 +109,7 @@ function HeadcountTable({ canEdit }: { canEdit: boolean }) {
       <Table head={["Department", "Approved", "Active", "Leaving", "Open positions", "Projected", ""]}>
         {data?.map((d) => (
           <tr key={d.departmentId}>
-            <Td className="font-medium text-white">{d.department}</Td>
+            <Td className="font-medium text-charcoal">{d.department}</Td>
             <Td>
               {canEdit ? (
                 <Input aria-label={`Approved headcount for ${d.department}`} type="number" min={0} className="w-24" value={values[d.departmentId] ?? (d.approved ?? "")} placeholder="No limit" onChange={(e) => setValues({ ...values, [d.departmentId]: e.target.value })} />
@@ -118,7 +118,7 @@ function HeadcountTable({ canEdit }: { canEdit: boolean }) {
             <Td className="tabular-nums">{d.active}</Td>
             <Td className="tabular-nums">{d.leaving}</Td>
             <Td className="tabular-nums">{d.openPositions}</Td>
-            <Td className={`tabular-nums font-semibold ${d.over ? "text-red-700" : "text-white"}`}>{d.projected}{d.over ? " (over)" : ""}</Td>
+            <Td className={`tabular-nums font-semibold ${d.over ? "text-red-700" : "text-charcoal"}`}>{d.projected}{d.over ? " (over)" : ""}</Td>
             <Td>
               {canEdit && values[d.departmentId] !== undefined && (
                 <Button size="sm" variant="secondary" onClick={async () => {

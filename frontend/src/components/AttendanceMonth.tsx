@@ -44,15 +44,15 @@ export function AttendanceTable({ data, fixLink }: { data: MonthData; fixLink?: 
         const fixable = fixLink && ["ABSENT", "LATE", "HALF_DAY"].includes(d.status) && !d.corrected;
         return (
           <tr key={d.date} className={muted ? "bg-slate-50/60" : undefined}>
-            <Td className={muted ? "text-slate-400" : undefined}>{fmtDate(d.date)}</Td>
+            <Td className={muted ? "text-slate-500" : undefined}>{fmtDate(d.date)}</Td>
             <Td className="text-slate-500">{weekday}</Td>
             <Td className="tabular-nums">
               {d.corrected?.checkIn ?? d.checkIn ?? "—"}
-              {d.corrected && d.checkIn !== d.corrected.checkIn && <span className="ml-1 text-xs text-slate-400 line-through">{d.checkIn}</span>}
+              {d.corrected && d.checkIn !== d.corrected.checkIn && <span className="ml-1 text-xs text-slate-500 line-through">{d.checkIn}</span>}
             </Td>
             <Td className="tabular-nums">
               {d.corrected?.checkOut ?? d.checkOut ?? "—"}
-              {d.corrected && d.checkOut !== d.corrected.checkOut && <span className="ml-1 text-xs text-slate-400 line-through">{d.checkOut ?? "missing"}</span>}
+              {d.corrected && d.checkOut !== d.corrected.checkOut && <span className="ml-1 text-xs text-slate-500 line-through">{d.checkOut ?? "missing"}</span>}
             </Td>
             <Td>
               <div className="flex items-center gap-2">

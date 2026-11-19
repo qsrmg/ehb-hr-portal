@@ -36,8 +36,8 @@ export function KpiCard({
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
       <div className="mt-4 text-sm font-semibold text-slate-500">{label}</div>
-      <div className="mt-1 text-3xl font-extrabold tabular-nums text-ink-950">
-        {value == null ? <span className="text-base font-semibold text-slate-400">{unavailable ?? "Not shown for your role"}</span> : <CountUp value={value} />}
+      <div data-testid="kpi-value" className="mt-1 text-3xl font-extrabold tabular-nums text-charcoal">
+        {value == null ? <span className="text-base font-semibold text-slate-500">{unavailable ?? "Not shown for your role"}</span> : <CountUp value={value} />}
       </div>
       {hint && <div className="mt-1.5 text-xs text-slate-500">{hint}</div>}
     </div>

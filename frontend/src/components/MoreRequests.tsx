@@ -58,7 +58,7 @@ export function MoreRequests({ className }: { className: string }) {
           id="more-requests"
           role="menu"
           aria-label="More requests"
-          className="absolute left-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-ink-900 py-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,.8)]"
+          className="absolute left-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-white py-1 shadow-[0_20px_50px_-15px_rgba(16,31,58,.2)]"
         >
           {ITEMS.map((item) => (
             <Link
@@ -66,10 +66,10 @@ export function MoreRequests({ className }: { className: string }) {
               href={item.href}
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-white/85 hover:bg-white/5 hover:text-white focus-visible:bg-white/10 focus-visible:outline-none"
+              className="flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-charcoal focus-visible:bg-slate-100 focus-visible:outline-none"
             >
               {item.label}
-              <Icon name="arrowRight" className="h-3.5 w-3.5 text-white/40" />
+              <Icon name="arrowRight" className="h-3.5 w-3.5 text-slate-400" />
             </Link>
           ))}
         </div>

@@ -54,7 +54,7 @@ export function DashboardHeader({ user, today, unreadNotifications, latestPaysli
       <HeaderIllustration3D />
       <Link
         href="/notifications"
-        className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition duration-200 hover:border-slate-300 hover:text-ink-950"
+        className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition duration-200 hover:border-slate-300 hover:text-charcoal"
         aria-label={`Notifications (${unreadNotifications} unread)`}
       >
         <Bell className="h-5 w-5" aria-hidden="true" />

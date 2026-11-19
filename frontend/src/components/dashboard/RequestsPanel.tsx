@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
  * existing /requests data, restyled with the brief's status colours. Every row still links to the request. */
 export function RequestsPanel({ rows }: { rows: RequestRow[] }) {
   return (
-    <Card title="My requests" actions={<Link href="/requests" className="text-sm font-semibold text-primary hover:underline">All requests</Link>}>
+    <Card title="My requests" actions={<Link href="/requests" className="text-sm font-semibold text-accent hover:underline">All requests</Link>}>
       {rows.length === 0 ? (
         <Empty>You have not submitted any requests yet.</Empty>
       ) : (
@@ -35,7 +35,7 @@ export function RequestsPanel({ rows }: { rows: RequestRow[] }) {
             const statusKey = isInProgress ? "IN_PROGRESS" : r.status;
             return (
               <tr key={r.id} className="anim-fade-in-fast transition-colors hover:bg-slate-50">
-                <Td><Link href={`/requests/${r.id}`} className="font-semibold text-ink-950 hover:text-primary">{r.title}</Link></Td>
+                <Td><Link href={`/requests/${r.id}`} className="font-semibold text-charcoal hover:text-accent">{r.title}</Link></Td>
                 <Td className="text-slate-500">{r.typeLabel}</Td>
                 <Td className="text-slate-500">{fmtDate(r.updatedAt)}</Td>
                 <Td>
@@ -44,7 +44,7 @@ export function RequestsPanel({ rows }: { rows: RequestRow[] }) {
                   </span>
                 </Td>
                 <Td className="text-slate-500">{r.status === "PENDING" ? r.currentStepLabel ?? "—" : "—"}</Td>
-                <Td><Link href={`/requests/${r.id}`} className="text-sm font-semibold text-primary hover:underline">View</Link></Td>
+                <Td><Link href={`/requests/${r.id}`} className="text-sm font-semibold text-accent hover:underline">View</Link></Td>
               </tr>
             );
           })}

@@ -33,17 +33,17 @@ function MyScorecards() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {data.map((s) => (
-        <Link key={s.id} href={`/performance/${s.id}`} className="block rounded-2xl bg-ink-800/80 p-5 ring-1 ring-line/80 transition hover:ring-white/30">
+        <Link key={s.id} href={`/performance/${s.id}`} className="block rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:border-slate-300">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <div className="font-display text-lg font-bold text-white">{s.cycle.name}</div>
+              <div className="font-display text-lg font-bold text-charcoal">{s.cycle.name}</div>
               <div className="text-sm text-slate-500">{fmtDate(s.cycle.startDate)} to {fmtDate(s.cycle.endDate)}</div>
             </div>
             <StatusBadge status={s.stage} label={s.stageLabel} />
           </div>
           {s.finalBand && (
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="font-display text-3xl font-extrabold text-white">{s.finalScore?.toFixed(2)}</span>
+              <span className="font-display text-3xl font-extrabold text-charcoal">{s.finalScore?.toFixed(2)}</span>
               <span className="text-sm text-slate-500">of 5 · {s.finalBand}</span>
             </div>
           )}
@@ -175,10 +175,10 @@ function Templates({ canEdit, rules }: { canEdit: boolean; rules: Rules }) {
             </KpiEditor>
           ) : t.kpis.length ? (
             <>
-              <ul className="divide-y divide-white/10">
+              <ul className="divide-y divide-slate-100">
                 {t.kpis.map((k, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <span><span className="text-slate-500">{PERSPECTIVES[k.perspective]}</span> · <span className="font-medium text-white">{k.title}</span> <span className="text-slate-500">(target {k.target})</span></span>
+                    <span><span className="text-slate-500">{PERSPECTIVES[k.perspective]}</span> · <span className="font-medium text-charcoal">{k.title}</span> <span className="text-slate-500">(target {k.target})</span></span>
                     <span className="font-semibold tabular-nums">{k.weight}%</span>
                   </li>
                 ))}

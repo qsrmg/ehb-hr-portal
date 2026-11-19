@@ -64,8 +64,8 @@ export default function CycleOverviewPage() {
         <Card title="Where everyone is" className="lg:col-span-2">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {c.stages.map((s) => (
-              <div key={s.stage} className="rounded-xl bg-ink-700/60 px-4 py-3">
-                <div className="font-display text-2xl font-extrabold tabular-nums text-white">{s.count}</div>
+              <div key={s.stage} className="rounded-xl bg-slate-50 px-4 py-3">
+                <div className="font-display text-2xl font-extrabold tabular-nums text-charcoal">{s.count}</div>
                 <div className="text-xs text-slate-500">{s.label}</div>
               </div>
             ))}
@@ -75,8 +75,8 @@ export default function CycleOverviewPage() {
           <ul className="space-y-2.5" aria-label="Rating distribution">
             {c.distribution.map((d) => (
               <li key={d.rating}>
-                <div className="flex justify-between text-sm"><span>{d.rating} · {d.band}</span><span className="tabular-nums text-white">{d.count}</span></div>
-                <div className="mt-1 h-2 rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-primary to-[#7ea6ff]" style={{ width: `${(d.count / max) * 100}%` }} /></div>
+                <div className="flex justify-between text-sm"><span>{d.rating} · {d.band}</span><span className="tabular-nums text-charcoal">{d.count}</span></div>
+                <div className="mt-1 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-primary to-[#7ea6ff]" style={{ width: `${(d.count / max) * 100}%` }} /></div>
               </li>
             ))}
           </ul>
@@ -106,7 +106,7 @@ export default function CycleOverviewPage() {
           ))}
         </Table>
         {c.canManage && (
-          <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-white/10 pt-4">
+          <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-slate-200 pt-4">
             <Field label="Add an employee to this cycle" className="min-w-64 flex-1">
               <Select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
                 <option value="">Choose…</option>

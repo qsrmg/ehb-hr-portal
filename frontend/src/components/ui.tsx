@@ -13,12 +13,12 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const buttonClass = (variant: ButtonProps["variant"] = "primary", size: ButtonProps["size"] = "md") =>
   cx(
-    "inline-flex items-center justify-center gap-2 rounded-md font-medium transition disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-sun focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950",
+    "inline-flex items-center justify-center gap-2 rounded-md font-medium transition disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white",
     size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-4 py-2 text-sm",
     variant === "primary" && "bg-primary text-white shadow-[0_8px_20px_-10px_rgba(37,99,235,.9)] hover:bg-primary-hover",
-    variant === "secondary" && "bg-white/5 text-white ring-1 ring-inset ring-white/30 hover:bg-white/10 hover:ring-white/50",
+    variant === "secondary" && "bg-slate-100 text-charcoal ring-1 ring-inset ring-slate-300 hover:bg-slate-200 hover:ring-slate-400",
     variant === "danger" && "bg-red-600 text-white hover:bg-red-500",
-    variant === "ghost" && "text-slate-600 hover:bg-white/10 hover:text-white",
+    variant === "ghost" && "text-slate-600 hover:bg-slate-100 hover:text-charcoal",
   );
 
 export function Button({ variant, size, loading, className, children, disabled, ...rest }: ButtonProps) {
@@ -40,10 +40,10 @@ export function LinkButton({ href, variant, size, className, children }: { href:
 
 export function Card({ title, actions, children, className }: { title?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cx("rounded-2xl bg-ink-800/80 ring-1 ring-line/80", className)}>
+    <section className={cx("rounded-2xl border border-line bg-white shadow-sm", className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-          {title && <h2 className="font-display text-base font-bold text-white">{title}</h2>}
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+          {title && <h2 className="font-display text-base font-bold text-charcoal">{title}</h2>}
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
@@ -56,7 +56,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-balance font-display text-2xl font-extrabold tracking-tight text-white">{title}</h1>
+        <h1 className="text-balance font-display text-2xl font-extrabold tracking-tight text-charcoal">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -70,13 +70,13 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
 }
 
 export function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded bg-white/10 px-1.5 py-0.5 text-xs font-medium text-slate-700">{children}</span>;
+  return <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700">{children}</span>;
 }
 
 export function Field({ label, hint, error, children, className }: { label: string; hint?: React.ReactNode; error?: string; children: React.ReactNode; className?: string }) {
   return (
     <label className={cx("block", className)}>
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-body">{label}</span>
       {children}
       {hint && !error && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
       {error && <span className="mt-1 block text-xs text-red-600">{error}</span>}
@@ -84,7 +84,7 @@ export function Field({ label, hint, error, children, className }: { label: stri
   );
 }
 
-const inputClass = "block w-full rounded-lg border-0 bg-ink-950/70 px-3 py-2 text-sm text-white ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary disabled:cursor-not-allowed disabled:bg-ink-800 disabled:text-slate-500 [&>option]:bg-ink-900 [&>option]:text-white";
+const inputClass = "block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-body ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 [&>option]:bg-white [&>option]:text-body";
 
 export const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} className={cx(inputClass, props.className)} />;
 export const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => <select {...props} className={cx(inputClass, props.className)} />;
@@ -101,7 +101,7 @@ export function Switch({ checked, onChange, disabled }: { checked: boolean; onCh
       onClick={() => onChange(!checked)}
       className={cx(
         "inline-flex h-7 w-24 shrink-0 items-center rounded-full px-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "justify-start bg-primary text-white" : "justify-end bg-white/10 text-slate-300",
+        checked ? "justify-start bg-primary text-white" : "justify-end bg-slate-200 text-slate-600",
       )}
     >
       <span className="px-2">{checked ? "On" : "Off"}</span>
@@ -138,7 +138,7 @@ export function Table({ head, children, empty }: { head: React.ReactNode[]; chil
     <div className="-mx-4 overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead>
-          <tr className="border-b border-slate-200 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <tr className="border-b border-slate-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             {head.map((h, i) => (
               <th key={i} className="whitespace-nowrap px-4 py-2">{h}</th>
             ))}
@@ -152,7 +152,7 @@ export function Table({ head, children, empty }: { head: React.ReactNode[]; chil
 }
 
 export const Td = ({ children, className }: { children?: React.ReactNode; className?: string }) => (
-  <td className={cx("whitespace-nowrap px-4 py-2.5 text-slate-700", className)}>{children}</td>
+  <td className={cx("whitespace-nowrap px-4 py-2.5 text-body", className)}>{children}</td>
 );
 
 export function Stat({ label, value, tone, sub }: { label: string; value: React.ReactNode; tone?: "green" | "amber" | "orange" | "red" | "sky" | "slate"; sub?: React.ReactNode }) {
@@ -160,7 +160,7 @@ export function Stat({ label, value, tone, sub }: { label: string; value: React.
     green: "text-emerald-700", amber: "text-amber-700", orange: "text-orange-700", red: "text-red-700", sky: "text-sky-700", slate: "text-slate-900",
   }[tone ?? "slate"];
   return (
-    <div className="rounded-2xl bg-ink-800/80 p-4 ring-1 ring-line/80">
+    <div className="rounded-2xl border border-line bg-white p-4 shadow-sm">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
       <div className={cx("mt-1 text-2xl font-semibold tabular-nums", color)}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
@@ -178,7 +178,7 @@ export function Tabs<T extends string>({ value, onChange, options }: { value: T;
           onClick={() => onChange(o.value)}
           className={cx(
             "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium",
-            value === o.value ? "border-sun text-white" : "border-transparent text-slate-500 hover:text-white",
+            value === o.value ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-charcoal",
           )}
         >
           {o.label}

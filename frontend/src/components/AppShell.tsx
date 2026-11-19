@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { Logo } from "@/components/brand";
 import { Icon, type IconName } from "@/components/icons";
 
-// Signed-in layout (design page 7): dark sidebar with the menu for the user's roles, the user and Sign out at the bottom.
+// Signed-in layout: white sidebar with the menu for the user's roles, the user and Sign out at the bottom.
 
 type NavItem = { href: string; label: string; icon: IconName; show?: (u: User) => boolean };
 type NavGroup = { title: string | null; items: NavItem[] };
@@ -86,10 +86,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         href={item.href}
         onClick={close}
         aria-current={active ? "page" : undefined}
-        className={`group relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-primary/20 text-white" : "text-white/75 hover:bg-white/5 hover:text-white"}`}
+        className={`group relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-blue-50 text-primary" : "text-dim hover:bg-gray-100 hover:text-charcoal"}`}
       >
-        {active && <span aria-hidden="true" className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-sun" />}
-        <Icon name={item.icon} className={`h-[18px] w-[18px] shrink-0 ${active ? "text-white" : "text-white/60 group-hover:text-white"}`} />
+        {active && <span aria-hidden="true" className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-primary" />}
+        <Icon name={item.icon} className={`h-[18px] w-[18px] shrink-0 ${active ? "text-primary" : "text-slate-400 group-hover:text-charcoal"}`} />
         <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
         {!!badge && <span className="rounded-full bg-sun px-1.5 text-[11px] font-bold leading-5 text-ink-950">{badge > 99 ? "99+" : badge}</span>}
       </Link>
@@ -107,23 +107,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           if (!items.length) return null;
           return (
             <div key={group.title ?? "mine"} className="space-y-0.5">
-              {group.title && <div className="px-3 pb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-haze/80">{group.title}</div>}
+              {group.title && <div className="px-3 pb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-dim/80">{group.title}</div>}
               {items.map((item) => link(item))}
             </div>
           );
         })}
       </nav>
-      <div className="border-t border-white/10 px-3 pb-3 pt-3">
+      <div className="border-t border-line px-3 pb-3 pt-3">
         <div className="px-3">
-          <div className="truncate text-sm font-bold text-white">{user.fullName}</div>
-          <div className="mt-0.5 text-xs text-haze">Employee code {user.code}</div>
-          <div className="mt-0.5 truncate text-xs text-haze/80">{roles}</div>
+          <div className="truncate text-sm font-bold text-charcoal">{user.fullName}</div>
+          <div className="mt-0.5 text-xs text-dim">Employee code {user.code}</div>
+          <div className="mt-0.5 truncate text-xs text-dim/80">{roles}</div>
         </div>
         <div className="mt-2 space-y-0.5">
           {link({ href: "/notifications", label: "Notifications", icon: "bell" }, unread)}
           {link({ href: "/change-password", label: "Change password", icon: "key" })}
-          <button onClick={logout} className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-semibold text-white/75 transition hover:bg-white/5 hover:text-white">
-            <Icon name="logout" className="h-[18px] w-[18px] text-white/60" /> Sign out
+          <button onClick={logout} className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-semibold text-dim transition hover:bg-gray-100 hover:text-charcoal">
+            <Icon name="logout" className="h-[18px] w-[18px] text-slate-400" /> Sign out
           </button>
         </div>
       </div>
@@ -131,16 +131,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="portal-dark flex min-h-screen bg-ink-950">
-      <aside className="hidden w-64 shrink-0 border-r border-white/5 bg-ink-900 lg:block">
+    <div data-testid="app-shell" className="flex min-h-screen bg-white">
+      <aside className="hidden w-64 shrink-0 border-r border-line bg-white lg:block">
         <div className="sticky top-0 h-screen">{sidebar}</div>
       </aside>
 
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-black/50" onClick={close} />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-ink-900">
-            <button onClick={close} className="absolute right-3 top-5 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close menu">
+          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-line bg-white">
+            <button onClick={close} className="absolute right-3 top-5 rounded-md p-1.5 text-dim hover:bg-gray-100 hover:text-charcoal" aria-label="Close menu">
               <Icon name="close" />
             </button>
             {sidebar}
@@ -150,13 +150,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Phones and tablets: the sidebar opens from this bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/5 bg-ink-900 px-4 lg:hidden">
-          <button className="rounded-md p-1.5 text-white/80 hover:bg-white/10" onClick={() => setOpen(true)} aria-label="Open menu">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-white px-4 lg:hidden">
+          <button className="rounded-md p-1.5 text-dim hover:bg-gray-100" onClick={() => setOpen(true)} aria-label="Open menu">
             <Icon name="menu" />
           </button>
           <Link href="/dashboard" aria-label="Dashboard"><Logo size="sm" /></Link>
           <div className="flex-1" />
-          <Link href="/notifications" className="relative rounded-md p-1.5 text-white/80 hover:bg-white/10" aria-label={`Notifications (${unread} unread)`}>
+          <Link href="/notifications" className="relative rounded-md p-1.5 text-dim hover:bg-gray-100" aria-label={`Notifications (${unread} unread)`}>
             <Icon name="bell" />
             {unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-sun px-1 text-center text-[10px] font-bold leading-4 text-ink-950">{unread > 99 ? "99+" : unread}</span>}
           </Link>

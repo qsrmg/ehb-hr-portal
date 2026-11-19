@@ -42,14 +42,14 @@ export function LeaveDoughnut({ balances }: { balances: LeaveBalance[] }) {
   ).list;
 
   return (
-    <Card title="Leave balance" actions={<Link href="/leave" className="text-sm font-semibold text-primary hover:underline">Details</Link>}>
+    <Card title="Leave balance" actions={<Link href="/leave" className="text-sm font-semibold text-accent hover:underline">Details</Link>}>
       {rows.length === 0 ? (
         <Empty>No leave quotas apply to your record.</Empty>
       ) : (
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0" style={{ width: size, height: size }}>
             <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
-              <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} />
+              <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-track)" strokeWidth={strokeWidth} />
               {segments.map((s) => (
                 <circle
                   key={s.leaveTypeId}
@@ -68,7 +68,7 @@ export function LeaveDoughnut({ balances }: { balances: LeaveBalance[] }) {
               ))}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-extrabold tabular-nums text-ink-950">{total}</span>
+              <span className="text-2xl font-extrabold tabular-nums text-charcoal">{total}</span>
               <span className="text-xs font-medium text-slate-500">day{total === 1 ? "" : "s"} left</span>
             </div>
           </div>

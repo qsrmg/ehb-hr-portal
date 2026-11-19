@@ -35,7 +35,7 @@ export function AttendanceStatusRings({ summary }: { summary: { onTime: number; 
                   strokeWidth={9}
                   centerLabel={
                     <div className="flex flex-col items-center">
-                      <span className="text-lg font-extrabold tabular-nums text-ink-950">{Math.round(pct)}%</span>
+                      <span data-testid="ring-percent" className="text-lg font-extrabold tabular-nums text-charcoal">{Math.round(pct)}%</span>
                     </div>
                   }
                 />

@@ -253,7 +253,7 @@ export default function RequestDetailPage() {
                     {r.attachments.map((a) => (
                       <li key={a.id}>
                         <button className="text-sm text-accent hover:underline" onClick={() => download(`/requests/${r.id}/attachments/${a.id}`, a.fileName)}>
-                          {a.fileName} <span className="text-xs text-slate-400">({Math.ceil(a.size / 1024)} KB)</span>
+                          {a.fileName} <span className="text-xs text-slate-500">({Math.ceil(a.size / 1024)} KB)</span>
                         </button>
                       </li>
                     ))}

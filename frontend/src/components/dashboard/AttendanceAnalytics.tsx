@@ -29,8 +29,8 @@ function Bar({ value, max, color, label }: { value: number; max: number; color: 
   const pct = grown && max ? (value / max) * 100 : 0;
   return (
     <div className="flex flex-1 flex-col items-center gap-2">
-      <div className="text-sm font-bold tabular-nums text-ink-950">{value}</div>
-      <div className="flex h-32 w-full items-end overflow-hidden rounded-lg bg-slate-50">
+      <div className="text-sm font-bold tabular-nums text-charcoal">{value}</div>
+      <div className="flex h-32 w-full items-end overflow-hidden rounded-lg bg-track">
         <div
           className="w-full rounded-t-lg motion-safe:transition-[height] motion-safe:duration-700 motion-safe:ease-out"
           style={{ height: `${pct}%`, minHeight: value ? 4 : 0, background: color }}
@@ -96,7 +96,7 @@ export function AttendanceAnalytics({
             ) : (
               <svg viewBox={`0 0 ${w} ${h}`} className="h-36 w-full" preserveAspectRatio="none" role="img" aria-label="Check-in time across the month, with the late cut-off marked">
                 <line x1={pad} y1={lateY} x2={w - pad} y2={lateY} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1} />
-                <text x={w - pad} y={lateY - 6} textAnchor="end" fontSize={10} fill="#b45309">Late after {fmtHm(lateCutoff)}</text>
+                <text x={w - pad} y={lateY - 6} textAnchor="end" fontSize={10} className="fill-amber-700">Late after {fmtHm(lateCutoff)}</text>
                 <path d={path} fill="none" stroke="#2563eb" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
                 {linePoints.map((p, i) => (
                   <circle key={p.date} cx={xFor(i)} cy={yFor(p.minutes)} r={4} fill={p.minutes > lateCutoff ? "#f59e0b" : "#10b981"} stroke="#fff" strokeWidth={1.5}>

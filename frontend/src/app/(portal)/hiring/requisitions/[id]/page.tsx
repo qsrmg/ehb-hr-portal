@@ -132,7 +132,7 @@ function Applicant({ r, a, isHr, onDone }: { r: Requisition; a: App; isHr: boole
     <div className="rounded-2xl p-4 ring-1 ring-slate-200" data-applicant={a.name}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="font-semibold text-white">{a.name} <span className="text-xs font-normal text-slate-500">{a.internal ? `Internal · ${a.code}` : "External"}</span></div>
+          <div className="font-semibold text-charcoal">{a.name} <span className="text-xs font-normal text-slate-500">{a.internal ? `Internal · ${a.code}` : "External"}</span></div>
           <div className="text-xs text-slate-500">{a.currentRole ?? [a.email, a.phone].filter(Boolean).join(" · ")} · applied {fmtDate(a.appliedAt)}</div>
         </div>
         <StatusBadge status={a.stage} label={a.stageLabel} />
@@ -142,16 +142,16 @@ function Applicant({ r, a, isHr, onDone }: { r: Requisition; a: App; isHr: boole
       {a.managerNotifiedAt && <p className="mt-1 text-xs text-slate-500">Current manager told at shortlisting ({fmtDateTime(a.managerNotifiedAt)})</p>}
 
       {a.feedback.length > 0 && (
-        <ul className="mt-3 space-y-1.5 border-t border-white/10 pt-3 text-sm">
+        <ul className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 text-sm">
           {a.feedback.map((fb) => (
-            <li key={fb.id}><span className="font-semibold text-white">{RECS[fb.recommendation]}</span> · {fb.comment} <span className="text-xs text-slate-500">({fb.author}, {fmtDate(fb.at)})</span></li>
+            <li key={fb.id}><span className="font-semibold text-charcoal">{RECS[fb.recommendation]}</span> · {fb.comment} <span className="text-xs text-slate-500">({fb.author}, {fmtDate(fb.at)})</span></li>
           ))}
         </ul>
       )}
       {error && <div className="mt-3"><Alert>{error}</Alert></div>}
 
       {isHr && r.can.manageApplicants && active && (
-        <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
           <Input aria-label={`Note for ${a.name}`} placeholder="Note for the record (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="flex flex-wrap gap-2">
             {next.map((s) => (
@@ -173,7 +173,7 @@ function Applicant({ r, a, isHr, onDone }: { r: Requisition; a: App; isHr: boole
       )}
 
       {r.can.feedback && ["SHORTLISTED", "INTERVIEW", "OFFER"].includes(a.stage) && (
-        <div className="mt-3 grid gap-2 border-t border-white/10 pt-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-end">
+        <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-end">
           <Field label="Recommendation">
             <Select value={rec} onChange={(e) => setRec(e.target.value)}>{Object.entries(RECS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
           </Field>
@@ -216,7 +216,7 @@ export default function RequisitionPage() {
       {top.error && <Alert>{top.error}</Alert>}
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={`REQ_${r.status}`} label={r.statusLabel} />
-        {r.request?.waitingFor && <span className="text-sm text-slate-600">Waiting for: <strong className="text-white">{r.request.waitingFor}</strong></span>}
+        {r.request?.waitingFor && <span className="text-sm text-slate-600">Waiting for: <strong className="text-charcoal">{r.request.waitingFor}</strong></span>}
         {r.request && <Link href={`/requests/${r.request.id}`} className="text-sm text-accent hover:underline">Approval request #{r.request.id}</Link>}
         {r.status === "POSTED" && <span className="text-sm text-slate-600">{r.hired} of {r.headcount} filled</span>}
       </div>

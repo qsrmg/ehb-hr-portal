@@ -62,6 +62,62 @@ async function signIn(p, email) {
   await p.locator("main h1").first().waitFor();
 }
 
+/**
+ * Text elements whose contrast with the colour actually behind them (all layers blended) is below 4.5:1.
+ * `root` scopes the search (default "main", the signed-in layout's landmark); the sign-in page has no
+ * <main>, so its own check passes "body" instead. `selector` checks exactly those elements instead of the
+ * default tag list (e.g. the dashboard's own KPI numbers and ring percentages, by their data-testid).
+ */
+const lowContrast = (p, root = "main", selector) =>
+  p.evaluate(({ root, selector }) => {
+    // Tailwind v4's default palette (red, etc.) can report through getComputedStyle in lab()/oklch(),
+    // not rgb() — parsing the string with a regex silently drops those colours. A 1x1 canvas resolves any
+    // valid CSS colour (lab, oklch, color(), named, …) to concrete, unpremultiplied RGBA pixel values.
+    const swatch = document.createElement("canvas");
+    swatch.width = swatch.height = 1;
+    const ctx = swatch.getContext("2d", { willReadFrequently: true });
+    const parse = (c) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = "#000";
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return { r, g, b, a: a / 255 };
+    };
+    const over = (top, bottom) => ({ r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a), b: top.b * top.a + bottom.b * (1 - top.a), a: 1 });
+    const background = (el) => {
+      const layers = [];
+      for (let e = el; e; e = e.parentElement) {
+        const c = parse(getComputedStyle(e).backgroundColor);
+        if (c && c.a > 0) layers.push(c);
+        if (c && c.a === 1) break;
+      }
+      return layers.reverse().reduce((acc, c) => over(c, acc), { r: 9, g: 24, b: 47, a: 1 });
+    };
+    const lum = ({ r, g, b }) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const bad = [];
+    const tags = ["td", "th", "input", "select", "textarea", "label", "button", "[role=alert]", "[role=status]", "h1", "h2", "p", "a", "dd", "dt", "li", "span"];
+    const sel = selector ?? tags.map((t) => `${root} ${t}`).join(", ");
+    for (const el of document.querySelectorAll(sel)) {
+      if (!el.offsetParent || el.disabled || !el.textContent.trim() && !["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName)) continue;
+      if (el.closest("[aria-hidden=true]")) continue;
+      const st = getComputedStyle(el);
+      // Gradient "clip-text" accents (e.g. the sign-in headline) report a transparent `color`; the real
+      // colour comes from the background gradient, which this check cannot see. Checked separately instead.
+      if (st.webkitBackgroundClip === "text" || st.backgroundClip === "text") continue;
+      const fg = parse(st.color);
+      if (!fg) continue;
+      const bg = background(el);
+      const [l1, l2] = [lum(over(fg, bg)), lum(bg)].sort((a, b) => b - a);
+      const ratio = (l1 + 0.05) / (l2 + 0.05);
+      if (ratio < 4.5) bad.push(`${el.tagName.toLowerCase()} "${(el.value || el.textContent).trim().slice(0, 40)}" ${ratio.toFixed(2)}:1`);
+    }
+    return [...new Set(bad)];
+  }, { root, selector });
+
 for (const vp of WIDTHS) {
   await step(`${vp.name}a`, `Landing page at ${vp.name}px: sections, buttons to /login, no sideways scroll`, async (check) => {
     const { p, close } = await page(vp);
@@ -149,6 +205,16 @@ for (const vp of WIDTHS) {
         await noSideScroll(p, `Dashboard (${who})`);
         await shot(p, `dashboard-${who}-${vp.name}`);
         check(`${who}: "${(await p.locator("main h1").first().innerText()).replace(/\s+/g, " ")}"`);
+        for (const [surface, locator] of [["body", "body"], ["portal shell", '[data-testid="app-shell"]'], ["sidebar", "aside"]]) {
+          const bg = await p.locator(locator).first().evaluate((el) => getComputedStyle(el).backgroundColor);
+          const [r, g, b] = bg.match(/\d+/g).map(Number);
+          const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+          if (lum < 0.9) throw new Error(`${surface} background is not near-white (${bg}, luminance ${lum.toFixed(2)})`);
+        }
+        check(`${who}: body, portal shell and sidebar backgrounds are all near-white`);
+        const bad = await lowContrast(p, "main", 'main [data-testid="kpi-value"], main [data-testid="ring-percent"]');
+        if (bad.length) throw new Error(`Low contrast on the KPI numbers / ring percentages — ${bad.join("; ")}`);
+        check(`${who}: KPI numbers and ring percentages are all at least 4.5:1 against their card`);
       } finally {
         await close();
       }
@@ -244,52 +310,6 @@ async function apiAs(email) {
     return data;
   };
 }
-
-/**
- * Text elements whose contrast with the colour actually behind them (all layers blended) is below 4.5:1.
- * `root` scopes the search (default "main", the signed-in layout's landmark); the sign-in page has no
- * <main>, so its own check passes "body" instead.
- */
-const lowContrast = (p, root = "main") =>
-  p.evaluate((root) => {
-    const parse = (c) => {
-      const m = c.match(/rgba?\(([^)]+)\)/);
-      if (!m) return null;
-      const [r, g, b, a = 1] = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
-      return { r, g, b, a };
-    };
-    const over = (top, bottom) => ({ r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a), b: top.b * top.a + bottom.b * (1 - top.a), a: 1 });
-    const background = (el) => {
-      const layers = [];
-      for (let e = el; e; e = e.parentElement) {
-        const c = parse(getComputedStyle(e).backgroundColor);
-        if (c && c.a > 0) layers.push(c);
-        if (c && c.a === 1) break;
-      }
-      return layers.reverse().reduce((acc, c) => over(c, acc), { r: 9, g: 24, b: 47, a: 1 });
-    };
-    const lum = ({ r, g, b }) => {
-      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-    };
-    const bad = [];
-    const tags = ["td", "th", "input", "select", "textarea", "label", "button", "[role=alert]", "[role=status]", "h1", "h2", "p", "a", "dd", "dt", "li", "span"];
-    for (const el of document.querySelectorAll(tags.map((t) => `${root} ${t}`).join(", "))) {
-      if (!el.offsetParent || el.disabled || !el.textContent.trim() && !["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName)) continue;
-      if (el.closest("[aria-hidden=true]")) continue;
-      const st = getComputedStyle(el);
-      // Gradient "clip-text" accents (e.g. the sign-in headline) report a transparent `color`; the real
-      // colour comes from the background gradient, which this check cannot see. Checked separately instead.
-      if (st.webkitBackgroundClip === "text" || st.backgroundClip === "text") continue;
-      const fg = parse(st.color);
-      if (!fg) continue;
-      const bg = background(el);
-      const [l1, l2] = [lum(over(fg, bg)), lum(bg)].sort((a, b) => b - a);
-      const ratio = (l1 + 0.05) / (l2 + 0.05);
-      if (ratio < 4.5) bad.push(`${el.tagName.toLowerCase()} "${(el.value || el.textContent).trim().slice(0, 40)}" ${ratio.toFixed(2)}:1`);
-    }
-    return [...new Set(bad)];
-  }, root);
 
 await step("pages", "10 most-used signed-in pages in the dark theme: screenshots at 1366px, text contrast at least 4.5:1", async (check) => {
   // A leave request from Ali waiting with Hamza, so the request page shows the approver's decision form.

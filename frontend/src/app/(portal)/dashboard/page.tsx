@@ -50,7 +50,7 @@ function clock(hm: string | null) {
   return `${String(h % 12 || 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
-const outline = "inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-ink-950 transition duration-200 motion-safe:hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50";
+const outline = "inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-charcoal transition duration-200 motion-safe:hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50";
 const primaryBtn = "inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-[0_10px_24px_-12px_rgba(37,99,235,.55)] transition duration-200 motion-safe:hover:-translate-y-0.5 hover:bg-primary-hover";
 
 export default function DashboardPage() {
@@ -132,7 +132,7 @@ export default function DashboardPage() {
 
         <div className="space-y-6">
           {approver && (
-            <Card title="Waiting for your approval" actions={<Link href="/approvals" className="text-sm font-semibold text-primary hover:underline">All approvals</Link>}>
+            <Card title="Waiting for your approval" actions={<Link href="/approvals" className="text-sm font-semibold text-accent hover:underline">All approvals</Link>}>
               {actionError && <Alert>{actionError}</Alert>}
               {data.tasks.length === 0 ? (
                 <Empty>Nothing waiting for you.</Empty>
@@ -140,7 +140,7 @@ export default function DashboardPage() {
                 <ul className="space-y-3">
                   {data.tasks.slice(0, 4).map((t) => (
                     <li key={t.requestId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="font-bold text-ink-950">{t.title}</div>
+                      <div className="font-bold text-charcoal">{t.title}</div>
                       <div className="mt-0.5 text-xs text-slate-500">From {t.employee} · {t.step} · since {fmtDateTime(t.pendingSince)}</div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {QUICK_APPROVE.has(t.type) && (
@@ -158,12 +158,12 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          <Card title="Pay slips" actions={<Link href="/payslips" className="text-sm font-semibold text-primary hover:underline">All pay slips</Link>}>
+          <Card title="Pay slips" actions={<Link href="/payslips" className="text-sm font-semibold text-accent hover:underline">All pay slips</Link>}>
             {data.latestPayslip ? (
               <>
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-ink-950">{data.latestPayslip.monthName} {data.latestPayslip.year}</div>
+                    <div className="font-bold text-charcoal">{data.latestPayslip.monthName} {data.latestPayslip.year}</div>
                     <div className="text-xs text-slate-500">PDF · net pay PKR {fmtMoney(data.latestPayslip.netPay)}</div>
                   </div>
                   <button className={outline} onClick={() => download(`/payroll/payslips/${data.latestPayslip!.id}/pdf`, `payslip-${data.latestPayslip!.year}-${data.latestPayslip!.month}.pdf`)}>

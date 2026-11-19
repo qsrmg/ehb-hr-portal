@@ -131,7 +131,7 @@ export function ExpenseDetails({ requestId, expense, canAdjust, canMarkPaid, pay
                 <Td>{fmtDate(l.date)}</Td>
                 <Td>
                   {l.category}
-                  {l.accountingCode && <div className="text-xs text-slate-400">Code {l.accountingCode}</div>}
+                  {l.accountingCode && <div className="text-xs text-slate-500">Code {l.accountingCode}</div>}
                 </Td>
                 <Td className="whitespace-normal">
                   <div className="min-w-40">{l.description}</div>
@@ -145,7 +145,7 @@ export function ExpenseDetails({ requestId, expense, canAdjust, canMarkPaid, pay
                   {l.noReceiptExplanation && <div className="mt-1 text-xs text-slate-500">No receipt: {l.noReceiptExplanation}</div>}
                   {l.financeReason && <div className="mt-1 text-xs text-red-700">Finance: {l.financeReason}</div>}
                 </Td>
-                <Td className={`tabular-nums ${l.status !== "CLAIMED" ? "text-slate-400 line-through" : ""}`}>{fmtMoney(l.amount)}</Td>
+                <Td className={`tabular-nums ${l.status !== "CLAIMED" ? "text-slate-500 line-through" : ""}`}>{fmtMoney(l.amount)}</Td>
                 <Td className="tabular-nums">
                   {fmtMoney(l.approvedAmount)}
                   {badge && <div className="mt-1"><StatusBadge status={badge.status} label={badge.label} /></div>}
@@ -156,7 +156,7 @@ export function ExpenseDetails({ requestId, expense, canAdjust, canMarkPaid, pay
                       {l.receipt.fileName.length > 22 ? `${l.receipt.fileName.slice(0, 20)}…` : l.receipt.fileName}
                     </button>
                   ) : (
-                    <span className="text-xs text-slate-400">None</span>
+                    <span className="text-xs text-slate-500">None</span>
                   )}
                 </Td>
                 {canAdjust && <Td><LineAdjust requestId={requestId} line={l} onChanged={onChanged} /></Td>}
