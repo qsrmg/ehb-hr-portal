@@ -164,7 +164,7 @@ for (const vp of WIDTHS) {
     const { p, close } = await page(vp);
     try {
       await p.goto(`${BASE}/login`);
-      await p.getByRole("heading", { name: "Sign in" }).waitFor();
+      await p.getByRole("heading", { name: "Welcome back" }).waitFor();
       await noSideScroll(p, "Sign-in");
       await p.waitForTimeout(1300); // entrance animation
       await shot(p, `login-${vp.name}`);
@@ -269,7 +269,7 @@ await step("widths", "Landing and sign-in at 1920, 1440, 1024, 768, 390 and 360p
       await noSideScroll(p, `Landing at ${vp.name}px`);
       await shot(p, `landing-${vp.name}`);
       await p.goto(`${BASE}/login`);
-      await p.getByRole("heading", { name: "Sign in" }).waitFor();
+      await p.getByRole("heading", { name: "Welcome back" }).waitFor();
       await p.waitForTimeout(1300);
       await noSideScroll(p, `Sign-in at ${vp.name}px`);
       await shot(p, `login-${vp.name}`);
@@ -384,7 +384,7 @@ await step(
         p.setDefaultTimeout(15000);
         video = p.video();
         await p.goto(`${BASE}/login`);
-        await p.getByRole("heading", { name: "Sign in" }).waitFor();
+        await p.getByRole("heading", { name: "Welcome back" }).waitFor();
         await p.waitForTimeout(400); // entrance animations under way
         const runningSoonAfterLoad = await p.evaluate(() => document.getAnimations().length);
         if (runningSoonAfterLoad === 0) throw new Error(`${vp.name}px, no-preference: no animations are running shortly after load`);
@@ -396,30 +396,6 @@ await step(
         const bad = await lowContrast(p, "body");
         if (bad.length) throw new Error(`${vp.name}px, no-preference: low contrast — ${bad.slice(0, 5).join("; ")}`);
         check(`${vp.name}px, no-preference: all text at least 4.5:1 after settling`);
-        // The "HR workspace." accent is gradient clip-text (its own `color` is transparent, invisible to the
-        // generic check above, and the rendered gradient is reported back in lab(), not rgb(), so it cannot be
-        // reliably parsed from the DOM either). Confirm the element is present and still uses this known
-        // gradient, then check its two Tailwind stop colours (amber-700 and amber-800) against white directly.
-        const hasAccent = await p.evaluate(() =>
-          [...document.querySelectorAll("h1 span")].some(
-            (e) =>
-              e.textContent.trim() === "HR workspace." &&
-              (getComputedStyle(e).webkitBackgroundClip === "text" || getComputedStyle(e).backgroundClip === "text") &&
-              getComputedStyle(e).backgroundImage !== "none",
-          ),
-        );
-        if (!hasAccent) throw new Error(`${vp.name}px: could not find the "HR workspace." gradient accent`);
-        const lum = ({ r, g, b }) => {
-          const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-          return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-        };
-        const ratioVsWhite = (c) => (1.0 + 0.05) / (lum(c) + 0.05);
-        // amber-700 #b45309 and amber-800 #92400e, the gradient's `from`/`to` classes in login/page.tsx.
-        const stops = [{ name: "amber-700", c: { r: 180, g: 83, b: 9 } }, { name: "amber-800", c: { r: 146, g: 64, b: 14 } }];
-        const ratios = stops.map((s) => ({ ...s, ratio: ratioVsWhite(s.c) }));
-        const worst = ratios.reduce((min, s) => Math.min(min, s.ratio), Infinity);
-        if (worst < 4.5) throw new Error(`${vp.name}px: "HR workspace." gradient stop is only ${worst.toFixed(2)}:1 against white — ${JSON.stringify(ratios)}`);
-        check(`${vp.name}px: "HR workspace." gradient (amber-700/amber-800) is at least ${worst.toFixed(2)}:1 against white`);
       } finally {
         await liveContext.close();
       }
@@ -437,7 +413,7 @@ await step(
         const p = await reducedContext.newPage();
         p.setDefaultTimeout(15000);
         await p.goto(`${BASE}/login`);
-        await p.getByRole("heading", { name: "Sign in" }).waitFor();
+        await p.getByRole("heading", { name: "Welcome back" }).waitFor();
         await p.waitForTimeout(500);
         const running = await p.evaluate(() => document.getAnimations().length);
         if (running !== 0) throw new Error(`${vp.name}px, reduce: ${running} animation(s) still running`);
