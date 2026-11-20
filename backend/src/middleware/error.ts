@@ -4,7 +4,8 @@ import { ZodError } from "zod";
 import { env } from "../config/env.js";
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  /** retryAfter: seconds, sent as a Retry-After header (used by rate-limited endpoints such as the activity heartbeat). */
+  constructor(public status: number, message: string, public retryAfter?: number) {
     super(message);
   }
 }
@@ -31,5 +32,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     message = "Invalid JSON body";
   }
   if (status === 500) console.error(err);
+  if (err instanceof HttpError && err.retryAfter != null) res.setHeader("Retry-After", String(err.retryAfter));
   res.status(status).json({ message: status === 500 && env.NODE_ENV === "production" ? "Internal server error" : message });
 };

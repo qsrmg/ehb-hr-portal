@@ -97,7 +97,25 @@ Also HR/Admin-editable per category (*Assets → Categories*), not global settin
 | ☐ | First password for new employees (changed at first login) | Welcome@123 | |
 | ☐ | Email service for notifications (SMTP) | Test mailbox (Mailpit) | |
 | ☐ | Who holds each role: HR, Finance, Admin, Management, HODs | Demo people | |
+| ☐ | Single sign-on (SSO) on the sign-in page | Not built — work email and password only | |
 | ☐ | Policies and HR forms to upload | Samples | |
+
+**Activity monitoring (keyboard/mouse presence time and Active %)**
+
+Off by default (`activity.enabled`, empty/off). Browser-tab only: it records a boolean ("was there any mouse/keyboard/touch/scroll activity") per minute, never which key, mouse position, page content, URL or window title — see [README.md](README.md) and `backend/src/services/activity.ts`. Nothing from this feature feeds appraisal, increment or disciplinary decisions automatically, and nothing here does that on its own.
+
+| Setting | Controls | Default | Decide |
+|---|---|---|---|
+| `activity.idleThresholdMinutes` | Minutes with no input before a minute counts as idle (a short gap after real activity still counts as active) | 5 | HR |
+| `activity.retentionDays` | Days an employee's daily totals are kept before a nightly job deletes them | 90 | HR |
+| `activity.breakWindows` | Daily windows (e.g. lunch, prayer) excluded from tracking entirely | Empty (none) | HR |
+| `activity.allowPause` / `activity.pauseMaxMinutesPerDay` | Lets an employee pause their own tracking, capped at this many minutes a day | Both off (allowPause off, cap 0) | HR |
+| Who is tracked | A single global on/off plus a per-employee exclusion list (*Admin → Activity monitoring*); per-department rules were not built | Exclusion list only | HR |
+| Who sees individual day-by-day detail | Only HR (not Finance, not Management); Line Managers and HR both see only team/company averages (never a colleague's own %) | HR only | HR/Management |
+| **"Checked in" proxy** | There is no live attendance check-in in this portal (attendance comes from the biometric import, after the fact — see `backend/src/modules/attendance.ts`), so tracking is gated on: office hours, not a weekend or configured holiday, no approved leave or travel for the day (reusing the existing holiday/leave/travel checks from `backend/src/services/attendance.ts`), the tab being open, acknowledged and not excluded — instead of a real check-in/check-out event. **Recommendation: keep this proxy until a real employee-initiated check-in exists.** | Office hours + working day + tab open (proxy) | HR/Management |
+| Legal/HR policy review of the tracking text shown to employees (`backend/src/services/activity.ts`, `POLICY_TEXT`) | Required before switching `activity.enabled` on company-wide | Not reviewed | HR/Legal |
+| Use in appraisal, increment or disciplinary decisions | **Recommended: never** — no code path connects this feature to those modules today; keep it that way | No automatic use | Management |
+| A desktop agent for activity outside the browser tab | Out of scope; not built | Not built | Management |
 
 ---
 

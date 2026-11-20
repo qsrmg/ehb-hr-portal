@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
 const TOKEN_KEY = "hr_token";
 export const SESSION_ENDED_EVENT = "hr:session-ended";
 

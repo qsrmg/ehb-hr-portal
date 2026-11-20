@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
 import {
-  FINANCE_SETTING_PREFIXES, getSettings, isBooleanSetting, isOptionalSetting, isRoleSetting, isTextSetting, listSettingValues, ROLE_VALUES, SETTING_DEFAULTS, type SettingKey,
+  FINANCE_SETTING_PREFIXES, getSettings, isBooleanSetting, isOptionalSetting, isRoleSetting, isTextSetting, listSettingValues, ROLE_VALUES, SETTING_DEFAULTS, settingHint, type SettingKey,
 } from "../lib/settings.js";
 import { toDate, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
@@ -47,7 +47,7 @@ adminRouter.get("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
   res.json(
     Object.entries(SETTING_DEFAULTS)
       .filter(([key]) => editableBy(user, key))
-      .map(([key, def]) => ({ key, label: def.label, value: values[key as SettingKey], default: def.value, optional: isOptionalSetting(key as SettingKey), boolean: isBooleanSetting(key as SettingKey) })),
+      .map(([key, def]) => ({ key, label: def.label, value: values[key as SettingKey], default: def.value, optional: isOptionalSetting(key as SettingKey), boolean: isBooleanSetting(key as SettingKey), hint: settingHint(key as SettingKey) })),
   );
 });
 
@@ -81,6 +81,8 @@ adminRouter.put("/settings", requireRole("HR", "FINANCE"), async (req, res) => {
       if (value.length < 2 || value.length > 40) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter a name of 2 to 40 characters`);
     } else if (isBooleanSetting(key as SettingKey)) {
       if (value !== "0" && value !== "1") throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: on or off`);
+    } else if (key === "activity.breakWindows") {
+      if (!/^\d{2}:\d{2}-\d{2}:\d{2}(,\d{2}:\d{2}-\d{2}:\d{2})*$/.test(value)) throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: use HH:MM-HH:MM, comma-separated`);
     } else if (isTime ? !/^\d{2}:\d{2}$/.test(value) : !/^\d+(\.\d+)?$/.test(value)) {
       throw new HttpError(400, `${SETTING_DEFAULTS[key as SettingKey].label}: enter ${isTime ? "a time as HH:MM" : "a number"}`);
     }
@@ -119,7 +121,7 @@ adminRouter.get("/audit", requireRole("HR", "MANAGEMENT"), async (req, res) => {
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({
       where, orderBy: { createdAt: "desc" }, skip: (page - 1) * 50, take: 50,
-      include: { actor: { select: { fullName: true, code: true } } },
+      include: { actor: { select: { id: true, fullName: true, code: true } } },
     }),
   ]);
   res.json({ total, page, pageSize: 50, items: rows });
