@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { minutesToHm, MONTHS, parseMonth, toDate, todayYmd } from "../lib/dates.js";
+import { minutesToHm, MONTHS, parseMonth, toDate, todayYmd, ymd } from "../lib/dates.js";
 import { currentUser, hasRole, requireAuth } from "../middleware/auth.js";
 import { monthlyAttendance } from "../services/attendance.js";
 import { balancesFor } from "../services/leave.js";
@@ -16,7 +16,7 @@ dashboardRouter.get("/", async (req, res) => {
   const today = todayYmd();
   const { year, month } = parseMonth(undefined);
 
-  const [todayRecord, attendance, balances, myPending, tasks, unread, latestPayslip, recent, settings, annual] = await Promise.all([
+  const [todayRecord, attendance, balances, myPending, tasks, unread, latestPayslip, recent, settings, annual, nextLeaveRow] = await Promise.all([
     prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: user.id, date: toDate(today) } } }),
     monthlyAttendance(user.id, year, month),
     balancesFor(user.id, year),
@@ -42,6 +42,11 @@ dashboardRouter.get("/", async (req, res) => {
     }),
     getSettings(),
     prisma.leaveType.findUnique({ where: { code: "AL" }, select: { carryForwardMax: true } }),
+    prisma.leaveRequest.findFirst({
+      where: { request: { employeeId: user.id, status: "APPROVED" }, startDate: { gte: toDate(today) } },
+      orderBy: { startDate: "asc" },
+      include: { leaveType: { select: { name: true } } },
+    }),
   ]);
   const stepLabel = (r: (typeof recent)[number]) => (r.status === "PENDING" ? r.steps.find((s) => s.order === r.currentStep)?.label ?? null : null);
 
@@ -53,6 +58,20 @@ dashboardRouter.get("/", async (req, res) => {
       prisma.leaveRequest.count({ where: { startDate: { lte: toDate(today) }, endDate: { gte: toDate(today) }, request: { status: "APPROVED" } } }),
     ]);
     hr = { lateWarningsThisMonth: lateWarnings, activeEmployees: employees, onLeaveToday };
+  }
+
+  // Line Manager (and anyone else with direct reports, short of HR's own company-wide figure above): how
+  // many of their own reports are on leave today — the same `managerId: user.id` "my team" scope already
+  // used for Team and Attendance, never the whole company.
+  let team = null;
+  if (!hr) {
+    const [reportsCount, onLeaveToday] = await Promise.all([
+      prisma.employee.count({ where: { managerId: user.id, status: "ACTIVE" } }),
+      prisma.leaveRequest.count({
+        where: { startDate: { lte: toDate(today) }, endDate: { gte: toDate(today) }, request: { status: "APPROVED", employee: { managerId: user.id } } },
+      }),
+    ]);
+    if (reportsCount > 0) team = { onLeaveToday };
   }
 
   res.json({
@@ -82,6 +101,10 @@ dashboardRouter.get("/", async (req, res) => {
     })),
     unreadNotifications: unread,
     latestPayslip: latestPayslip ? { id: latestPayslip.id, year: latestPayslip.year, month: latestPayslip.month, monthName: MONTHS[latestPayslip.month - 1], netPay: Number(latestPayslip.netPay) } : null,
+    nextLeave: nextLeaveRow
+      ? { leaveType: nextLeaveRow.leaveType.name, startDate: ymd(nextLeaveRow.startDate), endDate: ymd(nextLeaveRow.endDate), days: Number(nextLeaveRow.days) }
+      : null,
     hr,
+    team,
   });
 });

@@ -2,18 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Calendar as CalendarIcon, CheckSquare, ClipboardList, ShieldAlert, UserCheck, Users } from "lucide-react";
-import { Alert, Card, Empty, Spinner } from "@/components/ui";
+import { Calendar as CalendarIcon, CalendarClock, CheckSquare, ClipboardList, ShieldAlert, TrendingUp, UserCheck, Users } from "lucide-react";
+import { Alert, Empty, Spinner } from "@/components/ui";
+import { GlassCard } from "@/components/dashboard/GlassCard";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AttendanceAnalytics, type AttendanceDay, type AttendanceSummary } from "@/components/dashboard/AttendanceAnalytics";
 import { AttendanceStatusRings } from "@/components/dashboard/AttendanceStatusRings";
 import { LeaveDoughnut, type LeaveBalance } from "@/components/dashboard/LeaveDoughnut";
 import { RequestsPanel, type RequestRow } from "@/components/dashboard/RequestsPanel";
+import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useAuth, type User } from "@/lib/auth";
 import { download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
-import { currentMonth, fmtDateTime, fmtMoney, MONTH_NAMES } from "@/lib/format";
+import { currentMonth, fmtDate, fmtDateTime, fmtMoney, MONTH_NAMES } from "@/lib/format";
 
 // Premium dashboard: a white, card-based redesign of the same real data the previous dashboard showed
 // (nothing here is demonstration/hardcoded data — see the API calls below). The sidebar and every other
@@ -29,8 +31,10 @@ type Dashboard = {
   recent: RequestRow[];
   tasks: { requestId: number; type: string; title: string; typeLabel: string; step: string; employee: string; pendingSince: string }[];
   latestPayslip: { id: number; monthName: string; month: number; year: number; netPay: number } | null;
+  nextLeave: { leaveType: string; startDate: string; endDate: string; days: number } | null;
   rules: { lateAfter: string; payslipsDueDay: number; annualCarryForwardMax: number | null };
   hr: { lateWarningsThisMonth: number; activeEmployees: number; onLeaveToday: number } | null;
+  team: { onLeaveToday: number } | null;
   unreadNotifications: number;
 };
 
@@ -66,6 +70,15 @@ export default function DashboardPage() {
 
   const approver = isApprover(user);
   const quota = data.balances.filter((b) => b.hasQuota);
+  const monthSummary = monthData.data?.summary;
+  const monthTotal = monthSummary ? monthSummary.onTime + monthSummary.late + monthSummary.halfDay + monthSummary.absent : 0;
+  const monthInsight = !monthSummary || monthTotal === 0
+    ? "No attendance recorded yet this month."
+    : (() => {
+        const onTimePct = Math.round((monthSummary.onTime / monthTotal) * 100);
+        const lateNote = monthSummary.late ? `, with ${monthSummary.late} late arrival${monthSummary.late === 1 ? "" : "s"}` : "";
+        return `Attendance is ${onTimePct}% on-time this month${lateNote}.`;
+      })();
   const nextPayslip = (() => {
     if (!data.latestPayslip) return null;
     const m = data.latestPayslip.month === 12 ? 1 : data.latestPayslip.month + 1;
@@ -87,13 +100,24 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="relative isolate -mx-4 -my-6 overflow-hidden rounded-3xl bg-gradient-to-b from-[#eff6ff] via-[#dbeafe] to-white px-4 py-6 sm:-mx-6 sm:px-6 lg:-my-8 lg:py-8">
+      {/* Soft blue-white page backdrop for this one page — the rest of the portal keeps its own background. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-16 right-0 h-80 w-80 rounded-full bg-blue-200/35 blur-3xl" />
+        <div className="absolute -left-20 top-1/3 h-64 w-64 rounded-full bg-sky-100/50 blur-3xl" />
+        <svg aria-hidden="true" viewBox="0 0 1440 160" preserveAspectRatio="none" className="absolute bottom-0 left-0 h-28 w-full opacity-60">
+          <path d="M0,90 C240,130 480,50 720,80 C960,110 1200,40 1440,70 L1440,160 L0,160 Z" fill="#dbeafe" />
+          <path d="M0,120 C300,80 600,150 900,110 C1100,85 1300,140 1440,110 L1440,160 L0,160 Z" fill="#eff6ff" />
+        </svg>
+      </div>
+      <div className="relative space-y-6">
       <DashboardHeader
         user={user}
         today={data.today}
         unreadNotifications={data.unreadNotifications}
         latestPayslipId={data.latestPayslip?.id ?? null}
         onDownloadPayslip={() => download(`/payroll/payslips/${data.latestPayslip!.id}/pdf`, `payslip-${data.latestPayslip!.year}-${data.latestPayslip!.month}.pdf`)}
+        activeEmployees={data.hr?.activeEmployees}
       />
 
       {/* KPI cards: only ever real, role-appropriate data — see KpiCard for the "not shown for your role" rule. */}
@@ -108,6 +132,7 @@ export default function DashboardPage() {
         />
         <KpiCard label="My pending requests" value={data.myPending.length} icon={ClipboardList} tone="violet" href="/requests" hint={data.myPending[0]?.currentStepLabel ? `Waiting with ${data.myPending[0].currentStepLabel}` : undefined} />
         {approver && <KpiCard label="Waiting for your approval" value={data.tasks.length} icon={UserCheck} tone="sun" href="/approvals" hint={data.tasks.length ? "Needs your decision" : "Nothing waiting"} />}
+        {data.team && <KpiCard label="Team on leave today" value={data.team.onLeaveToday} icon={CalendarIcon} tone="primary" href="/team" />}
         {data.hr && <KpiCard label="Active employees" value={data.hr.activeEmployees} icon={Users} tone="emerald" href="/admin/employees" />}
         {data.hr && <KpiCard label="On leave today" value={data.hr.onLeaveToday} icon={CalendarIcon} tone="primary" href="/team" />}
         {data.hr && <KpiCard label="Late warnings this month" value={data.hr.lateWarningsThisMonth} icon={ShieldAlert} tone="red" href="/admin/late-warnings" />}
@@ -132,7 +157,19 @@ export default function DashboardPage() {
 
         <div className="space-y-6">
           {approver && (
-            <Card title="Waiting for your approval" actions={<Link href="/approvals" className="text-sm font-semibold text-accent hover:underline">All approvals</Link>}>
+            <GlassCard
+              title={
+                <span className="inline-flex items-center gap-2">
+                  Waiting for your approval
+                  {data.tasks.length > 0 && (
+                    <span className="inline-flex items-center rounded-full bg-sun/20 px-2 py-0.5 text-xs font-bold text-amber-800">
+                      {data.tasks.length} pending approval{data.tasks.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </span>
+              }
+              actions={<Link href="/approvals" className="text-sm font-semibold text-accent hover:underline">All approvals</Link>}
+            >
               {actionError && <Alert>{actionError}</Alert>}
               {data.tasks.length === 0 ? (
                 <Empty>Nothing waiting for you.</Empty>
@@ -155,10 +192,28 @@ export default function DashboardPage() {
                   {data.tasks.length > 4 && <li className="text-sm text-slate-500">and {data.tasks.length - 4} more in Approvals.</li>}
                 </ul>
               )}
-            </Card>
+            </GlassCard>
           )}
 
-          <Card title="Pay slips" actions={<Link href="/payslips" className="text-sm font-semibold text-accent hover:underline">All pay slips</Link>}>
+          <GlassCard title="Upcoming leave" actions={<Link href="/leave" className="text-sm font-semibold text-accent hover:underline">View leave</Link>}>
+            {data.nextLeave ? (
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <CalendarClock className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <div className="font-bold text-charcoal">
+                    {fmtDate(data.nextLeave.startDate)}{data.nextLeave.startDate !== data.nextLeave.endDate ? ` – ${fmtDate(data.nextLeave.endDate)}` : ""} ({data.nextLeave.days} day{data.nextLeave.days === 1 ? "" : "s"})
+                  </div>
+                  <div className="text-xs text-slate-500">{data.nextLeave.leaveType} · Approved</div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No upcoming approved leave.</p>
+            )}
+          </GlassCard>
+
+          <GlassCard title="Pay slips" actions={<Link href="/payslips" className="text-sm font-semibold text-accent hover:underline">All pay slips</Link>}>
             {data.latestPayslip ? (
               <>
                 <div className="flex items-center justify-between gap-3">
@@ -177,8 +232,21 @@ export default function DashboardPage() {
             ) : (
               <p className="text-sm text-slate-500">No pay slips uploaded yet. They are available by the {ordinal(data.rules.payslipsDueDay)} of each month.</p>
             )}
-          </Card>
+          </GlassCard>
         </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <RecentActivity rows={data.recent} />
+        <GlassCard title="This month">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+              <TrendingUp className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <p className="text-sm leading-relaxed text-slate-700">{monthInsight}</p>
+          </div>
+        </GlassCard>
+      </div>
       </div>
     </div>
   );

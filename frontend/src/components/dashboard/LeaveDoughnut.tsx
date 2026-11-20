@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, Empty } from "@/components/ui";
+import { Empty } from "@/components/ui";
+import { GlassCard } from "./GlassCard";
 
 export type LeaveBalance = { leaveTypeId: number; name: string; code: string; available: number | null; entitled: number; carriedForward: number; pending: number };
 
@@ -42,7 +43,7 @@ export function LeaveDoughnut({ balances }: { balances: LeaveBalance[] }) {
   ).list;
 
   return (
-    <Card title="Leave balance" actions={<Link href="/leave" className="text-sm font-semibold text-accent hover:underline">Details</Link>}>
+    <GlassCard title="Leave balance" actions={<Link href="/leave" className="text-sm font-semibold text-accent hover:underline">Details</Link>}>
       {rows.length === 0 ? (
         <Empty>No leave quotas apply to your record.</Empty>
       ) : (
@@ -97,6 +98,6 @@ export function LeaveDoughnut({ balances }: { balances: LeaveBalance[] }) {
           </div>
         </div>
       )}
-    </Card>
+    </GlassCard>
   );
 }

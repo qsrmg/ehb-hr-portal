@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { MoreRequests } from "@/components/MoreRequests";
-import { HeaderIllustration3D } from "./HeaderIllustration3D";
+import { HeaderOrbit3D } from "./HeaderOrbit3D";
 import type { User } from "@/lib/auth";
 
 function greeting() {
@@ -24,16 +24,19 @@ const primary = "inline-flex items-center justify-center rounded-lg bg-primary p
  * exactly what a "plays once, then stays put" entrance needs; Framer Motion is reserved for the sign-in
  * page's more elaborate word-by-word choreography, where a simple CSS class could not do the job alone.
  */
-export function DashboardHeader({ user, today, unreadNotifications, latestPayslipId, onDownloadPayslip }: {
+export function DashboardHeader(props: {
   user: User;
   today: string;
   unreadNotifications: number;
   latestPayslipId: number | null;
   onDownloadPayslip: () => void;
+  // Unused while the header illustration is HeaderOrbit3D.
+  activeEmployees?: number | null;
 }) {
+  const { user, today, unreadNotifications, latestPayslipId, onDownloadPayslip } = props;
   return (
-    <div className="relative flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-[#f3f7ff] p-6 shadow-[0_1px_2px_rgba(16,31,58,.04),0_8px_24px_-14px_rgba(16,31,58,.1)]">
-      <div className="min-w-0">
+    <div className="relative flex min-h-[170px] flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-[#f3f7ff] p-6 shadow-[0_1px_2px_rgba(16,31,58,.04),0_8px_24px_-14px_rgba(16,31,58,.1)] xl:min-h-[280px]">
+      <div className="relative z-10 min-w-0 pr-12 xl:w-1/2 xl:pr-0">
         <p className="anim-fade-up flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" style={{ "--i": 0 } as React.CSSProperties}>
           <span className="h-1.5 w-1.5 rounded-full bg-sun" aria-hidden="true" />
           {longDate(today)}
@@ -51,10 +54,10 @@ export function DashboardHeader({ user, today, unreadNotifications, latestPaysli
           <MoreRequests className={outline} />
         </div>
       </div>
-      <HeaderIllustration3D />
+      <HeaderOrbit3D />
       <Link
         href="/notifications"
-        className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition duration-200 hover:border-slate-300 hover:text-charcoal"
+        className="absolute right-6 top-6 z-20 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition duration-200 hover:border-slate-300 hover:text-charcoal"
         aria-label={`Notifications (${unreadNotifications} unread)`}
       >
         <Bell className="h-5 w-5" aria-hidden="true" />

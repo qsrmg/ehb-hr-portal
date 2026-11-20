@@ -1,7 +1,8 @@
 "use client";
 
-import { Card, Empty } from "@/components/ui";
-import { CircularProgress } from "./CircularProgress";
+import { Empty } from "@/components/ui";
+import { GlassCard } from "./GlassCard";
+import { StatusDoughnut } from "./StatusDoughnut";
 
 const ROWS: { key: "onTime" | "late" | "halfDay" | "absent"; label: string; color: string }[] = [
   { key: "onTime", label: "On-Time", color: "#10b981" },
@@ -11,43 +12,41 @@ const ROWS: { key: "onTime" | "late" | "halfDay" | "absent"; label: string; colo
 ];
 
 /**
- * Four circular indicators for this month's attendance composition. The denominator is every day with a
- * recorded outcome (on-time + late + half-day + absent) — the same base the existing progress bar and the
- * "% on time" figure already use, excluding leave, travel, weekends, holidays and days not yet imported.
+ * This month's attendance composition as one combined donut (same real summary the Attendance analytics
+ * card and the Attendance page already use) with a legend of counts and shares — the centre shows the total
+ * number of days recorded, not any single status, so the headline never misrepresents which status leads.
  */
 export function AttendanceStatusRings({ summary }: { summary: { onTime: number; late: number; halfDay: number; absent: number } }) {
   const total = summary.onTime + summary.late + summary.halfDay + summary.absent;
   return (
-    <Card title="Attendance status" actions={total ? <span className="text-sm text-slate-500">{total} day{total === 1 ? "" : "s"} recorded</span> : undefined}>
+    <GlassCard title="Attendance status" actions={total ? <span className="text-sm text-slate-500">{total} day{total === 1 ? "" : "s"} recorded</span> : undefined}>
       {total === 0 ? (
         <Empty>No attendance recorded yet this month.</Empty>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {ROWS.map(({ key, label, color }) => {
-            const count = summary[key];
-            const pct = total ? (count / total) * 100 : 0;
-            return (
-              <div key={key} className="flex flex-col items-center gap-2 text-center" title={`${label}: ${count} of ${total} day${total === 1 ? "" : "s"}`}>
-                <CircularProgress
-                  percent={pct}
-                  color={color}
-                  size={88}
-                  strokeWidth={9}
-                  centerLabel={
-                    <div className="flex flex-col items-center">
-                      <span data-testid="ring-percent" className="text-lg font-extrabold tabular-nums text-charcoal">{Math.round(pct)}%</span>
-                    </div>
-                  }
-                />
-                <div>
-                  <div className="text-sm font-semibold text-slate-700">{label}</div>
-                  <div className="text-xs text-slate-500">{count} day{count === 1 ? "" : "s"}</div>
+        <div className="flex flex-col items-center gap-6 sm:flex-row">
+          <StatusDoughnut
+            segments={ROWS.map((r) => ({ key: r.key, label: r.label, color: r.color, value: summary[r.key] }))}
+            centerValue={total}
+            centerLabel={`day${total === 1 ? "" : "s"} recorded`}
+            ariaLabel={`This month's attendance: ${ROWS.map((r) => `${r.label} ${summary[r.key]} of ${total}`).join(", ")}`}
+          />
+          <div className="w-full min-w-0 space-y-3">
+            {ROWS.map(({ key, label, color }) => {
+              const count = summary[key];
+              const pct = total ? Math.round((count / total) * 100) : 0;
+              return (
+                <div key={key} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-slate-700">
+                    <span className="h-2 w-2 rounded-full" style={{ background: color }} aria-hidden="true" />
+                    {label}
+                  </span>
+                  <span data-testid="ring-percent" className="text-slate-500">{count} day{count === 1 ? "" : "s"} · {pct}%</span>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
-    </Card>
+    </GlassCard>
   );
 }

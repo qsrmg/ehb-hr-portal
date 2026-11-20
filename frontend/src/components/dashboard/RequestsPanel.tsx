@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Card, Empty, Table, Td } from "@/components/ui";
+import { Empty, Table, Td } from "@/components/ui";
+import { GlassCard } from "./GlassCard";
 import { fmtDate } from "@/lib/format";
 
 export type RequestRow = { id: number; title: string; typeLabel: string; status: string; updatedAt: string; currentStepLabel: string | null };
@@ -24,7 +25,7 @@ const STATUS_LABEL: Record<string, string> = {
  * existing /requests data, restyled with the brief's status colours. Every row still links to the request. */
 export function RequestsPanel({ rows }: { rows: RequestRow[] }) {
   return (
-    <Card title="My requests" actions={<Link href="/requests" className="text-sm font-semibold text-accent hover:underline">All requests</Link>}>
+    <GlassCard title="My requests" actions={<Link href="/requests" className="text-sm font-semibold text-accent hover:underline">All requests</Link>}>
       {rows.length === 0 ? (
         <Empty>You have not submitted any requests yet.</Empty>
       ) : (
@@ -50,6 +51,6 @@ export function RequestsPanel({ rows }: { rows: RequestRow[] }) {
           })}
         </Table>
       )}
-    </Card>
+    </GlassCard>
   );
 }

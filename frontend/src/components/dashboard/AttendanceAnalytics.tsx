@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Card, Spinner } from "@/components/ui";
+import { useMemo } from "react";
+import { Spinner } from "@/components/ui";
+import { GlassCard } from "./GlassCard";
 import { MonthPicker } from "@/components/AttendanceMonth";
+import { StatusDoughnut } from "./StatusDoughnut";
 import { fmtDate } from "@/lib/format";
 
 export type AttendanceDay = { date: string; status: string; checkIn: string | null };
@@ -19,33 +21,10 @@ const NOT_A_WORKING_RECORD = new Set(["WEEKEND", "HOLIDAY", "NO_DATA", "UPCOMING
 const hmToMinutes = (hm: string) => { const [h, m] = hm.split(":").map(Number) as [number, number]; return h * 60 + m; };
 const fmtHm = (min: number) => { const h = Math.floor(min / 60); const m = Math.round(min % 60); const h12 = h % 12 || 12; return `${h12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 
-/** A bar growing from 0 to its share of the tallest bar, once, when the month's data is ready. */
-function Bar({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
-  const [grown, setGrown] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setGrown(true));
-    return () => cancelAnimationFrame(id);
-  }, [value]);
-  const pct = grown && max ? (value / max) * 100 : 0;
-  return (
-    <div className="flex flex-1 flex-col items-center gap-2">
-      <div className="text-sm font-bold tabular-nums text-charcoal">{value}</div>
-      <div className="flex h-32 w-full items-end overflow-hidden rounded-lg bg-track">
-        <div
-          className="w-full rounded-t-lg motion-safe:transition-[height] motion-safe:duration-700 motion-safe:ease-out"
-          style={{ height: `${pct}%`, minHeight: value ? 4 : 0, background: color }}
-          title={`${label}: ${value} day${value === 1 ? "" : "s"}`}
-        />
-      </div>
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-    </div>
-  );
-}
-
 /**
- * Attendance analytics for the selected month: a bar chart of the four recorded statuses, and a check-in
- * time trend line from the same month's real day-by-day records (both from /attendance/me, the same
- * endpoint the Attendance page uses — no new backend data).
+ * Attendance analytics for the selected month: a donut of the four recorded statuses with a legend, and a
+ * check-in time trend line from the same month's real day-by-day records (both from /attendance/me, the
+ * same endpoint the Attendance page uses — no new backend data).
  */
 export function AttendanceAnalytics({
   month, onMonthChange, summary, days, lateAfter, loading,
@@ -57,7 +36,7 @@ export function AttendanceAnalytics({
   lateAfter: string;
   loading: boolean;
 }) {
-  const max = Math.max(1, ...STATUS.map((s) => summary[s.key]));
+  const total = STATUS.reduce((s, x) => s + summary[x.key], 0);
   const linePoints = useMemo(
     () => days.filter((d) => d.checkIn && !NOT_A_WORKING_RECORD.has(d.status)).map((d) => ({ date: d.date, minutes: hmToMinutes(d.checkIn!) })),
     [days],
@@ -76,18 +55,42 @@ export function AttendanceAnalytics({
   const lateY = yFor(lateCutoff);
 
   return (
-    <Card title="Attendance analytics" actions={<MonthPicker month={month} onChange={onMonthChange} />}>
+    <GlassCard title="Attendance analytics" actions={<MonthPicker month={month} onChange={onMonthChange} />}>
       {loading ? (
         <Spinner />
       ) : (
         <div key={month} className="anim-fade-in-fast grid gap-8 lg:grid-cols-2">
           <div>
             <div className="mb-3 text-sm font-semibold text-slate-600">This month, by status</div>
-            <div className="flex items-end gap-3">
-              {STATUS.map((s) => (
-                <Bar key={s.key} value={summary[s.key]} max={max} color={s.color} label={s.label} />
-              ))}
-            </div>
+            {total === 0 ? (
+              <p className="flex h-32 items-center text-sm text-slate-500">No attendance recorded yet this month.</p>
+            ) : (
+              <div className="flex items-center gap-6">
+                <StatusDoughnut
+                  segments={STATUS.map((s) => ({ key: s.key, label: s.label, color: s.color, value: summary[s.key] }))}
+                  size={112}
+                  strokeWidth={16}
+                  centerValue={total}
+                  centerLabel="Total"
+                  ariaLabel={`This month's attendance: ${STATUS.map((s) => `${s.label} ${summary[s.key]} of ${total}`).join(", ")}`}
+                />
+                <ul className="min-w-0 flex-1 space-y-1.5">
+                  {STATUS.map((s) => {
+                    const count = summary[s.key];
+                    const pct = total ? Math.round((count / total) * 100) : 0;
+                    return (
+                      <li key={s.key} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="inline-flex items-center gap-1.5 font-medium text-slate-600">
+                          <span className="h-2 w-2 rounded-full" style={{ background: s.color }} aria-hidden="true" />
+                          {s.label}
+                        </span>
+                        <span className="tabular-nums text-slate-500">{count} · {pct}%</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
           <div>
             <div className="mb-3 text-sm font-semibold text-slate-600">Check-in time trend</div>
@@ -108,6 +111,6 @@ export function AttendanceAnalytics({
           </div>
         </div>
       )}
-    </Card>
+    </GlassCard>
   );
 }
