@@ -16,17 +16,17 @@ export const SETTING_DEFAULTS = {
   "office.end": { value: "18:00", label: "Office hours end" },
   "payroll.availableByDay": { value: "5", label: "Day of the month pay slips are due" },
   // Expense claims: HR or Finance can change these. Empty means "no limit" / "off".
-  "expense.maxPerClaim": { value: "", label: "Maximum total per expense claim (PKR, empty = no limit)", optional: true },
-  "expense.maxPerMonth": { value: "", label: "Maximum claimed per employee per month (PKR, empty = no limit)", optional: true },
-  "expense.managementApprovalAbove": { value: "", label: "Claims above this total also need Management/CEO approval (PKR, empty = off)", optional: true },
+  "expense.maxPerClaim": { value: "", label: "Maximum total per expense claim (PKR)", optional: true },
+  "expense.maxPerMonth": { value: "", label: "Maximum claimed per employee per month (PKR)", optional: true },
+  "expense.managementApprovalAbove": { value: "", label: "Claims above this total also need Management/CEO approval (PKR)", optional: true },
   "expense.receiptOptionalBelow": { value: "500", label: "Lines below this amount may have a written explanation instead of a receipt (PKR)" },
   "expense.maxAgeDays": { value: "30", label: "Expenses older than this many days cannot be claimed" },
   // Travel: HR or Finance can change these. Empty means "off" / "no limit".
-  "travel.managementApprovalAbove": { value: "", label: "Trips with an estimated cost above this also need Management/CEO approval (PKR, empty = off)", optional: true },
-  "travel.maxAdvance": { value: "", label: "Maximum travel advance per trip (PKR, empty = no limit)", optional: true },
-  "travel.perDiemRate": { value: "", label: "Daily allowance per trip day (PKR, empty = meals are claimed with receipts)", optional: true },
-  "travel.mileageRatePerKm": { value: "", label: "Own-car mileage rate per km (PKR, empty = mileage cannot be claimed)", optional: true },
-  "travel.hotelLimitPerNight": { value: "", label: "Hotel limit per night (PKR, empty = no limit)", optional: true },
+  "travel.managementApprovalAbove": { value: "", label: "Trips with an estimated cost above this also need Management/CEO approval (PKR)", optional: true },
+  "travel.maxAdvance": { value: "", label: "Maximum travel advance per trip (PKR)", optional: true },
+  "travel.perDiemRate": { value: "", label: "Daily allowance per trip day (PKR)", optional: true, hint: "Empty: meals are claimed with receipts instead" },
+  "travel.mileageRatePerKm": { value: "", label: "Own-car mileage rate per km (PKR)", optional: true, hint: "Empty: mileage cannot be claimed" },
+  "travel.hotelLimitPerNight": { value: "", label: "Hotel limit per night (PKR)", optional: true },
   "travel.settlementDays": { value: "15", label: "Days after return within which the trip settlement must be submitted" },
   // Resignation & exit clearance
   "exit.noticeDays": { value: "30", label: "Resignation notice period for confirmed employees (days)" },
@@ -49,19 +49,28 @@ export const SETTING_DEFAULTS = {
   "hiring.minPerformanceRating": { value: "0", label: "Minimum last performance rating to apply for an internal job (1-5, 0 = off)" },
   "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
   // Training request (Phase 3): HR or Finance can change this. Empty means "off".
-  "training.managementApprovalAbove": { value: "", label: "Training programmes above this estimated cost also need Management/CEO approval (PKR, empty = off)", optional: true },
+  "training.managementApprovalAbove": { value: "", label: "Training programmes above this estimated cost also need Management/CEO approval (PKR)", optional: true },
   // Employee Assets Management Policy / Cyber Security Incident Response Policy: left open by the policy,
   // so these are HR-editable settings, empty (off) by default. See DECISIONS.md.
-  "assets.recoveryApprovalThreshold": { value: "", label: "Asset recoveries above this amount also need Management approval (PKR, empty = off)", optional: true },
+  "assets.recoveryApprovalThreshold": { value: "", label: "Asset recoveries above this amount also need Management approval (PKR)", optional: true },
   "assets.cyberSecurityNotifyRole": { value: "", label: "Role also notified when a data-bearing asset is reported lost, stolen or damaged (one of: EMPLOYEE, LINE_MANAGER, HOD, HR, FINANCE, ADMIN, MANAGEMENT; empty = off)", optional: true, role: true },
-  "assets.auditReminderMonths": { value: "", label: "Remind Admin to start an asset verification round every this many months (empty = no reminder)", optional: true },
+  "assets.auditReminderMonths": { value: "", label: "Remind Admin to start an asset verification round every this many months", optional: true, hint: "Empty: no reminder" },
   "assets.policeReportRequiredTypes": { value: "", label: "Report types that should have a police report attached, comma-separated (DAMAGED, LOST; empty = HR or Admin decide case by case)", optional: true, list: INCIDENT_LIST_VALUES },
   "assets.recoveryMethod": { value: "", label: "How asset recovery amounts are worked out, shown for reference on the recovery form (empty = Finance enters the amount by hand; the portal has no depreciation formula)", optional: true, text: true },
-} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean; role?: boolean; list?: readonly string[] }>;
+  // Activity monitoring (keyboard/mouse presence time, never content): off by default. See DECISIONS.md.
+  "activity.enabled": { value: "0", label: "Turn on activity monitoring (tracked time and Active %) for the portal", boolean: true },
+  "activity.idleThresholdMinutes": { value: "5", label: "Minutes with no input before a minute counts as idle" },
+  "activity.retentionDays": { value: "90", label: "Days an employee's daily activity totals are kept before they are deleted" },
+  "activity.breakWindows": { value: "", label: "Daily break windows excluded from tracking, comma-separated HH:MM-HH:MM (e.g. lunch, prayer)", optional: true },
+  "activity.allowPause": { value: "0", label: "Let employees pause their own activity tracking", boolean: true },
+  "activity.pauseMaxMinutesPerDay": { value: "0", label: "Maximum minutes an employee may pause tracking per day (0 = pausing not allowed even if switched on above)" },
+} as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean; role?: boolean; list?: readonly string[]; hint?: string }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 
 export const isOptionalSetting = (key: SettingKey) => "optional" in SETTING_DEFAULTS[key];
+/** Extra helper text shown only when emptying the field means something more specific than "no limit" / "off". */
+export const settingHint = (key: SettingKey) => (SETTING_DEFAULTS[key] as { hint?: string }).hint ?? null;
 /** Settings whose value is a name rather than a number or a time. */
 export const isTextSetting = (key: SettingKey) => "text" in SETTING_DEFAULTS[key];
 /** Settings that are an on/off switch, stored as "1" or "0" rather than shown as a number. */

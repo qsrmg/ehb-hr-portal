@@ -48,7 +48,7 @@ export function OrbitFallbackDark({ nodes, hubTitle, hubSubtitle, className = ""
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary">
               <Icon className="h-3.5 w-3.5 text-white" aria-hidden="true" />
             </span>
-            <span className="text-[11px] font-semibold leading-none text-white sm:text-[12px]">{node.label}</span>
+            <span className="text-[12px] font-semibold leading-none text-white sm:text-[13px]">{node.label}</span>
           </div>
         );
       })}

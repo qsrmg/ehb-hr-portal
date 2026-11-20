@@ -27,20 +27,20 @@ function CardShell({
       <div
         role="img"
         aria-label={label}
-        className="relative overflow-hidden rounded-2xl border border-white/20 bg-[rgba(255,255,255,0.12)] p-4 shadow-[0_18px_40px_-20px_rgba(5,12,40,.6)] backdrop-blur-md transition-transform duration-200 motion-safe:group-hover:-translate-y-1"
+        className="relative flex h-[156px] flex-col overflow-hidden rounded-2xl border border-white/20 bg-[rgba(255,255,255,0.12)] p-3.5 shadow-[0_18px_40px_-20px_rgba(5,12,40,.6)] backdrop-blur-md transition-transform duration-200 motion-safe:group-hover:-translate-y-1"
       >
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-sun/80 to-transparent" />
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-6 -bottom-1.5 h-4 rounded-full bg-sun/25 blur-md" />
-        <div className="flex items-center justify-between gap-2">
-          <div className="inline-flex min-w-0 items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 to-sun text-white">
-              <Icon className="h-4 w-4" aria-hidden="true" />
+        <div className="flex items-center justify-between gap-1">
+          <div className="inline-flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 to-sun text-white">
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
-            <span className="text-[12.5px] font-semibold leading-tight text-white sm:text-sm">{title}</span>
+            <span className="whitespace-nowrap text-[10px] font-semibold leading-tight text-white sm:text-[11.5px]">{title}</span>
           </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-blue-100/60" aria-hidden="true" />
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-blue-100/60" aria-hidden="true" />
         </div>
-        <div aria-hidden="true">{children}</div>
+        <div aria-hidden="true" className="min-h-0 flex-1">{children}</div>
       </div>
     </div>
   );
@@ -77,13 +77,13 @@ export function PreviewCards() {
 
         <CardShell icon={Wallet} title="Leave & Payroll" tilt={0} label="Leave and Payroll preview: sample figures for leave balance and next payroll date">
           <div className="mt-3 space-y-1.5">
-            <div className="flex items-center justify-between rounded-lg bg-[rgba(255,255,255,0.12)] px-2.5 py-1.5">
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-[rgba(219,234,254,0.85)]"><Plane className="h-3.5 w-3.5" aria-hidden="true" /> Leave Balance</span>
-              <span className="text-[11px] font-bold text-white">14 days</span>
+            <div className="flex items-center justify-between gap-1.5 rounded-lg bg-[rgba(255,255,255,0.12)] px-2 py-1.5">
+              <span className="inline-flex min-w-0 items-center gap-1 truncate text-[9.5px] text-[rgba(219,234,254,0.85)]"><Plane className="h-3 w-3 shrink-0" aria-hidden="true" /> Leave Balance</span>
+              <span className="shrink-0 text-[9.5px] font-bold text-white">14 days</span>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-[rgba(255,255,255,0.12)] px-2.5 py-1.5">
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-[rgba(219,234,254,0.85)]"><Wallet className="h-3.5 w-3.5" aria-hidden="true" /> Next Payroll</span>
-              <span className="text-[11px] font-bold text-white">26 Nov</span>
+            <div className="flex items-center justify-between gap-1.5 rounded-lg bg-[rgba(255,255,255,0.12)] px-2 py-1.5">
+              <span className="inline-flex min-w-0 items-center gap-1 truncate text-[9.5px] text-[rgba(219,234,254,0.85)]"><Wallet className="h-3 w-3 shrink-0" aria-hidden="true" /> Next Payroll</span>
+              <span className="shrink-0 text-[9.5px] font-bold text-white">26 Nov</span>
             </div>
           </div>
         </CardShell>

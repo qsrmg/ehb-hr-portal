@@ -128,47 +128,55 @@ export default function LoginPage() {
     <div className={`relative flex min-h-full flex-1 flex-col bg-[#0b1b4d] font-display transition-opacity duration-300 ${success ? "opacity-0" : "opacity-100"}`}>
       <DarkHeroBackdrop />
 
-      {/* Shared top bar: logo (always first, mobile and desktop) and a way back to the landing page. */}
-      <div className="anim-fade-up relative z-10 flex items-center justify-between gap-4 px-5 py-6 sm:px-10 lg:px-14 lg:py-10">
-        <Link href="/" aria-label="EHB HR Self-Service Portal home" className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sun">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a local SVG, no chip/card */}
-          <img src="/brand/ehb-hr-logo-white.svg" alt="EHB HR Self-Service Portal" className="h-auto w-40 sm:w-[220px]" />
-        </Link>
-        <Link href="/" className="group inline-flex items-center gap-2 rounded-md text-sm font-semibold text-blue-100/80 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-sun">
-          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" /> Back to home
-        </Link>
-      </div>
+      {/* Everything below (top bar + the two-column story/form layout) shares one centered, max-1440px
+          container with identical left/right padding, so the "Back to home" link gets the same right
+          padding the logo gets on the left and the row can never overflow — the backdrop above stays
+          full-bleed since it's a sibling, not a child, of this container. */}
+      <div className="relative z-10 mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-5 sm:px-10 lg:px-14">
+        {/* Shared top bar: logo (always first, mobile and desktop) and a way back to the landing page. */}
+        <div className="anim-fade-up flex items-center justify-between gap-4 py-6 lg:py-10">
+          <Link href="/" aria-label="EHB HR Self-Service Portal home" className="shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sun">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a local SVG, no chip/card */}
+            <img src="/brand/ehb-hr-logo-white.svg" alt="EHB HR Self-Service Portal" className="h-auto w-40 sm:w-[220px]" />
+          </Link>
+          <Link href="/" className="group inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md text-sm font-semibold text-blue-100/80 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-sun">
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" /> Back to home
+          </Link>
+        </div>
 
-      <div className="relative z-10 grid flex-1 lg:grid-cols-[1.1fr_1fr]">
-        {/* EHB story: the 3D hub-and-orbit illustration, then feature columns. First visually on desktop
-            (left column); stacked below the sign-in card on phones/tablets. */}
-        <section className="order-2 flex flex-col items-center justify-center gap-6 px-5 pb-10 sm:px-10 lg:order-1 lg:px-14 lg:pb-14">
-          <div className="hidden min-[480px]:block w-full max-w-2xl">
-            <OrbitScene3D
-              nodes={ORBIT_NODES}
-              hubTitle="EHB"
-              hubSubtitle="HR WORKSPACE"
-              dark
-              className="h-[220px] w-full sm:h-[260px] md:h-[300px] lg:h-[320px]"
-            />
-          </div>
-          <div className="hidden min-[480px]:block">
-            <PreviewCards />
-          </div>
-          <div className="grid w-full max-w-2xl grid-cols-1 divide-y divide-white/15 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            {FEATURES.map(({ icon: Icon, title, hint }) => (
-              <div key={title} className="flex flex-col items-center gap-1.5 px-4 py-4 text-center first:pt-0 sm:py-0">
-                <Icon className="h-5 w-5 text-sun" aria-hidden="true" />
-                <p className="text-sm font-bold text-white">{title}</p>
-                <p className="text-xs text-blue-100/75">{hint}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* The two-column split waits for `xl` (1280px) rather than `lg` (1024px): between those two, an
+            `lg`-triggered split would halve the column width before there's room for it, clipping the
+            preview cards' fixed-size text — the single, full-width stacked column has plenty of room. */}
+        <div className="grid flex-1 xl:grid-cols-2 xl:gap-10">
+          {/* EHB story: the 3D hub-and-orbit illustration, then feature columns. First visually on desktop
+              (left column); stacked below the sign-in card on phones/tablets. */}
+          <section className="order-2 flex flex-col items-center justify-center gap-6 pb-10 lg:pb-14 xl:order-1">
+            <div className="hidden min-[480px]:block w-full max-w-2xl">
+              <OrbitScene3D
+                nodes={ORBIT_NODES}
+                hubTitle="EHB"
+                hubSubtitle="HR WORKSPACE"
+                dark
+                className="h-[clamp(300px,31vw,480px)] w-full"
+              />
+            </div>
+            <div className="hidden min-[480px]:block">
+              <PreviewCards />
+            </div>
+            <div className="grid w-full max-w-2xl grid-cols-1 divide-y divide-white/15 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              {FEATURES.map(({ icon: Icon, title, hint }) => (
+                <div key={title} className="flex flex-col items-center gap-1.5 px-4 py-4 text-center first:pt-0 sm:py-0">
+                  <Icon className="h-5 w-5 text-sun" aria-hidden="true" />
+                  <p className="text-sm font-bold text-white">{title}</p>
+                  <p className="text-xs text-blue-100/75">{hint}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
-        {/* Sign-in card: a frosted-glass panel over the dark backdrop. First on phones/tablets. */}
-        <section className="order-1 flex items-center justify-center px-4 pb-6 pt-2 sm:px-10 lg:order-2 lg:px-10 lg:py-12">
-          <div className="anim-rise w-full max-w-[440px]">
+          {/* Sign-in card: a frosted-glass panel over the dark backdrop. First on phones/tablets. */}
+          <section className="order-1 flex items-center justify-center pb-6 pt-2 lg:py-12 xl:order-2">
+            <div className="anim-rise w-full max-w-[440px]">
             <form
               ref={form}
               onSubmit={submit}
@@ -243,8 +251,9 @@ export default function LoginPage() {
                 <ShieldCheck className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" /> Secured with HTTPS. Passwords are stored encrypted.
               </p>
             </form>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

@@ -235,10 +235,17 @@ function Hub({ title, subtitle, compact }: { title: string; subtitle?: string; c
 function NodeCard({ node, hovered, onHover, compact, dark }: { node: RuntimeNode; hovered: boolean; onHover: (v: boolean) => void; compact?: boolean; dark?: boolean }) {
   const pos = useRef<THREE.Group>(null);
   const hoverT = useRef(0);
-  const size = (compact ? 0.62 : 0.74) * (dark ? 1.15 : 1);
+  // Dark theme cards are scaled up well beyond the light theme's: at this size, with the matching
+  // higher-resolution label texture below, "Attendance"-length labels render crisp and >=12px effective
+  // size at 1440px viewport width — the ring radius and hub leave generous clearance for it (see
+  // OrbitSceneContent's radius/hub comments), so cards still clear the hub and each other with margin.
+  const size = (compact ? 0.62 : 0.74) * (dark ? 2 : 1);
   const iconMap = useMemo(() => iconTexture(node.icon, "#ffffff"), [node.icon]);
   const labelColor = dark ? "#ffffff" : INK;
-  const labelMap = useMemo(() => textTexture(node.label, labelColor, { widthPx: 256, heightPx: 72, fontPx: 34, weight: dark ? 700 : 600 }), [node.label, labelColor, dark]);
+  const labelMap = useMemo(
+    () => textTexture(node.label, labelColor, dark ? { widthPx: 420, heightPx: 108, fontPx: 56, weight: 700 } : { widthPx: 256, heightPx: 72, fontPx: 34, weight: 600 }),
+    [node.label, labelColor, dark],
+  );
   const borderColor = node.accent === "sun" ? SUN : dark ? "#ffffff" : BORDER_GREY;
   const x = Math.cos(node.baseAngle) * node.radius;
   const z = Math.sin(node.baseAngle) * node.radius;

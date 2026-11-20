@@ -7,6 +7,7 @@ import { hasRole, ROLE_LABELS, useAuth, type Role, type User } from "@/lib/auth"
 import { api } from "@/lib/api";
 import { Logo } from "@/components/brand";
 import { Icon, type IconName } from "@/components/icons";
+import { ActivityStrip } from "@/components/ActivityStrip";
 
 // Signed-in layout: white sidebar with the menu for the user's roles, the user and Sign out at the bottom.
 
@@ -28,6 +29,7 @@ const NAV: NavGroup[] = [
       { href: "/performance", label: "Performance", icon: "chart" },
       { href: "/hiring", label: "Jobs and hiring", icon: "users" },
       { href: "/inventory", label: "My inventory", icon: "box" },
+      { href: "/activity", label: "My activity", icon: "eye" },
       { href: "/documents", label: "Policies and documents", icon: "file" },
       { href: "/profile", label: "My profile", icon: "user" },
     ],
@@ -53,6 +55,7 @@ const NAV: NavGroup[] = [
       { href: "/admin/expenses", label: "Expense claims", icon: "file", show: any("FINANCE", "HR", "MANAGEMENT") },
       { href: "/admin/travel", label: "Travel", icon: "arrowRight", show: any("ADMIN", "FINANCE", "HR", "MANAGEMENT") },
       { href: "/admin/assets", label: "Assets", icon: "box", show: any("ADMIN", "HR", "FINANCE", "MANAGEMENT") },
+      { href: "/admin/activity", label: "Activity monitoring", icon: "eye", show: any("HR") },
       { href: "/admin/expense-settings", label: "Expense & travel settings", icon: "settings", show: any("FINANCE", "HR") },
       { href: "/admin/requests", label: "All requests", icon: "list", show: any("HR", "MANAGEMENT") },
       { href: "/admin/settings", label: "Rules & settings", icon: "settings", show: any("HR") },
@@ -74,7 +77,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const wide = pathname === "/dashboard";
   const roles = user.roles.filter((r) => r !== "EMPLOYEE").map((r) => ROLE_LABELS[r]).join(", ") || "Employee";
   const close = () => setOpen(false);
 
@@ -161,7 +163,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-sun px-1 text-center text-[10px] font-bold leading-4 text-ink-950">{unread > 99 ? "99+" : unread}</span>}
           </Link>
         </header>
-        <main className={`mx-auto w-full flex-1 px-4 py-6 sm:px-6 lg:py-8 ${wide ? "max-w-7xl" : "max-w-6xl"}`}>{children}</main>
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:pt-8">
+          <ActivityStrip />
+        </div>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+          {children}
+        </main>
       </div>
     </div>
   );

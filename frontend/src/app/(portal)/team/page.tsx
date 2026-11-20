@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Alert, Button, Card, Input, PageHeader, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Input, PageHeader, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
 import { AttendanceTable, MonthPicker, type MonthData } from "@/components/AttendanceMonth";
 import { TeamAssets } from "@/components/AssetPanels";
 import { post } from "@/lib/api";
@@ -12,6 +12,32 @@ import type { Profile } from "@/lib/types";
 
 type Daily = { date: string; lastImported: string | null; rows: { employeeId: number; code: string; fullName: string; designation: string | null; department: string | null; status: string; leaveType: string | null; checkIn: string | null; checkOut: string | null }[] };
 type LeaveRow = { requestId: number; status: string; employee: { id: number; fullName: string; code: string }; leaveType: string; startDate: string; endDate: string; days: number };
+type TeamActivity = { teamAveragePct: number | null; trackedCount: number; totalCount: number; members: { id: number; fullName: string; code: string; trackedToday: boolean }[] };
+
+/** Aggregate only — never an individual member's own Active %, by design. */
+function TeamActivityTab() {
+  const { data, loading, error } = useApi<TeamActivity>("/activity/team");
+  if (loading) return <Spinner />;
+  if (error) return <Alert>{error}</Alert>;
+  if (!data) return null;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">
+        Team average Active % this month: <strong>{data.teamAveragePct == null ? "-" : `${data.teamAveragePct}%`}</strong> · {data.trackedCount} of {data.totalCount} tracked today
+      </p>
+      {data.members.length === 0 ? <Empty>No team members.</Empty> : (
+        <Table head={["Employee", "Tracked today"]}>
+          {data.members.map((m) => (
+            <tr key={m.id}>
+              <Td><div className="font-medium text-slate-900">{m.fullName}</div><div className="text-xs text-slate-500">{m.code}</div></Td>
+              <Td>{m.trackedToday ? <Badge tone="green">Tracked</Badge> : <Badge>Not tracked</Badge>}</Td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </div>
+  );
+}
 
 /** Shown only when the team member's probation is due: a note to HR before they confirm or extend it. */
 function ProbationDueNote({ employeeId }: { employeeId: number }) {
@@ -55,11 +81,18 @@ function ProbationDueNote({ employeeId }: { employeeId: number }) {
 }
 
 export default function TeamPage() {
-  const [tab, setTab] = useState<"today" | "leave" | "member" | "assets">("today");
+  const [tab, setTab] = useState<"today" | "leave" | "member" | "assets" | "activity">("today");
   const [date, setDate] = useState(todayYmd());
+  const [dateDefaultedFor, setDateDefaultedFor] = useState<string | null>(null);
   const [month, setMonth] = useState(currentMonth());
   const [memberId, setMemberId] = useState<number | null>(null);
   const daily = useApi<Daily>(`/attendance/daily?date=${date}`);
+  // If today has no biometric data yet, jump once to the latest day that does, so the table isn't empty by
+  // default; guarded by dateDefaultedFor so it only ever fires once per lastImported value, not on every render.
+  if (daily.data?.lastImported && daily.data.lastImported < date && dateDefaultedFor !== daily.data.lastImported) {
+    setDateDefaultedFor(daily.data.lastImported);
+    setDate(daily.data.lastImported);
+  }
   const leave = useApi<LeaveRow[]>(tab === "leave" ? `/leave/calendar?month=${month}` : null);
   const member = useApi<MonthData & { employee: { fullName: string; code: string } }>(memberId ? `/attendance/employee/${memberId}?month=${month}` : null);
 
@@ -72,12 +105,12 @@ export default function TeamPage() {
         <Tabs
           value={tab}
           onChange={setTab}
-          options={[{ value: "today", label: "Attendance by day" }, { value: "leave", label: "Leave calendar" }, { value: "assets", label: "Assets" }, ...(memberId ? [{ value: "member" as const, label: member.data?.employee.fullName ?? "Employee" }] : [])]}
+          options={[{ value: "today", label: "Attendance by day" }, { value: "leave", label: "Leave calendar" }, { value: "assets", label: "Assets" }, { value: "activity", label: "Activity" }, ...(memberId ? [{ value: "member" as const, label: member.data?.employee.fullName ?? "Employee" }] : [])]}
         />
         {tab === "today" && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" aria-label="Date" />
+              <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setDateDefaultedFor("manual"); }} className="!w-44" aria-label="Date" />
               {counts && Object.entries(counts).map(([s, n]) => <span key={s} className="text-sm text-slate-600"><StatusBadge status={s} /> {n}</span>)}
             </div>
             {daily.data?.lastImported && date > daily.data.lastImported && <Alert kind="info">Biometric data is imported up to {fmtDate(daily.data.lastImported)}.</Alert>}
@@ -117,6 +150,7 @@ export default function TeamPage() {
           </div>
         )}
         {tab === "assets" && <TeamAssets />}
+        {tab === "activity" && <TeamActivityTab />}
         {tab === "member" && memberId && (
           <div className="space-y-4">
             <MonthPicker month={month} onChange={setMonth} />

@@ -42,11 +42,11 @@ model Department {
   // Dress Code Policy D1/D3: plain text, no attachments. Edited by HR or this department's own HOD.
   dressCodeNotes String?
 
-  assetAssignments    AssetAssignment[]
+  assetAssignments        AssetAssignment[]
   assetVerificationRounds AssetVerificationRound[]
-  performanceTemplate PerformanceTemplate?
-  approvedHeadcount   Int? // maintained by HR; empty = no limit
-  requisitions        Requisition[]
+  performanceTemplate     PerformanceTemplate?
+  approvedHeadcount       Int? // maintained by HR; empty = no limit
+  requisitions            Requisition[]
 }
 
 model Employee {
@@ -58,12 +58,12 @@ model Employee {
   roles              Role[]         @default([EMPLOYEE])
   status             EmployeeStatus @default(ACTIVE)
 
-  fullName         String
-  fatherName       String?
-  gender           Gender?
-  dateOfBirth      DateTime? @db.Date
-  designation      String?
-  joiningDate      DateTime  @db.Date
+  fullName            String
+  fatherName          String?
+  gender              Gender?
+  dateOfBirth         DateTime? @db.Date
+  designation         String?
+  joiningDate         DateTime  @db.Date
   // Resignation notice: the probation notice period applies until this date (empty = confirmed)
   probationEndDate    DateTime? @db.Date
   // HR's formal confirmation (Module: Probation confirmation). Empty while on probation or still due.
@@ -71,8 +71,8 @@ model Employee {
   // So the Line Manager (or HR, with no manager) is told once per due cycle, not on every run of the daily job
   probationNotifiedAt DateTime?
   // Hiring: the grade replacements keep by default, and since when the employee is in their current role
-  grade            String?
-  roleSince        DateTime? @db.Date // empty = joining date; set again by an internal move
+  grade               String?
+  roleSince           DateTime? @db.Date // empty = joining date; set again by an internal move
 
   departmentId Int?
   department   Department? @relation("DepartmentMembers", fields: [departmentId], references: [id])
@@ -103,68 +103,73 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  headOf                  Department[]          @relation("DepartmentHod")
-  attendance              AttendanceRecord[]
-  leaveBalances           LeaveBalance[]
-  requests                Request[]             @relation("Requester")
-  stepsToApprove          RequestStep[]         @relation("StepApprover")
-  stepsActed              RequestStep[]         @relation("StepActor")
-  actions                 RequestAction[]
-  payslips                Payslip[]
-  lateWarnings            LateWarning[]
-  notifications           Notification[]
-  auditLogs               AuditLog[]
-  documents               Document[]
-  expensesPaid            ExpenseClaim[]        @relation("ExpensePaidBy")
-  travelAdvancesPaid      TravelRequest[]       @relation("TravelAdvancePaidBy")
-  travelAdvanceReturns    TravelRequest[]       @relation("TravelAdvanceReturnedBy")
-  travelBooked            TravelRequest[]       @relation("TravelBookedBy")
-  travelCancelled         TravelRequest[]       @relation("TravelCancelledBy")
-  travelBookingsCreated   TravelBooking[]
-  assetsHeld              AssetAssignment[]     @relation("AssetHolder")
-  assetsIssued            AssetAssignment[]     @relation("AssetIssuer")
-  assetsReceived          AssetAssignment[]     @relation("AssetReceiver")
-  assetRepairsLogged      AssetRepair[]
-  assetIncidentsAbout     AssetIncident[]       @relation("IncidentEmployee")
-  assetIncidentsReported  AssetIncident[]       @relation("IncidentReporter")
-  assetIncidentsRecorded  AssetIncident[]       @relation("IncidentRecorder")
-  assetRecoveriesSet      AssetIncident[]       @relation("IncidentRecoverySetter")
-  assetRecoveriesApproved AssetIncident[]       @relation("IncidentRecoveryApprover")
-  assetWriteOffs          AssetIncident[]       @relation("IncidentWriteOff")
-  assetVerificationRoundsCreated AssetVerificationRound[] @relation("VerificationRoundCreatedBy")
-  assetRetentionsApproved AssetAssignment[] @relation("AssetRetainedBy")
-  exits                   ExitCase[]            @relation("ExitEmployee")
-  exitsStarted            ExitCase[]            @relation("ExitStartedBy")
-  exitsCompleted          ExitCase[]            @relation("ExitCompletedBy")
-  exitsCancelled          ExitCase[]            @relation("ExitCancelledBy")
-  exitLettersIssued       ExitCase[]            @relation("ExitLettersBy")
-  exitsSettled            ExitCase[]            @relation("ExitSettledBy")
-  clearancesToApprove     ExitClearance[]       @relation("ClearanceApprover")
-  clearancesCleared       ExitClearance[]       @relation("ClearanceClearedBy")
-  exitInterviewsRecorded  ExitInterview[]
-  scorecards              Scorecard[]           @relation("ScorecardEmployee")
-  cyclesCreated           PerformanceCycle[]
-  scorecardGoalsSet       Scorecard[]           @relation("ScorecardGoalsSetBy")
-  scorecardsReviewed      Scorecard[]           @relation("ScorecardReviewedBy")
-  scorecardAppealsDecided Scorecard[]           @relation("ScorecardAppealDecidedBy")
-  scorecardCheckIns       ScorecardCheckIn[]
-  ratingAdjustments       RatingAdjustment[]
-  performanceTemplates    PerformanceTemplate[]
-  requisitionsRaised      Requisition[]         @relation("RequisitionRequester")
-  requisitionsReporting   Requisition[]         @relation("RequisitionReportsTo")
-  requisitionsReplacing   Requisition[]         @relation("RequisitionReplaces")
-  requisitionsBudgeted    Requisition[]         @relation("RequisitionBudgetBy")
-  requisitionsPosted      Requisition[]         @relation("RequisitionPostedBy")
-  requisitionsClosed      Requisition[]         @relation("RequisitionClosedBy")
-  jobApplications         JobApplication[]      @relation("ApplicationApplicant")
-  hiredFromApplications   JobApplication[]      @relation("ApplicationHired")
-  applicationEvents       ApplicationEvent[]
-  interviewFeedback       InterviewFeedback[]
-  probationDecisions      ProbationDecision[]   @relation("ProbationEmployee")
-  probationDecisionsMade  ProbationDecision[]   @relation("ProbationDecidedBy")
-  probationNotes          ProbationNote[]       @relation("ProbationNoteEmployee")
-  probationNotesWritten   ProbationNote[]       @relation("ProbationNoteAuthor")
-  documentAcknowledgements DocumentAcknowledgement[]
+  headOf                         Department[]                    @relation("DepartmentHod")
+  attendance                     AttendanceRecord[]
+  leaveBalances                  LeaveBalance[]
+  requests                       Request[]                       @relation("Requester")
+  stepsToApprove                 RequestStep[]                   @relation("StepApprover")
+  stepsActed                     RequestStep[]                   @relation("StepActor")
+  actions                        RequestAction[]
+  payslips                       Payslip[]
+  lateWarnings                   LateWarning[]
+  notifications                  Notification[]
+  auditLogs                      AuditLog[]
+  documents                      Document[]
+  expensesPaid                   ExpenseClaim[]                  @relation("ExpensePaidBy")
+  travelAdvancesPaid             TravelRequest[]                 @relation("TravelAdvancePaidBy")
+  travelAdvanceReturns           TravelRequest[]                 @relation("TravelAdvanceReturnedBy")
+  travelBooked                   TravelRequest[]                 @relation("TravelBookedBy")
+  travelCancelled                TravelRequest[]                 @relation("TravelCancelledBy")
+  travelBookingsCreated          TravelBooking[]
+  assetsHeld                     AssetAssignment[]               @relation("AssetHolder")
+  assetsIssued                   AssetAssignment[]               @relation("AssetIssuer")
+  assetsReceived                 AssetAssignment[]               @relation("AssetReceiver")
+  assetRepairsLogged             AssetRepair[]
+  assetIncidentsAbout            AssetIncident[]                 @relation("IncidentEmployee")
+  assetIncidentsReported         AssetIncident[]                 @relation("IncidentReporter")
+  assetIncidentsRecorded         AssetIncident[]                 @relation("IncidentRecorder")
+  assetRecoveriesSet             AssetIncident[]                 @relation("IncidentRecoverySetter")
+  assetRecoveriesApproved        AssetIncident[]                 @relation("IncidentRecoveryApprover")
+  assetWriteOffs                 AssetIncident[]                 @relation("IncidentWriteOff")
+  assetVerificationRoundsCreated AssetVerificationRound[]        @relation("VerificationRoundCreatedBy")
+  assetRetentionsApproved        AssetAssignment[]               @relation("AssetRetainedBy")
+  exits                          ExitCase[]                      @relation("ExitEmployee")
+  exitsStarted                   ExitCase[]                      @relation("ExitStartedBy")
+  exitsCompleted                 ExitCase[]                      @relation("ExitCompletedBy")
+  exitsCancelled                 ExitCase[]                      @relation("ExitCancelledBy")
+  exitLettersIssued              ExitCase[]                      @relation("ExitLettersBy")
+  exitsSettled                   ExitCase[]                      @relation("ExitSettledBy")
+  clearancesToApprove            ExitClearance[]                 @relation("ClearanceApprover")
+  clearancesCleared              ExitClearance[]                 @relation("ClearanceClearedBy")
+  exitInterviewsRecorded         ExitInterview[]
+  scorecards                     Scorecard[]                     @relation("ScorecardEmployee")
+  cyclesCreated                  PerformanceCycle[]
+  scorecardGoalsSet              Scorecard[]                     @relation("ScorecardGoalsSetBy")
+  scorecardsReviewed             Scorecard[]                     @relation("ScorecardReviewedBy")
+  scorecardAppealsDecided        Scorecard[]                     @relation("ScorecardAppealDecidedBy")
+  scorecardCheckIns              ScorecardCheckIn[]
+  ratingAdjustments              RatingAdjustment[]
+  performanceTemplates           PerformanceTemplate[]
+  requisitionsRaised             Requisition[]                   @relation("RequisitionRequester")
+  requisitionsReporting          Requisition[]                   @relation("RequisitionReportsTo")
+  requisitionsReplacing          Requisition[]                   @relation("RequisitionReplaces")
+  requisitionsBudgeted           Requisition[]                   @relation("RequisitionBudgetBy")
+  requisitionsPosted             Requisition[]                   @relation("RequisitionPostedBy")
+  requisitionsClosed             Requisition[]                   @relation("RequisitionClosedBy")
+  jobApplications                JobApplication[]                @relation("ApplicationApplicant")
+  hiredFromApplications          JobApplication[]                @relation("ApplicationHired")
+  applicationEvents              ApplicationEvent[]
+  interviewFeedback              InterviewFeedback[]
+  probationDecisions             ProbationDecision[]             @relation("ProbationEmployee")
+  probationDecisionsMade         ProbationDecision[]             @relation("ProbationDecidedBy")
+  probationNotes                 ProbationNote[]                 @relation("ProbationNoteEmployee")
+  probationNotesWritten          ProbationNote[]                 @relation("ProbationNoteAuthor")
+  documentAcknowledgements       DocumentAcknowledgement[]
+  activityPolicyAcknowledgements ActivityPolicyAcknowledgement[]
+  activityExclusion              ActivityExclusion?              @relation("ActivityExcluded")
+  activityExclusionsSet          ActivityExclusion[]             @relation("ActivityExcludedBy")
+  activityDailySummaries         ActivityDailySummary[]
+  activityHeartbeatState         ActivityHeartbeatState?
 }
 
 /**
@@ -498,24 +503,26 @@ enum DocumentCategory {
 }
 
 model Document {
-  id                     Int              @id @default(autoincrement())
-  title                  String
-  description            String?
-  category               DocumentCategory
-  fileName               String
-  path                   String
-  mimeType               String
-  size                   Int
+  id                      Int              @id @default(autoincrement())
+  title                   String
+  description             String?
+  category                DocumentCategory
+  fileName                String
+  path                    String
+  mimeType                String
+  size                    Int
   // Dress Code Policy design 1: HR can require every employee to acknowledge a published document.
-  requiresAcknowledgement Boolean         @default(false)
-  uploadedById           Int
-  uploadedBy             Employee         @relation(fields: [uploadedById], references: [id])
-  createdAt              DateTime         @default(now())
+  requiresAcknowledgement Boolean          @default(false)
+  uploadedById            Int
+  uploadedBy              Employee         @relation(fields: [uploadedById], references: [id])
+  createdAt               DateTime         @default(now())
 
   acknowledgements DocumentAcknowledgement[]
 }
 
-/** One row per employee who has acknowledged a document; never deleted once recorded. */
+/**
+ * One row per employee who has acknowledged a document; never deleted once recorded.
+ */
 model DocumentAcknowledgement {
   id             Int      @id @default(autoincrement())
   documentId     Int
@@ -821,42 +828,42 @@ enum VerificationScope {
 }
 
 model AssetCategory {
-  id               Int            @id @default(autoincrement())
-  name             String         @unique
-  kind             AssetKind      @default(PHYSICAL)
+  id                      Int                      @id @default(autoincrement())
+  name                    String                   @unique
+  kind                    AssetKind                @default(PHYSICAL)
   // Exit clearance waits for these items to be returned (or revoked), written off or charged.
-  mustReturnOnExit Boolean        @default(true)
+  mustReturnOnExit        Boolean                  @default(true)
   // Cyber Security Incident Response Policy: a loss/theft/damage report for one of these also notifies
   // the role in the assets.cyberSecurityNotifyRole setting (empty = off). HR/Admin set this per category.
-  dataBearing      Boolean        @default(false)
+  dataBearing             Boolean                  @default(false)
   // Employee Assets Management Policy A9: who may authorise a transfer of this category. Empty = Admin.
   transferAuthorisingRole Role?
-  active           Boolean        @default(true)
-  sortOrder        Int            @default(0)
-  assets           Asset[]
-  requests         AssetRequest[]
-  verificationRounds AssetVerificationRound[]
+  active                  Boolean                  @default(true)
+  sortOrder               Int                      @default(0)
+  assets                  Asset[]
+  requests                AssetRequest[]
+  verificationRounds      AssetVerificationRound[]
 }
 
 model Asset {
-  id              Int            @id @default(autoincrement())
-  tag             String         @unique // existing tag, or generated EHB-AST-0001
+  id              Int             @id @default(autoincrement())
+  tag             String          @unique // existing tag, or generated EHB-AST-0001
   categoryId      Int
-  category        AssetCategory  @relation(fields: [categoryId], references: [id])
+  category        AssetCategory   @relation(fields: [categoryId], references: [id])
   name            String // make / model, or the account / software name
   serialNumber    String?
-  purchaseDate    DateTime?      @db.Date
-  cost            Decimal?       @db.Decimal(12, 2) // visible to Admin, Finance and Management only
-  warrantyUntil   DateTime?      @db.Date
-  condition       AssetCondition @default(GOOD)
-  status          AssetStatus    @default(IN_STOCK)
+  purchaseDate    DateTime?       @db.Date
+  cost            Decimal?        @db.Decimal(12, 2) // visible to Admin, Finance and Management only
+  warrantyUntil   DateTime?       @db.Date
+  condition       AssetCondition  @default(GOOD)
+  status          AssetStatus     @default(IN_STOCK)
   storageLocation String? // where it is kept when in stock
   notes           String?
   // A13: set together when the asset is retired (disposal or replacement status)
   disposalReason  DisposalReason?
-  disposalDate    DateTime?      @db.Date
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  disposalDate    DateTime?       @db.Date
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   assignments AssetAssignment[]
   repairs     AssetRepair[]
@@ -868,38 +875,38 @@ model Asset {
 
 // Who had the item and when. Never overwritten: a return closes the row, a new issue adds one.
 model AssetAssignment {
-  id           Int             @id @default(autoincrement())
-  assetId      Int
-  asset        Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  assigneeType AssigneeType
-  employeeId   Int?
-  employee     Employee?       @relation("AssetHolder", fields: [employeeId], references: [id])
-  departmentId Int?
-  department   Department?     @relation(fields: [departmentId], references: [id])
-  location     String?
-  issuedAt     DateTime        @default(now())
-  issuedById   Int
-  issuedBy     Employee        @relation("AssetIssuer", fields: [issuedById], references: [id])
-  conditionOut AssetCondition
-  issueNote    String?
-  confirmedAt  DateTime? // the employee confirms receipt (automatic for access, departments and locations)
+  id                Int             @id @default(autoincrement())
+  assetId           Int
+  asset             Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assigneeType      AssigneeType
+  employeeId        Int?
+  employee          Employee?       @relation("AssetHolder", fields: [employeeId], references: [id])
+  departmentId      Int?
+  department        Department?     @relation(fields: [departmentId], references: [id])
+  location          String?
+  issuedAt          DateTime        @default(now())
+  issuedById        Int
+  issuedBy          Employee        @relation("AssetIssuer", fields: [issuedById], references: [id])
+  conditionOut      AssetCondition
+  issueNote         String?
+  confirmedAt       DateTime? // the employee confirms receipt (automatic for access, departments and locations)
   // A9: set on the new assignment created by a transfer; empty for an ordinary issue.
   authorisationNote String?
   // A10/A14: Management's written authorisation to let the employee keep this item past their exit.
   // While set, it no longer blocks IT/Admin's exit clearance.
-  retainedById Int?
-  retainedBy   Employee?       @relation("AssetRetainedBy", fields: [retainedById], references: [id])
-  retainedAt   DateTime?
-  retainedNote String?
-  returnedAt   DateTime?
-  receivedById Int?
-  receivedBy   Employee?       @relation("AssetReceiver", fields: [receivedById], references: [id])
-  conditionIn  AssetCondition?
-  returnNote   String?
+  retainedById      Int?
+  retainedBy        Employee?       @relation("AssetRetainedBy", fields: [retainedById], references: [id])
+  retainedAt        DateTime?
+  retainedNote      String?
+  returnedAt        DateTime?
+  receivedById      Int?
+  receivedBy        Employee?       @relation("AssetReceiver", fields: [receivedById], references: [id])
+  conditionIn       AssetCondition?
+  returnNote        String?
 
-  incidents    AssetIncident[]
-  request      AssetRequest?
-  accessories  AssetAccessory[]
+  incidents         AssetIncident[]
+  request           AssetRequest?
+  accessories       AssetAccessory[]
   verificationItems AssetVerificationItem[]
 
   @@index([employeeId, returnedAt])
@@ -933,43 +940,43 @@ model AssetRepair {
 // Damage or loss. Admin records it, HR sets a recovery amount (sent to Finance for the final settlement),
 // or Management writes it off.
 model AssetIncident {
-  id              Int              @id @default(autoincrement())
-  assetId         Int
-  asset           Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  assignmentId    Int?
-  assignment      AssetAssignment? @relation(fields: [assignmentId], references: [id])
-  employeeId      Int? // the person responsible (the holder at the time)
-  employee        Employee?        @relation("IncidentEmployee", fields: [employeeId], references: [id])
-  type            IncidentType
-  status          IncidentStatus
-  description     String
-  reportedById    Int
-  reportedBy      Employee         @relation("IncidentReporter", fields: [reportedById], references: [id])
-  createdAt       DateTime         @default(now())
-  recordedById    Int?
-  recordedBy      Employee?        @relation("IncidentRecorder", fields: [recordedById], references: [id])
-  recordedAt      DateTime?
-  adminNote       String?
+  id                   Int              @id @default(autoincrement())
+  assetId              Int
+  asset                Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assignmentId         Int?
+  assignment           AssetAssignment? @relation(fields: [assignmentId], references: [id])
+  employeeId           Int? // the person responsible (the holder at the time)
+  employee             Employee?        @relation("IncidentEmployee", fields: [employeeId], references: [id])
+  type                 IncidentType
+  status               IncidentStatus
+  description          String
+  reportedById         Int
+  reportedBy           Employee         @relation("IncidentReporter", fields: [reportedById], references: [id])
+  createdAt            DateTime         @default(now())
+  recordedById         Int?
+  recordedBy           Employee?        @relation("IncidentRecorder", fields: [recordedById], references: [id])
+  recordedAt           DateTime?
+  adminNote            String?
   // A6: finding and amount set together by HR; WEAR_AND_TEAR never carries an amount.
-  finding         RecoveryFinding?
-  recoveryAmount  Decimal?         @db.Decimal(12, 2)
-  recoverySetById Int?
-  recoverySetBy   Employee?        @relation("IncidentRecoverySetter", fields: [recoverySetById], references: [id])
-  recoverySetAt   DateTime?
-  recoveryNote    String?
+  finding              RecoveryFinding?
+  recoveryAmount       Decimal?         @db.Decimal(12, 2)
+  recoverySetById      Int?
+  recoverySetBy        Employee?        @relation("IncidentRecoverySetter", fields: [recoverySetById], references: [id])
+  recoverySetAt        DateTime?
+  recoveryNote         String?
   // Set only when the recovery amount needed Management approval (above assets.recoveryApprovalThreshold)
   recoveryApprovedById Int?
-  recoveryApprovedBy   Employee?   @relation("IncidentRecoveryApprover", fields: [recoveryApprovedById], references: [id])
+  recoveryApprovedBy   Employee?        @relation("IncidentRecoveryApprover", fields: [recoveryApprovedById], references: [id])
   recoveryApprovedAt   DateTime?
-  writtenOffById  Int?
-  writtenOffBy    Employee?        @relation("IncidentWriteOff", fields: [writtenOffById], references: [id])
-  writtenOffAt    DateTime?
-  writeOffNote    String?
+  writtenOffById       Int?
+  writtenOffBy         Employee?        @relation("IncidentWriteOff", fields: [writtenOffById], references: [id])
+  writtenOffAt         DateTime?
+  writeOffNote         String?
   // A6: an optional file (e.g. a police report), visible to the employee, Admin, HR and Management only.
-  attachmentFileName String?
-  attachmentPath      String?
-  attachmentMimeType  String?
-  attachmentSize      Int?
+  attachmentFileName   String?
+  attachmentPath       String?
+  attachmentMimeType   String?
+  attachmentSize       Int?
 
   @@index([status])
   @@index([employeeId])
@@ -978,27 +985,29 @@ model AssetIncident {
 // A13: a periodic physical audit. Admin opens a round for everyone, a department or a category; every
 // holder in scope confirms their items from My Inventory. Not blocking: it never affects login or exit.
 model AssetVerificationRound {
-  id           Int               @id @default(autoincrement())
+  id           Int                     @id @default(autoincrement())
   scope        VerificationScope
   departmentId Int?
-  department   Department?       @relation(fields: [departmentId], references: [id])
+  department   Department?             @relation(fields: [departmentId], references: [id])
   categoryId   Int?
-  category     AssetCategory?    @relation(fields: [categoryId], references: [id])
-  dueDate      DateTime          @db.Date
+  category     AssetCategory?          @relation(fields: [categoryId], references: [id])
+  dueDate      DateTime                @db.Date
   createdById  Int
-  createdBy    Employee          @relation("VerificationRoundCreatedBy", fields: [createdById], references: [id])
-  createdAt    DateTime          @default(now())
+  createdBy    Employee                @relation("VerificationRoundCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime                @default(now())
   closedAt     DateTime?
   items        AssetVerificationItem[]
 }
 
-/** One item snapshotted into a round when it opens; never added to or removed from afterwards. */
+/**
+ * One item snapshotted into a round when it opens; never added to or removed from afterwards.
+ */
 model AssetVerificationItem {
-  id              Int                     @id @default(autoincrement())
+  id              Int                    @id @default(autoincrement())
   roundId         Int
-  round           AssetVerificationRound  @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  round           AssetVerificationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
   assignmentId    Int
-  assignment      AssetAssignment         @relation(fields: [assignmentId], references: [id])
+  assignment      AssetAssignment        @relation(fields: [assignmentId], references: [id])
   confirmedAt     DateTime?
   discrepancyNote String?
 
@@ -1522,4 +1531,67 @@ model TrainingRequest {
   location       String? // required when mode is ON_SITE
   estimatedCost  Decimal      @db.Decimal(12, 2)
   justification  String
+}
+
+// ---------- Activity monitoring (keyboard/mouse presence, never content) ----------
+
+/**
+ * Never deleted once recorded: proof the employee saw the policy text before tracking started.
+ */
+model ActivityPolicyAcknowledgement {
+  id             Int      @id @default(autoincrement())
+  employeeId     Int
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  policyVersion  Int
+  acknowledgedAt DateTime @default(now())
+
+  @@unique([employeeId, policyVersion])
+}
+
+/**
+ * An employee HR has switched off tracking for, even while the feature is globally on.
+ */
+model ActivityExclusion {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int      @unique
+  employee     Employee @relation("ActivityExcluded", fields: [employeeId], references: [id])
+  excludedById Int
+  excludedBy   Employee @relation("ActivityExcludedBy", fields: [excludedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+/**
+ * One row per employee per day. Aggregates only (no per-minute bitmap): every screen this feature has —
+ * today/month totals, Active %, a daily bar, department/company reports — only ever needs day-level counts,
+ * and keeping it that way means nobody can reconstruct an intra-day activity timeline from this table.
+ * processedThroughAt is a watermark so a resent heartbeat batch never double-counts a minute already seen.
+ */
+model ActivityDailySummary {
+  id                 Int       @id @default(autoincrement())
+  employeeId         Int
+  employee           Employee  @relation(fields: [employeeId], references: [id])
+  date               DateTime  @db.Date
+  trackedMinutes     Int       @default(0)
+  activeMinutes      Int       @default(0)
+  idleMinutes        Int       @default(0)
+  pausedMinutesUsed  Int       @default(0)
+  firstActivityAt    DateTime?
+  lastActivityAt     DateTime?
+  processedThroughAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+/**
+ * Small per-employee state for heartbeat rate limiting, idle-threshold smoothing and "Pause tracking".
+ */
+model ActivityHeartbeatState {
+  employeeId        Int       @id
+  employee          Employee  @relation(fields: [employeeId], references: [id])
+  lastHeartbeatAt   DateTime?
+  lastRawActivityAt DateTime?
+  pausedSince       DateTime?
 }
