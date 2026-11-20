@@ -20,7 +20,7 @@ export default function LateWarningsPage() {
                 <Td><div className="font-medium text-slate-900">{w.employee.fullName}</div><div className="text-xs text-slate-500">{w.employee.code}</div></Td>
                 <Td>{w.employee.department ?? "—"}</Td>
                 <Td>{w.employee.manager ?? "—"}</Td>
-                <Td className="font-semibold tabular-nums text-amber-700">{w.lateCount}</Td>
+                <Td className="text-right font-semibold tabular-nums text-amber-700">{w.lateCount}</Td>
                 <Td>{fmtDateTime(w.createdAt)}</Td>
               </tr>
             ))}

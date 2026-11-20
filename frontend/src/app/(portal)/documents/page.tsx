@@ -48,6 +48,7 @@ export default function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [ackBusy, setAckBusy] = useState<number | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const upload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,7 +116,7 @@ export default function DocumentsPage() {
               {d.requiresAcknowledgement && !d.acknowledgedAt && (
                 <Button size="sm" loading={ackBusy === d.id} onClick={() => acknowledge(d)}>I have read this</Button>
               )}
-              {isHr && <Button size="sm" variant="ghost" className="text-red-600" onClick={() => remove(d)}>Delete</Button>}
+              {isHr && <Button size="sm" variant="ghost-danger" onClick={() => remove(d)}>Delete</Button>}
             </Td>
           </tr>
         ))}
@@ -125,15 +126,19 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Policies and HR forms" subtitle="Read and download company policies and HR forms." />
+      <PageHeader
+        title="Policies and HR forms"
+        subtitle="Read and download company policies and HR forms."
+        actions={isHr && !uploadOpen ? <Button onClick={() => setUploadOpen(true)}>Upload document</Button> : null}
+      />
       {loading ? <Spinner /> : error ? <Alert>{error}</Alert> : (
         <>
           {section("POLICY", "Policies")}
           {section("HR_FORM", "HR forms")}
         </>
       )}
-      {isHr && (
-        <Card title="Upload a document (HR)">
+      {isHr && uploadOpen && (
+        <Card title="Upload a document (HR)" actions={<Button variant="ghost" size="sm" onClick={() => setUploadOpen(false)}>Close</Button>}>
           <form onSubmit={upload} className="grid gap-4 sm:grid-cols-2">
             {msg && <div className="sm:col-span-2"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
             <Field label="Title"><Input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>

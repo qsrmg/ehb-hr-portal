@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { Inbox } from "lucide-react";
 import { STATUS_STYLES } from "@/lib/format";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: "primary" | "secondary" | "danger" | "ghost" | "ghost-danger";
   size?: "sm" | "md";
   loading?: boolean;
 };
@@ -19,6 +20,7 @@ const buttonClass = (variant: ButtonProps["variant"] = "primary", size: ButtonPr
     variant === "secondary" && "bg-slate-100 text-charcoal ring-1 ring-inset ring-slate-300 hover:bg-slate-200 hover:ring-slate-400",
     variant === "danger" && "bg-red-600 text-white hover:bg-red-500",
     variant === "ghost" && "text-slate-600 hover:bg-slate-100 hover:text-charcoal",
+    variant === "ghost-danger" && "text-red-600 hover:bg-red-50 hover:text-red-700",
   );
 
 export function Button({ variant, size, loading, className, children, disabled, ...rest }: ButtonProps) {
@@ -40,7 +42,7 @@ export function LinkButton({ href, variant, size, className, children }: { href:
 
 export function Card({ title, actions, children, className }: { title?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cx("rounded-2xl border border-line bg-white shadow-sm", className)}>
+    <section className={cx("rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]", className)}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
           {title && <h2 className="font-display text-base font-bold text-charcoal">{title}</h2>}
@@ -56,7 +58,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-balance font-display text-2xl font-extrabold tracking-tight text-charcoal">{title}</h1>
+        <h1 className="text-balance font-display text-2xl font-bold tracking-normal text-charcoal">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -69,14 +71,23 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   return <span className={cx("inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset", s.className)}>{label ?? s.label}</span>;
 }
 
-export function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700">{children}</span>;
+const BADGE_TONES = {
+  slate: "bg-slate-50 text-slate-600 ring-slate-200",
+  amber: "bg-amber-50 text-amber-800 ring-amber-200",
+  blue: "bg-sky-50 text-sky-700 ring-sky-200",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  red: "bg-red-50 text-red-700 ring-red-200",
+};
+
+/** One pill shape (height, radius, ring) for every status-like chip in the app — the same shape as StatusBadge. */
+export function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: keyof typeof BADGE_TONES }) {
+  return <span className={cx("inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset", BADGE_TONES[tone])}>{children}</span>;
 }
 
-export function Field({ label, hint, error, children, className }: { label: string; hint?: React.ReactNode; error?: string; children: React.ReactNode; className?: string }) {
+export function Field({ label, hint, error, children, className, labelClassName }: { label: string; hint?: React.ReactNode; error?: string; children: React.ReactNode; className?: string; labelClassName?: string }) {
   return (
     <label className={cx("block", className)}>
-      <span className="mb-1 block text-sm font-medium text-body">{label}</span>
+      <span className={labelClassName ?? "mb-1 block text-sm font-medium text-body"}>{label}</span>
       {children}
       {hint && !error && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
       {error && <span className="mt-1 block text-xs text-red-600">{error}</span>}
@@ -84,11 +95,11 @@ export function Field({ label, hint, error, children, className }: { label: stri
   );
 }
 
-const inputClass = "block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-body ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 [&>option]:bg-white [&>option]:text-body";
+const inputClass = "block w-full rounded-lg border-0 bg-white px-3 text-sm text-body ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 [&>option]:bg-white [&>option]:text-body";
 
-export const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} className={cx(inputClass, props.className)} />;
-export const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => <select {...props} className={cx(inputClass, props.className)} />;
-export const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea rows={3} {...props} className={cx(inputClass, props.className)} />;
+export const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} className={cx(inputClass, "h-10 py-2", props.className)} />;
+export const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => <select {...props} className={cx(inputClass, "h-10 py-2", props.className)} />;
+export const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea rows={3} {...props} className={cx(inputClass, "py-2", props.className)} />;
 
 /** An on/off switch for a boolean setting, rather than a 1/0 text field. */
 export function Switch({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -128,31 +139,47 @@ export function Spinner({ label = "Loading…" }: { label?: string }) {
   );
 }
 
+/** Soft icon, a short title or line, and an optional action — the one empty-state look used everywhere,
+ * from a one-line fallback (pass just `line`, e.g. via the `empty` string shorthand on Table) up to a full
+ * title + helpful line + call to action. */
+export function EmptyState({ icon, title, line, action }: { icon?: React.ReactNode; title?: React.ReactNode; line?: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5 px-4 py-10 text-center">
+      <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        {icon ?? <Inbox className="h-5 w-5" aria-hidden="true" />}
+      </span>
+      {title && <p className="text-sm font-semibold text-charcoal">{title}</p>}
+      {line && <p className="max-w-sm text-sm text-slate-500">{line}</p>}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
+  );
+}
+
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-sm text-slate-500">{children}</p>;
+  return <EmptyState line={children} />;
 }
 
 export function Table({ head, children, empty }: { head: React.ReactNode[]; children: React.ReactNode; empty?: React.ReactNode }) {
   const rows = Array.isArray(children) ? children.flat().filter(Boolean) : children ? [children] : [];
   return (
-    <div className="-mx-4 overflow-x-auto">
+    <div className="-mx-4 -mt-4 overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead>
-          <tr className="border-b border-slate-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <tr className="border-b border-slate-200 bg-white text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             {head.map((h, i) => (
-              <th key={i} className="whitespace-nowrap px-4 py-2">{h}</th>
+              <th key={i} className="whitespace-nowrap px-4 py-2.5">{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
+        <tbody className="divide-y divide-slate-100 [&>tr:hover]:bg-gray-50">{children}</tbody>
       </table>
-      {rows.length === 0 && empty && <Empty>{empty}</Empty>}
+      {rows.length === 0 && empty && (typeof empty === "string" ? <EmptyState line={empty} /> : empty)}
     </div>
   );
 }
 
 export const Td = ({ children, className }: { children?: React.ReactNode; className?: string }) => (
-  <td className={cx("whitespace-nowrap px-4 py-2.5 text-body", className)}>{children}</td>
+  <td className={cx("whitespace-nowrap px-4 py-3.5 text-body", className)}>{children}</td>
 );
 
 export function Stat({ label, value, tone, sub }: { label: string; value: React.ReactNode; tone?: "green" | "amber" | "orange" | "red" | "sky" | "slate"; sub?: React.ReactNode }) {
@@ -160,7 +187,7 @@ export function Stat({ label, value, tone, sub }: { label: string; value: React.
     green: "text-emerald-700", amber: "text-amber-700", orange: "text-orange-700", red: "text-red-700", sky: "text-sky-700", slate: "text-slate-900",
   }[tone ?? "slate"];
   return (
-    <div className="rounded-2xl border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
       <div className={cx("mt-1 text-2xl font-semibold tabular-nums", color)}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
@@ -168,9 +195,16 @@ export function Stat({ label, value, tone, sub }: { label: string; value: React.
   );
 }
 
+/** Search box (flexible width) plus filter selects, in one row; wraps only on small screens. Give the
+ * search input `className="flex-1"` and selects `className="!w-40"` (or similar) so their own width wins
+ * over the shared input/select default of `w-full`. */
+export function FilterBar({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cx("flex flex-wrap items-center gap-2", className)}>{children}</div>;
+}
+
 export function Tabs<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[] }) {
   return (
-    <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200">
+    <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-slate-200">
       {options.map((o) => (
         <button
           key={o.value}
@@ -188,10 +222,10 @@ export function Tabs<T extends string>({ value, onChange, options }: { value: T;
   );
 }
 
-export function Info({ label, value }: { label: string; value: React.ReactNode }) {
+export function Info({ label, value, labelClassName }: { label: string; value: React.ReactNode; labelClassName?: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
+      <dt className={labelClassName ?? "text-xs text-slate-500"}>{label}</dt>
       <dd className="mt-0.5 text-sm text-slate-900">{value || "—"}</dd>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Card, Field, LinkButton, PageHeader, Select, Spinner, StatusBadge, Table, Td, Textarea } from "@/components/ui";
+import { Alert, Button, Card, EmptyState, Field, LinkButton, PageHeader, Select, Spinner, StatusBadge, Table, Td, Textarea } from "@/components/ui";
 import { download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtMoney } from "@/lib/format";
@@ -97,7 +97,13 @@ export default function InventoryPage() {
       {msg && <Alert kind="success">{msg}</Alert>}
       {awaiting.length > 0 && <Alert kind="warning">Please confirm that you received {awaiting.length === 1 ? "the item" : `${awaiting.length} items`} below.</Alert>}
       <Card title={`With me (${current.length})`}>
-        {loading ? <Spinner /> : error ? <Alert>{error}</Alert> : !current.length ? <p className="py-4 text-sm text-slate-500">Nothing is issued to you.</p> : (
+        {loading ? <Spinner /> : error ? <Alert>{error}</Alert> : !current.length ? (
+          <EmptyState
+            title="Nothing is issued to you."
+            line="A laptop, a phone, software access — anything assigned to you will show up here."
+            action={<LinkButton href="/requests/new/asset" size="sm">Request an asset</LinkButton>}
+          />
+        ) : (
           <ul className="divide-y divide-slate-100">
             {current.map((item) => {
               const open = item.incidents.find((i) => ["REPORTED", "RECORDED", "RECOVERY_SET", "WRITTEN_OFF"].includes(i.status));

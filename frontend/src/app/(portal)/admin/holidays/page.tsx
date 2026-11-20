@@ -51,7 +51,7 @@ export default function HolidaysPage() {
                 <Td>{fmtDate(h.date)}</Td>
                 <Td className="text-slate-500">{new Date(`${h.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" })}</Td>
                 <Td className="font-medium text-slate-900">{h.name}</Td>
-                <Td className="text-right"><Button size="sm" variant="ghost" className="text-red-600" onClick={() => remove(h)}>Remove</Button></Td>
+                <Td className="text-right"><Button size="sm" variant="ghost-danger" onClick={() => remove(h)}>Remove</Button></Td>
               </tr>
             ))}
           </Table>

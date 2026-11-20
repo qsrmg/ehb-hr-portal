@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, FilterBar, Input, PageHeader, Select, Spinner, StatusBadge, Table, Tabs, Td } from "@/components/ui";
 import { ImportForm } from "@/components/ImportResult";
 import { download, post, put } from "@/lib/api";
 import { hasRole, useAuth } from "@/lib/auth";
@@ -75,19 +75,19 @@ function Register({ view, isAdmin }: { view: "register" | "awaiting"; isAdmin: b
           )}
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
-        <Input placeholder="Search tag, name or serial" value={q} onChange={(e) => setQ(e.target.value)} className="w-64" />
-        <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-48" aria-label="Category">
+      <FilterBar>
+        <Input placeholder="Search tag, name or serial" value={q} onChange={(e) => setQ(e.target.value)} className="min-w-[14rem] flex-1" />
+        <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="!w-48" aria-label="Category">
           <option value="">All categories</option>
           {categories.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         {view === "register" && (
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-40" aria-label="Status">
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="!w-40" aria-label="Status">
             <option value="">All statuses</option>
             {["IN_STOCK", "ISSUED", "IN_REPAIR", "LOST", "RETIRED"].map((s) => <option key={s} value={s}>{s.replace("_", " ").toLowerCase()}</option>)}
           </Select>
         )}
-      </div>
+      </FilterBar>
       {loading ? <Spinner /> : error ? <Alert>{error}</Alert> : (
         <Table head={["Tag", "Item", "Category", "Status", "With", "Warranty", ...(showCost ? ["Cost"] : [])]} empty="No assets match.">
           {data?.map((r) => (
@@ -96,7 +96,7 @@ function Register({ view, isAdmin }: { view: "register" | "awaiting"; isAdmin: b
               <Td className="whitespace-normal"><div className="min-w-40 font-medium text-slate-900">{r.name}</div>{r.serialNumber && <div className="text-xs text-slate-500">{r.serialNumber}</div>}</Td>
               <Td>{r.category}</Td>
               <Td><StatusBadge status={r.status} />{r.condition === "DAMAGED" && <span className="ml-1 text-xs text-red-700">damaged</span>}</Td>
-              <Td className="whitespace-normal">{r.holder ?? "—"}{r.awaitingConfirmation && <div className="text-xs text-amber-800">awaiting confirmation</div>}</Td>
+              <Td className="whitespace-normal">{r.holder ?? "—"}{r.awaitingConfirmation && <div className="mt-1"><Badge tone="amber">Awaiting confirmation</Badge></div>}</Td>
               <Td>{r.warrantyUntil ? fmtDate(r.warrantyUntil) : "—"}</Td>
               {showCost && <Td className="tabular-nums">{r.cost != null ? fmtMoney(r.cost) : "—"}</Td>}
             </tr>

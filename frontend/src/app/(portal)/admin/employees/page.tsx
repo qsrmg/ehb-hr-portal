@@ -77,6 +77,7 @@ export default function EmployeesPage() {
   const { data, loading, error, reload } = useApi<Row[]>(`/employees?status=${status}&q=${encodeURIComponent(q)}${departmentId ? `&departmentId=${departmentId}` : ""}`);
   const depts = useApi<Dept[]>("/departments");
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [newEmp, setNewEmp] = useState({ fullName: "", email: "", joiningDate: "", designation: "", departmentId: "" });
   const [createError, setCreateError] = useState<string | null>(null);
@@ -130,8 +131,11 @@ export default function EmployeesPage() {
         </Card>
       )}
 
-      {isHr && (
-        <Card title="Import from the Employee Personal Information Google Form">
+      {isHr && !importOpen && (
+        <div><Button variant="secondary" onClick={() => setImportOpen(true)}>Import from Google Form</Button></div>
+      )}
+      {isHr && importOpen && (
+        <Card title="Import from the Employee Personal Information Google Form" actions={<Button variant="ghost" size="sm" onClick={() => setImportOpen(false)}>Close</Button>}>
           <p className="mb-3 text-sm text-slate-600">
             Export the form responses as CSV or Excel. Columns are matched by name (Full Name, Work Email, CNIC, Phone, Department, Designation, Date of Joining, Machine ID, Line Manager Email, Bank Name, Account Number…). Existing emails are skipped. Sample: <code className="text-xs">backend/samples/employees-google-form.csv</code>
           </p>
@@ -151,18 +155,18 @@ export default function EmployeesPage() {
       <Card
         title={`Employees${data ? ` (${data.length})` : ""}`}
         actions={
-          <>
-            <Input placeholder="Search name, code, email" value={q} onChange={(e) => setQ(e.target.value)} className="w-56" />
-            <Select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="w-44" aria-label="Department">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input placeholder="Search name, code, email" value={q} onChange={(e) => setQ(e.target.value)} className="!w-56" />
+            <Select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="!w-44" aria-label="Department">
               <option value="">All departments</option>
               {depts.data?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Select>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-32" aria-label="Status">
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="!w-32" aria-label="Status">
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
               <option value="ALL">All</option>
             </Select>
-          </>
+          </div>
         }
       >
         {loading ? <Spinner /> : error ? <Alert>{error}</Alert> : (

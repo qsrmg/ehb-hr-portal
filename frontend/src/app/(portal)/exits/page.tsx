@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, StatusBadge, Table, Tabs, Td, Textarea } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, StatusBadge, Table, Tabs, Td, Textarea } from "@/components/ui";
 import { hasRole, useAuth } from "@/lib/auth";
 import { post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
@@ -110,7 +110,7 @@ export default function ExitsPage() {
                   {x.deactivated && <div className="text-xs text-slate-500">Login switched off</div>}
                 </Td>
                 {x.clearances.map((c) => <Td key={c.area}><StatusBadge status={c.status} /></Td>)}
-                <Td>{x.waitingForMe && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">Waiting for you</span>}</Td>
+                <Td>{x.waitingForMe && <Badge tone="amber">Waiting for you</Badge>}</Td>
               </tr>
             ))}
           </Table>

@@ -29,6 +29,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} h-full antialiased`}
+      // Tells Next.js's router the smooth scroll (globals.css, for the landing page's in-page anchor links)
+      // is intentional, so it accounts for it during client-side route transitions instead of flagging it.
+      data-scroll-behavior="smooth"
       // The script below adds the "js" class before React hydrates.
       suppressHydrationWarning
     >

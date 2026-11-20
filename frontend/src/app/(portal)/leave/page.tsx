@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Alert, Card, LinkButton, PageHeader, Spinner, StatusBadge, Table, Td } from "@/components/ui";
+import { Alert, Card, EmptyState, LinkButton, PageHeader, Spinner, StatusBadge, Table, Td } from "@/components/ui";
 import { useApi } from "@/lib/useApi";
 import { fmtDate } from "@/lib/format";
 
@@ -26,11 +26,11 @@ export default function LeavePage() {
             {balances.data?.map((b) => (
               <tr key={b.leaveTypeId}>
                 <Td className="font-medium text-slate-900">{b.name}</Td>
-                <Td className="tabular-nums">{b.hasQuota ? b.entitled : "No fixed quota"}</Td>
-                <Td className="tabular-nums">{b.hasQuota ? b.carriedForward : "—"}</Td>
-                <Td className="tabular-nums">{b.used}</Td>
-                <Td className="tabular-nums">{b.pending}</Td>
-                <Td className="font-semibold tabular-nums">{b.available ?? "—"}</Td>
+                <Td className="text-right tabular-nums">{b.hasQuota ? b.entitled : "No fixed quota"}</Td>
+                <Td className="text-right tabular-nums">{b.hasQuota ? b.carriedForward : "—"}</Td>
+                <Td className="text-right tabular-nums">{b.used}</Td>
+                <Td className="text-right tabular-nums">{b.pending}</Td>
+                <Td className="text-right font-semibold tabular-nums">{b.available ?? "—"}</Td>
               </tr>
             ))}
           </Table>
@@ -38,7 +38,10 @@ export default function LeavePage() {
       </Card>
       <Card title="My leave requests">
         {history.loading ? <Spinner /> : (
-          <Table head={["#", "Request", "Submitted", "Status"]} empty="No leave requests yet.">
+          <Table
+            head={["#", "Request", "Submitted", "Status"]}
+            empty={<EmptyState title="No leave requests yet." line="Apply when you need a day off — it goes straight to your approver." action={<LinkButton href="/requests/new/leave" size="sm">Apply for leave</LinkButton>} />}
+          >
             {history.data?.map((r) => (
               <tr key={r.id}>
                 <Td className="text-slate-500">{r.id}</Td>

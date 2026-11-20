@@ -55,9 +55,9 @@ export default function ExpenseClaimsPage() {
                     <div className="text-xs text-slate-500">{c.employee.code}{c.employee.department ? ` · ${c.employee.department}` : ""}</div>
                   </Td>
                   <Td className="whitespace-normal"><Link href={`/requests/${c.requestId}`} className="text-accent hover:underline">{c.purpose}</Link></Td>
-                  <Td className="tabular-nums">{c.items}</Td>
-                  <Td className="tabular-nums">{fmtMoney(c.totalClaimed)}</Td>
-                  <Td className={`tabular-nums font-medium ${c.totalApproved !== c.totalClaimed ? "text-orange-700" : ""}`}>{fmtMoney(c.totalApproved)}</Td>
+                  <Td className="text-right tabular-nums">{c.items}</Td>
+                  <Td className="text-right tabular-nums">{fmtMoney(c.totalClaimed)}</Td>
+                  <Td className={`text-right tabular-nums font-medium ${c.totalApproved !== c.totalClaimed ? "text-orange-700" : ""}`}>{fmtMoney(c.totalApproved)}</Td>
                   <Td>
                     {c.paid ? (
                       <div className="text-sm">

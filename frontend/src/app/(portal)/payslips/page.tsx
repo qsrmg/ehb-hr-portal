@@ -34,9 +34,9 @@ export default function PayslipsPage() {
               <Fragment key={s.id}>
                 <tr>
                   <Td className="font-medium text-slate-900">{s.monthName} {s.year}</Td>
-                  <Td className="tabular-nums">{fmtMoney(s.gross)}</Td>
-                  <Td className="tabular-nums">{fmtMoney(s.totalDeductions)}</Td>
-                  <Td className="font-semibold tabular-nums">{fmtMoney(s.netPay)}</Td>
+                  <Td className="text-right tabular-nums">{fmtMoney(s.gross)}</Td>
+                  <Td className="text-right tabular-nums">{fmtMoney(s.totalDeductions)}</Td>
+                  <Td className="text-right font-semibold tabular-nums">{fmtMoney(s.netPay)}</Td>
                   <Td className="text-right">
                     <Button size="sm" variant="ghost" onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "Hide" : "View"}</Button>
                     <Button size="sm" variant="secondary" onClick={() => download(`/payroll/payslips/${s.id}/pdf`, `payslip-${s.year}-${s.month}.pdf`)}>PDF</Button>
@@ -72,7 +72,7 @@ export default function PayslipsPage() {
         title="Yearly tax statement (July – June)"
         actions={
           <>
-            <Select value={fy} onChange={(e) => setFy(Number(e.target.value))} className="w-36" aria-label="Tax year">
+            <Select value={fy} onChange={(e) => setFy(Number(e.target.value))} className="!w-36" aria-label="Tax year">
               {[0, 1, 2].map((n) => {
                 const y = currentTaxYear() - n;
                 return <option key={y} value={y}>{y}-{String((y + 1) % 100).padStart(2, "0")}</option>;
@@ -87,17 +87,17 @@ export default function PayslipsPage() {
             {tax.data.months.map((m) => (
               <tr key={m.id}>
                 <Td>{m.monthName} {m.year}</Td>
-                <Td className="tabular-nums">{fmtMoney(m.gross)}</Td>
-                <Td className="tabular-nums">{fmtMoney(m.incomeTax)}</Td>
-                <Td className="tabular-nums">{fmtMoney(m.netPay)}</Td>
+                <Td className="text-right tabular-nums">{fmtMoney(m.gross)}</Td>
+                <Td className="text-right tabular-nums">{fmtMoney(m.incomeTax)}</Td>
+                <Td className="text-right tabular-nums">{fmtMoney(m.netPay)}</Td>
               </tr>
             ))}
             {tax.data.months.length > 0 && (
               <tr className="font-semibold">
                 <Td>Total</Td>
-                <Td className="tabular-nums">{fmtMoney(tax.data.totals.gross)}</Td>
-                <Td className="tabular-nums">{fmtMoney(tax.data.totals.incomeTax)}</Td>
-                <Td className="tabular-nums">{fmtMoney(tax.data.totals.netPay)}</Td>
+                <Td className="text-right tabular-nums">{fmtMoney(tax.data.totals.gross)}</Td>
+                <Td className="text-right tabular-nums">{fmtMoney(tax.data.totals.incomeTax)}</Td>
+                <Td className="text-right tabular-nums">{fmtMoney(tax.data.totals.netPay)}</Td>
               </tr>
             )}
           </Table>

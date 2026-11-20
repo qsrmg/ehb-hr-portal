@@ -6,7 +6,11 @@ import { post, put } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import type { ExpenseCategory } from "@/components/ExpenseForm";
 
-type Setting = { key: string; label: string; value: string; default: string; optional: boolean };
+type Setting = { key: string; label: string; value: string; default: string; optional: boolean; hint: string | null };
+
+/** Helper text only when it adds something the label and "No limit" placeholder don't already say. */
+const hintFor = (s: Setting) => (s.optional ? (s.hint ?? undefined) : s.default ? `Default: ${s.default}` : undefined);
+const FIELD_LABEL_CLASS = "mb-1 block min-h-10 text-sm font-medium text-body";
 
 function LimitsForm({ settings, onSaved }: { settings: Setting[]; onSaved: () => void }) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(settings.map((s) => [s.key, s.value])));
@@ -31,7 +35,7 @@ function LimitsForm({ settings, onSaved }: { settings: Setting[]; onSaved: () =>
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">
         {settings.map((s) => (
-          <Field key={s.key} label={s.label} hint={s.optional ? "Leave empty for no limit" : `Default: ${s.default}`}>
+          <Field key={s.key} label={s.label} hint={hintFor(s)} labelClassName={FIELD_LABEL_CLASS}>
             <Input
               inputMode="decimal"
               value={values[s.key] ?? ""}

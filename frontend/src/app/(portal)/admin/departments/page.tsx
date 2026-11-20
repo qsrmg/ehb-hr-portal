@@ -90,7 +90,7 @@ export default function DepartmentsPage() {
                 <Td className="tabular-nums">{d.employeeCount}</Td>
                 <Td>
                   {isHr ? (
-                    <Select value={d.hod?.id ?? ""} onChange={(e) => setHod(d, e.target.value)} className="w-64" aria-label={`HOD of ${d.name}`}>
+                    <Select value={d.hod?.id ?? ""} onChange={(e) => setHod(d, e.target.value)} className="!w-48" aria-label={`HOD of ${d.name}`}>
                       <option value="">—</option>
                       {people.data?.map((p) => <option key={p.id} value={p.id}>{p.fullName} ({p.code})</option>)}
                     </Select>
