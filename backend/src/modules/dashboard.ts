@@ -6,6 +6,7 @@ import { monthlyAttendance } from "../services/attendance.js";
 import { balancesFor } from "../services/leave.js";
 import { pendingForUserWhere, TYPE_LABELS } from "../services/approvals.js";
 import { getSettings } from "../lib/settings.js";
+import { myTasksSummary } from "../services/tasks.js";
 
 export const dashboardRouter = Router();
 dashboardRouter.use(requireAuth);
@@ -106,5 +107,6 @@ dashboardRouter.get("/", async (req, res) => {
       : null,
     hr,
     team,
+    myTasks: await myTasksSummary(user.id),
   });
 });

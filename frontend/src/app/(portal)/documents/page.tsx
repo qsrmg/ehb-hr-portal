@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, Table, Td } from "@/components/ui";
+import { PolicyAcknowledgementsPanel } from "@/components/PolicyAcknowledgementsPanel";
 import { del, download, post } from "@/lib/api";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
@@ -11,33 +12,6 @@ type Doc = {
   id: number; title: string; description: string | null; category: "POLICY" | "HR_FORM"; fileName: string; size: number; createdAt: string; uploadedBy: string;
   requiresAcknowledgement: boolean; acknowledgedAt: string | null;
 };
-
-type Acknowledgements = { acknowledged: { id: number; fullName: string; code: string; acknowledgedAt: string }[]; outstanding: { id: number; fullName: string; code: string }[] };
-
-/** HR sees who still has not acknowledged a document that requires it. */
-function AcknowledgementsPanel({ doc }: { doc: Doc }) {
-  const [open, setOpen] = useState(false);
-  const { data } = useApi<Acknowledgements>(open ? `/documents/${doc.id}/acknowledgements` : null);
-  return (
-    <div className="mt-1">
-      <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)}>
-        {open ? "Hide" : "Who has not acknowledged?"}
-      </Button>
-      {open && data && (
-        <div className="mt-2 text-xs text-slate-600">
-          <div>{data.acknowledged.length} acknowledged, {data.outstanding.length} outstanding:</div>
-          {data.outstanding.length ? (
-            <ul className="mt-1 list-disc pl-4">
-              {data.outstanding.map((e) => <li key={e.id}>{e.fullName} ({e.code})</li>)}
-            </ul>
-          ) : (
-            <div className="mt-1">Everyone has acknowledged this document.</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function DocumentsPage() {
   const { user } = useAuth();
@@ -77,8 +51,12 @@ export default function DocumentsPage() {
 
   const remove = async (d: Doc) => {
     if (!confirm(`Delete "${d.title}"?`)) return;
-    await del(`/documents/${d.id}`);
-    reload();
+    try {
+      await del(`/documents/${d.id}`);
+      reload();
+    } catch (err) {
+      alert((err as Error).message);
+    }
   };
 
   const acknowledge = async (d: Doc) => {
@@ -108,7 +86,7 @@ export default function DocumentsPage() {
                   )}
                 </div>
               )}
-              {isHr && d.requiresAcknowledgement && <AcknowledgementsPanel doc={d} />}
+              {isHr && d.requiresAcknowledgement && <PolicyAcknowledgementsPanel policyKey={`document:${d.id}`} everyoneLabel="Everyone has acknowledged this document." />}
             </Td>
             <Td className="text-slate-500">{fmtDate(d.createdAt)}</Td>
             <Td className="text-right">

@@ -17,3 +17,25 @@ export type Profile = {
   cnic?: string | null; fatherName?: string | null; maritalStatus?: string | null; familyDetails?: string | null;
   bankName?: string | null; bankAccount?: string | null; basicSalary?: number | null; grossSalary?: number | null;
 };
+
+export type TaskPerson = { id: number; fullName: string; code: string };
+export type TaskStatus = "BACKLOG" | "TODO" | "IN_PROGRESS" | "DONE";
+export type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
+export type Task = {
+  id: number;
+  title: string;
+  description: string | null;
+  assignee: TaskPerson;
+  creator: TaskPerson;
+  priority: TaskPriority;
+  dueDate: string | null;
+  status: TaskStatus;
+  blocked: boolean;
+  department: { id: number; name: string } | null;
+  archivedAt: string | null;
+  archivedBy: TaskPerson | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type TaskComment = { id: number; body: string; createdAt: string; author: TaskPerson };
+export type TaskHistoryRow = { id: number; action: string; at: string; actor: TaskPerson | null; changes: Record<string, { from: unknown; to: unknown }> };

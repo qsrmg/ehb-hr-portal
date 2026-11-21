@@ -19,7 +19,7 @@ const WEB_PORT = Number(env.E2E_WEB_PORT ?? 3100);
 const MAIL_PORT = Number(env.E2E_MAIL_PORT ?? 8125);
 const SMTP_PORT = Number(env.E2E_SMTP_PORT ?? 1125);
 const UPLOAD_DIR = path.join(BACKEND, "uploads-e2e");
-const SPECS = (env.E2E_SPECS ?? "design,travel,inventory,exit,performance,hiring,leave,probation,training,activity,demo").split(",").map((s) => s.trim()).filter(Boolean);
+const SPECS = (env.E2E_SPECS ?? "design,travel,inventory,exit,performance,hiring,leave,probation,training,activity,tasks,demo").split(",").map((s) => s.trim()).filter(Boolean);
 
 // Safety: this script drops the database, so it only ever works on one whose name ends in _e2e.
 if (!/_e2e$/.test(DB_NAME)) {
@@ -49,6 +49,14 @@ const backendEnv = {
   SMTP_HOST: "127.0.0.1",
   SMTP_PORT: String(SMTP_PORT),
   SMTP_SECURE: "false",
+  // Lets the working-day gate (weekend / public holiday — backend/src/jobs/reminders.ts's inOfficeHours)
+  // pass even when the e2e suite happens to run on a real weekend, so activity.mjs is not weekday-dependent.
+  // This never changes what time it is anywhere (heartbeat timestamps, daily buckets, etc. all stay on the
+  // real clock — only the "is today Sat/Sun/a holiday" rejection is skipped). Read by
+  // backend/src/lib/dates.ts's e2eIgnoreWorkingDayGate, which applies this ONLY when NODE_ENV is not
+  // "production" AND DATABASE_URL ends in "_e2e" (true here, by DB_NAME above) — so it can never take
+  // effect outside this harness, even if the variable leaked into another environment's config.
+  E2E_IGNORE_WORKING_DAY_GATE: "1",
 };
 
 const children = [];

@@ -93,4 +93,18 @@ export const STATUS_STYLES: Record<string, { label: string; className: string }>
   SKIPPED: { label: "Skipped", className: "bg-slate-50 text-slate-500 ring-slate-200" },
   ACTIVE: { label: "Active", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   INACTIVE: { label: "Inactive", className: "bg-slate-100 text-slate-500 ring-slate-200" },
+  // Tasks: status is always shown as text alongside the colour, never colour alone.
+  BACKLOG: { label: "Backlog", className: "bg-slate-100 text-slate-600 ring-slate-200" },
+  TODO: { label: "To Do", className: "bg-sky-50 text-sky-700 ring-sky-200" },
+  IN_PROGRESS: { label: "In Progress", className: "bg-amber-50 text-amber-800 ring-amber-200" },
+  DONE: { label: "Done", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+};
+
+export const TASK_STATUSES = ["BACKLOG", "TODO", "IN_PROGRESS", "DONE"] as const;
+export type TaskStatusValue = (typeof TASK_STATUSES)[number];
+
+export const TASK_PRIORITY_STYLES: Record<string, { label: string; className: string }> = {
+  LOW: { label: "Low", className: "bg-slate-50 text-slate-600 ring-slate-200" },
+  MEDIUM: { label: "Medium", className: "bg-sky-50 text-sky-700 ring-sky-200" },
+  HIGH: { label: "High", className: "bg-red-50 text-red-700 ring-red-200" },
 };

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, Table, Tabs, Td } from "@/components/ui";
 import { MonthPicker } from "@/components/AttendanceMonth";
+import { PolicyAcknowledgementsPanel } from "@/components/PolicyAcknowledgementsPanel";
 import { del, download, post } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { currentMonth, fmtDateTime } from "@/lib/format";
@@ -169,6 +170,10 @@ export default function AdminActivityPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Activity monitoring" subtitle="Tracked time and Active % across the company. Never used to judge the quality of anyone's work." />
+      <Card title="Policy acknowledgement">
+        <p className="text-sm text-slate-600">Who has acknowledged the activity-monitoring policy. Names, codes and acknowledgement status only — no tracked time or Active %.</p>
+        <PolicyAcknowledgementsPanel policyKey="activity-monitoring" everyoneLabel="Everyone has acknowledged the activity-monitoring policy." />
+      </Card>
       <Card>
         <Tabs value={tab} onChange={setTab} options={[{ value: "reports", label: "Reports" }, { value: "individual", label: "Individual" }, { value: "exclusions", label: "Excluded employees" }]} />
         {tab === "reports" && <ReportsTab />}

@@ -24,6 +24,7 @@ const GROUPS: { title: string; prefixes: string[] }[] = [
   { title: "Training", prefixes: ["training."] },
   { title: "Assets", prefixes: ["assets."] },
   { title: "Activity monitoring", prefixes: ["activity."] },
+  { title: "Tasks", prefixes: ["tasks."] },
 ];
 
 function SettingsForm({ settings, onSaved }: { settings: Setting[]; onSaved: () => void }) {

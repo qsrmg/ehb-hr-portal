@@ -47,6 +47,7 @@ model Department {
   performanceTemplate     PerformanceTemplate?
   approvedHeadcount       Int? // maintained by HR; empty = no limit
   requisitions            Requisition[]
+  tasks                   Task[]
 }
 
 model Employee {
@@ -166,10 +167,15 @@ model Employee {
   probationNotesWritten          ProbationNote[]                 @relation("ProbationNoteAuthor")
   documentAcknowledgements       DocumentAcknowledgement[]
   activityPolicyAcknowledgements ActivityPolicyAcknowledgement[]
+  policyAcknowledgements         PolicyAcknowledgement[]
   activityExclusion              ActivityExclusion?              @relation("ActivityExcluded")
   activityExclusionsSet          ActivityExclusion[]             @relation("ActivityExcludedBy")
   activityDailySummaries         ActivityDailySummary[]
   activityHeartbeatState         ActivityHeartbeatState?
+  tasksAssigned                  Task[]                          @relation("TaskAssignee")
+  tasksCreated                   Task[]                          @relation("TaskCreator")
+  tasksArchived                  Task[]                          @relation("TaskArchivedBy")
+  taskComments                   TaskComment[]
 }
 
 /**
@@ -517,11 +523,14 @@ model Document {
   uploadedBy              Employee         @relation(fields: [uploadedById], references: [id])
   createdAt               DateTime         @default(now())
 
-  acknowledgements DocumentAcknowledgement[]
+  acknowledgements       DocumentAcknowledgement[]
+  policyAcknowledgements PolicyAcknowledgement[]
 }
 
 /**
  * One row per employee who has acknowledged a document; never deleted once recorded.
+ * Superseded by PolicyAcknowledgement (see below) for every acknowledgement recorded from here on; this
+ * table is frozen in place, read-only history, so that no row that already existed is ever lost.
  */
 model DocumentAcknowledgement {
   id             Int      @id @default(autoincrement())
@@ -532,6 +541,27 @@ model DocumentAcknowledgement {
   acknowledgedAt DateTime @default(now())
 
   @@unique([documentId, employeeId])
+}
+
+/**
+ * One shared table for every "I have read / I agree" acknowledgement in the portal: documents that
+ * require acknowledgement (policyKey "document:<documentId>", version always 1) and the activity-monitoring
+ * policy (policyKey "activity-monitoring", version bumped in code when the policy text changes), and any
+ * future policy keyed the same way. Never deleted or rewritten once recorded. documentId has no cascading
+ * delete: a document with acknowledgement rows cannot be deleted at all (see documents.ts), so a row here
+ * can never be orphaned by a document disappearing out from under it.
+ */
+model PolicyAcknowledgement {
+  id             Int       @id @default(autoincrement())
+  policyKey      String
+  version        Int
+  employeeId     Int
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  documentId     Int?
+  document       Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  acknowledgedAt DateTime  @default(now())
+
+  @@unique([policyKey, version, employeeId])
 }
 
 // ---------- Notifications and audit ----------
@@ -1594,4 +1624,64 @@ model ActivityHeartbeatState {
   lastHeartbeatAt   DateTime?
   lastRawActivityAt DateTime?
   pausedSince       DateTime?
+}
+
+// ---------- Tasks ----------
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/**
+ * "History" (who changed status/assignee/due date/priority, and when) is never stored here — it is read
+ * straight out of the existing AuditLog (entity "Task"), the same {from, to} shape already used for
+ * Setting/Employee updates. Comments are free text and stay in their own table, never audited.
+ */
+model Task {
+  id           Int          @id @default(autoincrement())
+  title        String
+  description  String?
+  assigneeId   Int
+  assignee     Employee     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creatorId    Int
+  creator      Employee     @relation("TaskCreator", fields: [creatorId], references: [id])
+  priority     TaskPriority @default(MEDIUM)
+  dueDate      DateTime?    @db.Date
+  status       TaskStatus   @default(BACKLOG)
+  blocked      Boolean      @default(false)
+  departmentId Int?
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  archivedAt   DateTime?
+  archivedById Int?
+  archivedBy   Employee?    @relation("TaskArchivedBy", fields: [archivedById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  comments TaskComment[]
+
+  @@index([assigneeId, status])
+  @@index([creatorId])
+  @@index([status, archivedAt])
+}
+
+/**
+ * Plain text only (no attachments in v1). Never written to the audit log.
+ */
+model TaskComment {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  Int
+  author    Employee @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
 }

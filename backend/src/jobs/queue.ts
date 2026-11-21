@@ -7,6 +7,7 @@ import { deactivateDueExits } from "../services/exits.js";
 import { notifyProbationDue } from "../services/probation.js";
 import { notifyAssetVerificationDue } from "../services/assets.js";
 import { cleanupOldActivity } from "../services/activity.js";
+import { sendOverdueDigest } from "../services/tasks.js";
 
 // Background jobs run on pg-boss, which keeps its queue in the same PostgreSQL database (schema "pgboss").
 const EMAIL_QUEUE = "email";
@@ -16,6 +17,7 @@ const EXIT_DEACTIVATION_QUEUE = "exit-deactivation";
 const PROBATION_DUE_QUEUE = "probation-due";
 const ASSET_VERIFICATION_QUEUE = "asset-verification-due";
 const ACTIVITY_CLEANUP_QUEUE = "activity-cleanup";
+const TASKS_OVERDUE_DIGEST_QUEUE = "tasks-overdue-digest";
 /** 00:05 on 1 January, company time. */
 export const CARRY_FORWARD_CRON = "5 0 1 1 *";
 
@@ -89,6 +91,14 @@ export async function startQueue(opts: QueueOptions = {}) {
     await instance.work(ACTIVITY_CLEANUP_QUEUE, async () => {
       const count = await cleanupOldActivity();
       if (count) console.log(`[activity] deleted ${count} daily summary row(s) past retention`);
+    });
+
+    // Once per working day at 08:30 (sendOverdueDigest itself skips weekends and holidays, Pakistan time).
+    await instance.createQueue(TASKS_OVERDUE_DIGEST_QUEUE, { retryLimit: 3, retryDelay: 300 });
+    await instance.schedule(TASKS_OVERDUE_DIGEST_QUEUE, "30 8 * * *", null, { tz: env.APP_TIMEZONE, missed: "once" });
+    await instance.work(TASKS_OVERDUE_DIGEST_QUEUE, async () => {
+      const count = await sendOverdueDigest();
+      if (count) console.log(`[tasks] overdue digest sent to ${count} assignee(s)`);
     });
   }
   boss = instance;

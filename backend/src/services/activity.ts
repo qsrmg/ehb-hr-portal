@@ -4,6 +4,8 @@ import { getSettings, settingNumber, type SettingKey } from "../lib/settings.js"
 import { HttpError } from "../middleware/error.js";
 import { approvedTripsWhere, holidayMap } from "./attendance.js";
 import { inOfficeHours } from "../jobs/reminders.js";
+import { ACTIVITY_MONITORING_POLICY_KEY, ACTIVITY_MONITORING_POLICY_TEXT, ACTIVITY_MONITORING_POLICY_VERSION } from "../lib/policies.js";
+import { acknowledgePolicy as acknowledgeSharedPolicy, hasAcknowledged } from "./policyAcknowledgement.js";
 
 /**
  * Activity monitoring: records only "was there keyboard/mouse/touch/scroll activity in this minute" — a
@@ -11,14 +13,8 @@ import { inOfficeHours } from "../jobs/reminders.js";
  * content, URLs or window titles; the frontend hook (useActivityTracking.ts) only ever reads event.type.
  */
 
-export const POLICY_VERSION = 1;
-export const POLICY_TEXT =
-  "While you are signed in during office hours, this portal notes whether your mouse or keyboard were used " +
-  "in each minute — never which key, where you clicked, or what was on screen. It only runs in this browser " +
-  "tab and only after you agree below. HR and your Line Manager can see how much of your tracked time was " +
-  "active; only HR can see your day-by-day detail, and every time they do that is recorded in the audit log. " +
-  "This is not used to judge the quality of your work, and never feeds appraisals, pay or disciplinary " +
-  "decisions automatically. You can stop it at any time by closing this tab.";
+export const POLICY_VERSION = ACTIVITY_MONITORING_POLICY_VERSION;
+export const POLICY_TEXT = ACTIVITY_MONITORING_POLICY_TEXT;
 
 const MIN_HEARTBEAT_INTERVAL_SECONDS = 45;
 const MAX_MINUTE_AGE_MS = 24 * 60 * 60 * 1000;
@@ -71,11 +67,7 @@ export async function isExcluded(employeeId: number) {
 }
 
 export async function hasAcknowledgedPolicy(employeeId: number) {
-  return (
-    (await prisma.activityPolicyAcknowledgement.findUnique({
-      where: { employeeId_policyVersion: { employeeId, policyVersion: POLICY_VERSION } },
-    })) != null
-  );
+  return hasAcknowledged(employeeId, ACTIVITY_MONITORING_POLICY_KEY, POLICY_VERSION);
 }
 
 /**
@@ -126,11 +118,7 @@ export async function trackabilityStatus(employeeId: number, now = new Date()) {
 }
 
 export async function acknowledgePolicy(employeeId: number) {
-  await prisma.activityPolicyAcknowledgement.upsert({
-    where: { employeeId_policyVersion: { employeeId, policyVersion: POLICY_VERSION } },
-    create: { employeeId, policyVersion: POLICY_VERSION },
-    update: {},
-  });
+  await acknowledgeSharedPolicy(employeeId, ACTIVITY_MONITORING_POLICY_KEY, "Policy", ACTIVITY_MONITORING_POLICY_KEY);
 }
 
 export type HeartbeatMinute = { minuteStart: string; active: boolean };

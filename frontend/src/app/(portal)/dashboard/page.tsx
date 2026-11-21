@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Calendar as CalendarIcon, CalendarClock, CheckSquare, ClipboardList, ShieldAlert, TrendingUp, UserCheck, Users } from "lucide-react";
+import { Calendar as CalendarIcon, CalendarClock, CheckSquare, ClipboardList, ListTodo, ShieldAlert, TrendingUp, UserCheck, Users } from "lucide-react";
 import { Alert, Empty, Spinner } from "@/components/ui";
 import { GlassCard } from "@/components/dashboard/GlassCard";
 import { KpiCard } from "@/components/dashboard/KpiCard";
@@ -36,6 +36,7 @@ type Dashboard = {
   hr: { lateWarningsThisMonth: number; activeEmployees: number; onLeaveToday: number } | null;
   team: { onLeaveToday: number } | null;
   unreadNotifications: number;
+  myTasks: { toDo: number; inProgress: number; overdueCount: number };
 };
 
 type MonthAttendance = { summary: AttendanceSummary; days: AttendanceDay[]; rules: { lateAfter: string } };
@@ -131,6 +132,14 @@ export default function DashboardPage() {
           hint={data.todayAttendance ? `Arriving after ${clock(data.rules.lateAfter)?.replace(/^0/, "")} counts as Late` : data.month.lastImported ? `Imported up to ${data.month.lastImported}` : "No attendance imported yet"}
         />
         <KpiCard label="My pending requests" value={data.myPending.length} icon={ClipboardList} tone="violet" href="/requests" hint={data.myPending[0]?.currentStepLabel ? `Waiting with ${data.myPending[0].currentStepLabel}` : undefined} />
+        <KpiCard
+          label="My tasks"
+          value={data.myTasks.toDo + data.myTasks.inProgress}
+          icon={ListTodo}
+          tone={data.myTasks.overdueCount ? "red" : "primary"}
+          href="/tasks"
+          hint={`${data.myTasks.toDo} To Do · ${data.myTasks.inProgress} In Progress${data.myTasks.overdueCount ? ` · ${data.myTasks.overdueCount} overdue` : ""}`}
+        />
         {approver && <KpiCard label="Waiting for your approval" value={data.tasks.length} icon={UserCheck} tone="sun" href="/approvals" hint={data.tasks.length ? "Needs your decision" : "Nothing waiting"} />}
         {data.team && <KpiCard label="Team on leave today" value={data.team.onLeaveToday} icon={CalendarIcon} tone="primary" href="/team" />}
         {data.hr && <KpiCard label="Active employees" value={data.hr.activeEmployees} icon={Users} tone="emerald" href="/admin/employees" />}

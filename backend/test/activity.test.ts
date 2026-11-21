@@ -283,7 +283,7 @@ describe("Activity monitoring", () => {
     assert.equal(after[0]!.actorId, id.hr);
   });
 
-  test("excluding an employee blocks their tracking and is audited; removing the exclusion restores it, also audited", async () => {
+  test("excluding an employee blocks their tracking and is audited; removing the exclusion restores it, also audited", async (t) => {
     assert.equal((await as("hr").post("/activity/exclusions", { employeeId: id.sara })).status, 201);
     assert.equal(((await auditRows("ActivityExclusion", "CREATE"))[0]!).actorId, id.hr);
     assert.equal((await as("sara").get("/activity/status")).data.trackable, false);
@@ -292,6 +292,10 @@ describe("Activity monitoring", () => {
     assert.equal((await as("hr").delete(`/activity/exclusions/${id.sara}`)).status, 200);
     assert.equal(((await auditRows("ActivityExclusion", "DELETE"))[0]!).actorId, id.hr);
     assert.equal((await as("sara").post("/activity/policy/acknowledge")).status, 200);
+    // Being un-excluded and acknowledged is only enough to make trackable true on a working day inside
+    // office hours; freeze the clock there so this does not depend on the real calendar date (2026-11-10
+    // is a Tuesday). Scoped to this test only — t.mock.timers auto-restores the real clock once it ends.
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-10T06:00:00.000Z").getTime() });
     assert.equal((await as("sara").get("/activity/status")).data.trackable, true);
   });
 

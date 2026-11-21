@@ -218,6 +218,26 @@ await step(8, "HR's individual view is audited; the CSV export works", async (ch
   await context.close();
 });
 
+await step(9, "HR's new 'Policy acknowledgement' card on the Activity admin page shows who has not acknowledged", async (check) => {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 900 }, timezoneId: "Asia/Karachi" });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15000);
+  await signIn(page, HR);
+  await page.goto(`${BASE}/admin/activity`);
+  await page.getByRole("heading", { name: "Policy acknowledgement" }).waitFor();
+  await page.getByRole("button", { name: "Who has not acknowledged?" }).click();
+  await page.getByText(/acknowledged, .* outstanding/).waitFor();
+  check("The report opens and shows an acknowledged/outstanding split");
+  const text = await page.getByText(/acknowledged, .* outstanding/).locator("..").innerText();
+  if (text.includes("Ali Raza")) throw new Error("Ali Raza already acknowledged the policy in step 4 and must not show as outstanding");
+  check("Ali Raza (already acknowledged in step 4) does not appear as outstanding");
+  await snap(page, "hr-policy-acknowledgement-card");
+  await page.getByRole("button", { name: "Hide" }).click();
+  if (await page.getByText(/acknowledged, .* outstanding/).count()) throw new Error("The report did not collapse after clicking Hide");
+  check("The report collapses again on 'Hide'");
+  await context.close();
+});
+
 await browser.close();
 
 console.log("\n=== activity summary ===");

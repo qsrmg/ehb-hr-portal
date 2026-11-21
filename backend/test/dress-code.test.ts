@@ -89,9 +89,10 @@ describe("Dress Code Policy", () => {
       const after1 = (await as("ali").get("/documents")).data as { id: number; acknowledgedAt: string | null }[];
       assert.ok(after1.find((d) => d.id === docId)!.acknowledgedAt);
 
-      // Acknowledging again is a no-op, not a duplicate or an error.
+      // Acknowledging again is a no-op, not a duplicate or an error. Acknowledgements are now recorded in
+      // the shared PolicyAcknowledgement table (see DECISIONS.md); DocumentAcknowledgement is frozen history.
       ok(await as("ali").post(`/documents/${docId}/acknowledge`));
-      const rows = await prisma.documentAcknowledgement.findMany({ where: { documentId: docId, employeeId: id.ali } });
+      const rows = await prisma.policyAcknowledgement.findMany({ where: { documentId: docId, employeeId: id.ali } });
       assert.equal(rows.length, 1);
 
       const after2 = await as("hr").get(`/documents/${docId}/acknowledgements`);

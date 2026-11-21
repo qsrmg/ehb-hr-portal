@@ -4,8 +4,10 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { audit } from "../lib/audit.js";
 import { absoluteUploadPath, documentUpload, relativeUploadPath, removeFiles } from "../lib/upload.js";
+import { documentPolicyKey } from "../lib/policies.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth.js";
+import { acknowledgePolicy, documentHasAcknowledgements, getAcknowledgementReport } from "../services/policyAcknowledgement.js";
 
 export const documentsRouter = Router();
 documentsRouter.use(requireAuth);
@@ -18,12 +20,12 @@ documentsRouter.get("/", async (req, res) => {
   const rows = await prisma.document.findMany({
     where: category ? { category } : {},
     orderBy: [{ category: "asc" }, { title: "asc" }],
-    include: { uploadedBy: { select: { fullName: true } }, acknowledgements: { where: { employeeId: user.id }, select: { acknowledgedAt: true } } },
+    include: { uploadedBy: { select: { fullName: true } }, policyAcknowledgements: { where: { employeeId: user.id }, select: { acknowledgedAt: true } } },
   });
   res.json(rows.map((d) => ({
     id: d.id, title: d.title, description: d.description, category: d.category, fileName: d.fileName,
     size: d.size, createdAt: d.createdAt, uploadedBy: d.uploadedBy.fullName,
-    requiresAcknowledgement: d.requiresAcknowledgement, acknowledgedAt: d.acknowledgements[0]?.acknowledgedAt ?? null,
+    requiresAcknowledgement: d.requiresAcknowledgement, acknowledgedAt: d.policyAcknowledgements[0]?.acknowledgedAt ?? null,
   })));
 });
 
@@ -60,18 +62,14 @@ documentsRouter.get("/:id/download", async (req, res) => {
   res.download(file, doc.fileName);
 });
 
-// Dress Code Policy design 1: a timestamped acknowledgement, no login blocking. Submitting again is a no-op.
+// Dress Code Policy design 1: a timestamped acknowledgement, no login blocking. Submitting again is a no-op
+// (acknowledgePolicy treats a race between a double-click / two tabs the same way, never a 500).
 documentsRouter.post("/:id/acknowledge", async (req, res) => {
   const user = currentUser(req);
   const id = Number(req.params.id);
   const doc = await prisma.document.findUnique({ where: { id } });
   if (!doc) throw new HttpError(404, "Document not found");
-  const ack = await prisma.documentAcknowledgement.upsert({
-    where: { documentId_employeeId: { documentId: id, employeeId: user.id } },
-    create: { documentId: id, employeeId: user.id },
-    update: {},
-  });
-  await audit(user.id, "ACKNOWLEDGE", "Document", id);
+  const ack = await acknowledgePolicy(user.id, documentPolicyKey(id), "Document", id);
   res.json({ ok: true, acknowledgedAt: ack.acknowledgedAt });
 });
 
@@ -80,20 +78,13 @@ documentsRouter.get("/:id/acknowledgements", requireRole("HR"), async (req, res)
   const id = Number(req.params.id);
   const doc = await prisma.document.findUnique({ where: { id } });
   if (!doc) throw new HttpError(404, "Document not found");
-  const [acknowledged, employees] = await Promise.all([
-    prisma.documentAcknowledgement.findMany({ where: { documentId: id }, include: { employee: { select: { id: true, fullName: true, code: true } } }, orderBy: { acknowledgedAt: "asc" } }),
-    prisma.employee.findMany({ where: { status: "ACTIVE" }, select: { id: true, fullName: true, code: true }, orderBy: { fullName: "asc" } }),
-  ]);
-  const ackedIds = new Set(acknowledged.map((a) => a.employeeId));
-  res.json({
-    acknowledged: acknowledged.map((a) => ({ id: a.employee.id, fullName: a.employee.fullName, code: a.employee.code, acknowledgedAt: a.acknowledgedAt })),
-    outstanding: employees.filter((e) => !ackedIds.has(e.id)),
-  });
+  res.json(await getAcknowledgementReport(documentPolicyKey(id)));
 });
 
 documentsRouter.delete("/:id", requireRole("HR"), async (req, res) => {
   const doc = await prisma.document.findUnique({ where: { id: Number(req.params.id) } });
   if (!doc) throw new HttpError(404, "Document not found");
+  if (await documentHasAcknowledgements(doc.id)) throw new HttpError(409, "This document has acknowledgements and cannot be deleted");
   await prisma.document.delete({ where: { id: doc.id } });
   fs.rm(absoluteUploadPath(doc.path), { force: true }, () => {});
   await audit(currentUser(req).id, "DELETE", "Document", doc.id, { title: doc.title });

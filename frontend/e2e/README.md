@@ -12,6 +12,7 @@
 | `probation.mjs` | Probation confirmation: the Employees list due-count, HR sees Confirm/Extend on a due record, the Line Manager leaves a note from the Team page, HR extends with a reason (and the due cycle moves on) or confirms, and the employee sees their own status, read-only, on their profile | `test-screenshots/probation/` |
 | `training.mjs` | Training requests: validation, the Line Manager → HOD → Finance approval chain (with the Management threshold), return/resubmit, rejection, withdrawal and access control | `test-screenshots/training/` |
 | `activity.mjs` | Activity monitoring: off by default, HR turns it on, the non-blocking acknowledgement prompt, the badge once acknowledged, multi-tab activity (OR-merged, leader tab sends the heartbeat), the heartbeat payload has only `{minuteStart, active}`, the Line Manager's team view is aggregate-only, and HR's individual view / CSV export are both audited | `test-screenshots/activity/` |
+| `tasks.mjs` | Tasks: an employee creates and moves their own task with the keyboard "Move to" control and cannot assign to anyone else, a Line Manager assigns within their team and is rejected outside it, HR assigns anyone, a notification fires on assignment, an unauthorised status move is rejected, Finance sees only its own tasks, phone-width screenshots for all three roles | `test-screenshots/tasks/` |
 | `demo.mjs` | Walks through DEMO.md on the HR demo data (`backend/prisma/demo.ts`, loaded instead of the standard seed): every login and screen the demo uses | `test-screenshots/demo/` |
 
 `travel.mjs` runs in a real browser as Finance, HR, the traveller (Sara), the line manager (Ayesha), the HOD (Hamza) and Admin (Usman), and takes screenshots at each important step.
@@ -48,7 +49,7 @@ The server logs go to `test-screenshots/e2e-logs/` (ignored by git, like the scr
 
 | Variable | Default |
 |---|---|
-| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring,leave,probation,training,activity,demo` (e.g. `E2E_SPECS=demo` to run one) |
+| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring,leave,probation,training,activity,tasks,demo` (e.g. `E2E_SPECS=demo` to run one) |
 | `E2E_DB_NAME` | `hr_ms_e2e` (must end in `_e2e`) |
 | `E2E_API_PORT` / `E2E_WEB_PORT` | `5100` / `3100` |
 | `E2E_MAIL_PORT` / `E2E_SMTP_PORT` | `8125` / `1125` |

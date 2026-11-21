@@ -2,6 +2,7 @@ import { prisma } from "./prisma.js";
 
 /** Report types a police report can be required for ("not working" is handled by repair, never police). */
 const INCIDENT_LIST_VALUES = ["DAMAGED", "LOST"] as const;
+const TASK_PRIORITY_LIST_VALUES = ["LOW", "MEDIUM", "HIGH"] as const;
 
 // Every quota, limit and day count is a setting HR can change without new development.
 export const SETTING_DEFAULTS = {
@@ -64,6 +65,10 @@ export const SETTING_DEFAULTS = {
   "activity.breakWindows": { value: "", label: "Daily break windows excluded from tracking, comma-separated HH:MM-HH:MM (e.g. lunch, prayer)", optional: true },
   "activity.allowPause": { value: "0", label: "Let employees pause their own activity tracking", boolean: true },
   "activity.pauseMaxMinutesPerDay": { value: "0", label: "Maximum minutes an employee may pause tracking per day (0 = pausing not allowed even if switched on above)" },
+  // Tasks module.
+  "tasks.defaultPriority": { value: "MEDIUM", label: "Default priority for a new task", list: TASK_PRIORITY_LIST_VALUES },
+  "tasks.employeesCanCreateOwnTasks": { value: "1", label: "Let employees create tasks for themselves", boolean: true },
+  "tasks.sendEmails": { value: "1", label: "Also email task notifications (assigned, status changed, overdue digest), not just the in-app notification", boolean: true },
 } as const satisfies Record<string, { value: string; label: string; optional?: boolean; text?: boolean; boolean?: boolean; role?: boolean; list?: readonly string[]; hint?: string }>;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

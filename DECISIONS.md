@@ -117,6 +117,30 @@ Off by default (`activity.enabled`, empty/off). Browser-tab only: it records a b
 | Use in appraisal, increment or disciplinary decisions | **Recommended: never** — no code path connects this feature to those modules today; keep it that way | No automatic use | Management |
 | A desktop agent for activity outside the browser tab | Out of scope; not built | Not built | Management |
 
+**Tasks (task board with assignment)**
+
+Employees create tasks for themselves only (`tasks.employeesCanCreateOwnTasks`, on by default); a Line Manager/HOD may assign within their own direct-and-indirect team (`backend/src/services/tasks.ts`, `teamIdsRecursive`), regardless of department — there is no cross-department restriction in v1. HR may assign anyone. Finance is always own-tasks-only, even if they happen to have reports. No hard delete — "Archive" only, by the creator, the assignee's direct manager, or HR. History (who changed status/assignee/due date/priority, and when) is read straight out of the existing audit log, filtered to those four fields only — comment text is never written to the audit log at all.
+
+| Setting | Controls | Default | Decide |
+|---|---|---|---|
+| `tasks.defaultPriority` | Priority a new task gets when none is chosen | Medium | HR |
+| `tasks.employeesCanCreateOwnTasks` | Lets an employee create a task assigned to themselves | On | HR |
+| `tasks.sendEmails` | Also emails task notifications (assigned, status changed, overdue digest), not just the in-app row | On | HR |
+| **ADMIN / MANAGEMENT role scope** | Not specified in the original brief; implemented as own-tasks-only in v1 (same as Finance), even though some MANAGEMENT users structurally have direct reports in the org chart. An ADMIN/MANAGEMENT user who *also* holds LINE_MANAGER or HOD gets team scope through that role instead. | Own tasks only | HR/Management |
+| Tasks feeding appraisal or performance | **Recommended: never** — no code path connects Tasks to Performance today | No automatic use | Management |
+| Showing activity-monitoring data alongside task data | **Recommended: no** — the two features are not cross-referenced anywhere in the UI or API | Not shown together | HR/Management |
+| Sub-tasks, labels, attachments, recurring tasks, an extra "Review" column | Out of scope v1; not built | Not built | Management |
+| Viewing another person's tasks as HR or Line Manager | **Recommended: not audited** — ordinary work items, not the sensitive-data class that gets `VIEW_SENSITIVE` elsewhere (payslips, CNIC, activity detail) | Not audited | HR |
+
+**Shared policy acknowledgement**
+
+Every "I have read / I agree" acknowledgement in the portal (a document that requires acknowledgement, and the activity-monitoring policy) is now recorded in one table, `PolicyAcknowledgement` (`backend/prisma/schema.prisma`), keyed by `policyKey` + `version` + `employeeId` and never rewritten once recorded. The two tables this replaced — `DocumentAcknowledgement` and `ActivityPolicyAcknowledgement` — are left in the schema, frozen, read-only history; migration `20261121061300_policy_acknowledgement` copies every row that existed in them into the new table and touches neither old table otherwise. HR's "who has not acknowledged" report is now a single generic endpoint, `GET /policies/:policyKey/acknowledgements` (`backend/src/services/policyAcknowledgement.ts`), used by both the Documents page and the new "Policy acknowledgement" card on the Activity admin page.
+
+| Setting | Controls | Default | Decide |
+|---|---|---|---|
+| A document with acknowledgement rows | Cannot be deleted (409) — the rows are never cascaded away; a document with none can still be deleted | Blocked while rows exist | HR |
+| Dropping the two old (now frozen) tables | **Recommended: not yet** — keep them as a historical record for at least one full cycle, then drop in a separate, explicit change | Kept, unused | HR/Management |
+
 ---
 
 **Repository note:** line endings are enforced as LF via `.gitattributes` (`* text=auto eol=lf`, with binary file types excepted) and `core.autocrlf` is set to `false` for this repository, so Windows checkouts no longer convert files to CRLF and reintroduce whole-file diff noise.

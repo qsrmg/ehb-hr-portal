@@ -29,6 +29,10 @@ const karachiYmd = (offsetDays = 0) => {
 };
 const TODAY = karachiYmd(0);
 const TOMORROW = karachiYmd(1);
+// Attendance shows "Weekend" ahead of "On duty / Travel" for any day that is actually a Saturday/Sunday —
+// by design (backend/src/services/attendance.ts), regardless of an approved trip. Since this is a same-day
+// trip, step 5's attendance check below has to expect whichever of the two is actually correct for TODAY.
+const TODAY_IS_WEEKEND = [0, 6].includes(new Date(`${TODAY}T00:00:00Z`).getUTCDay());
 const fmtDate = (ymd) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 const browser = await chromium.launch();
@@ -246,8 +250,9 @@ await step(5, "Traveller: booked notice, ticket download, On duty / Travel, sett
 
     await page.goto(`${BASE}/attendance`);
     const row = page.locator("tr", { hasText: fmtDate(TODAY) });
-    await row.getByText("On duty / Travel").waitFor();
-    check(`Attendance shows ${fmtDate(TODAY)} as On duty / Travel`);
+    const expectedStatus = TODAY_IS_WEEKEND ? "Weekend" : "On duty / Travel";
+    await row.getByText(expectedStatus).waitFor();
+    check(`Attendance shows ${fmtDate(TODAY)} as ${expectedStatus}`);
     s(await snap(page, "step5-attendance-travel"));
 
     await page.goto(`${BASE}/requests/${ctx.trip1}`);

@@ -26,6 +26,7 @@ const NAV: NavGroup[] = [
       { href: "/leave", label: "Leave", icon: "calendar" },
       { href: "/payslips", label: "Pay slips & tax", icon: "wallet" },
       { href: "/requests", label: "Requests", icon: "clipboard" },
+      { href: "/tasks", label: "My tasks", icon: "checkCircle" },
       { href: "/performance", label: "Performance", icon: "chart" },
       { href: "/hiring", label: "Jobs and hiring", icon: "users" },
       { href: "/inventory", label: "My inventory", icon: "box" },
@@ -39,6 +40,7 @@ const NAV: NavGroup[] = [
     items: [
       { href: "/approvals", label: "Approvals", icon: "inbox", show: isApprover },
       { href: "/team", label: "Team", icon: "users", show: (u) => u.hasTeam || hasRole(u, "HR", "MANAGEMENT") },
+      { href: "/tasks/team", label: "Team tasks", icon: "checkCircle", show: (u) => u.hasTeam || hasRole(u, "HR") },
       { href: "/exits", label: "Exit clearance", icon: "logout", show: (u) => u.hasTeam || hasRole(u, "HR", "MANAGEMENT", "ADMIN", "FINANCE") },
     ],
   },
