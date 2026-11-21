@@ -5,7 +5,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { addDays, todayYmd, toDate, ymd } from "../src/lib/dates.js";
 import { deactivateDueExits } from "../src/services/exits.js";
 import { evaluateLeave } from "../src/services/leave.js";
-import { outbox, PASSWORD, resetDatabase, startServer, useMemoryTransport } from "./helpers.js";
+import { futureWorkday, outbox, PASSWORD, resetDatabase, startServer, useMemoryTransport } from "./helpers.js";
 
 const day = (n: number) => ymd(addDays(toDate(todayYmd()), n));
 
@@ -276,8 +276,11 @@ describe("Resignation & exit clearance", () => {
   });
 
   test("HR is warned about the leaver's team and approvals; the exit cannot be completed until they are reassigned", async () => {
-    // Zara has a leave request waiting with Hamza.
-    const leave = await api.call(token.zara!, "POST", "/requests/leave", { leaveTypeId: annualLeave, startDate: day(14), endDate: day(14), reason: "Family event" });
+    // Zara has a leave request waiting with Hamza. A single working day, not day(14): that lands on a
+    // weekend depending on the real calendar date, which would make this a "no working days" 400 instead
+    // of the leave request this test needs.
+    const leaveDay = futureWorkday(14);
+    const leave = await api.call(token.zara!, "POST", "/requests/leave", { leaveTypeId: annualLeave, startDate: leaveDay, endDate: leaveDay, reason: "Family event" });
     ok(leave, 201);
     const hamza: number = await resign("hamza", day(30));
     // Hamza's line manager is Nadia, who is also the HOD: one step for her, then HR.

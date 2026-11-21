@@ -2,6 +2,32 @@ import { env } from "../config/env.js";
 
 // All calendar dates travel as "YYYY-MM-DD" strings and are stored as UTC-midnight DATE values.
 
+/**
+ * True only for the e2e test harness, so the working-day gate (weekend / public holiday — see
+ * jobs/reminders.ts's inOfficeHours) never blocks a feature that depends on it (activity monitoring today)
+ * just because the e2e suite happens to run on a real weekend. It never substitutes a different date or
+ * time anywhere — every Date computation in the app still reads the real clock; this only skips the
+ * "is today Sat/Sun/a holiday" rejection, which is why it is safe for things like heartbeat timestamps
+ * that must stay real (see activity.ts's MAX_MINUTE_AGE_MS / FUTURE_SKEW_MS checks).
+ *
+ * Guarded twice, both of which must hold:
+ *   1. NODE_ENV is not "production", and
+ *   2. the connected database's name ends in "_e2e" — the exact same marker frontend/e2e/run-all.mjs
+ *      already requires before it will run against a database at all (see its DB_NAME check).
+ * A stray E2E_IGNORE_WORKING_DAY_GATE left in a real .env has no effect: production's DATABASE_URL is
+ * never *_e2e, so the second check alone would block it even if the first did not.
+ */
+const databaseName = (() => {
+  try {
+    return new URL(env.DATABASE_URL).pathname.replace(/^\//, "");
+  } catch {
+    return "";
+  }
+})();
+
+export const e2eIgnoreWorkingDayGate =
+  env.NODE_ENV !== "production" && /_e2e$/.test(databaseName) && process.env.E2E_IGNORE_WORKING_DAY_GATE === "1";
+
 export const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 export const ymd = (d: Date) => d.toISOString().slice(0, 10);
 

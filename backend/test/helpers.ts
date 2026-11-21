@@ -36,8 +36,11 @@ export const failNextDeliveries = (n: number) => { failuresToSimulate = n; };
 
 /** Waits until the queue has delivered emails matching the predicate. */
 export async function waitForEmails(predicate: (sent: SentEmail[]) => boolean, timeoutMs = 20_000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  // performance.now(), not Date.now(): a few tests freeze Date to a fixed instant for the duration of one
+  // test (see activity.test.ts's t.mock.timers.enable calls) — a Date-based deadline here would never
+  // elapse if this ran inside one of those. performance.now() tracks real wall-clock time regardless.
+  const start = performance.now();
+  while (performance.now() - start < timeoutMs) {
     if (predicate(outbox)) return;
     await new Promise((r) => setTimeout(r, 100));
   }

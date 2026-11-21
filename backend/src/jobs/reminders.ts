@@ -2,12 +2,13 @@ import { prisma } from "../lib/prisma.js";
 import { getSettings } from "../lib/settings.js";
 import { notify } from "../lib/notify.js";
 import { currentApproverIds } from "../services/approvals.js";
-import { hmToMinutes, nowParts, toDate } from "../lib/dates.js";
+import { e2eIgnoreWorkingDayGate, hmToMinutes, nowParts, toDate } from "../lib/dates.js";
 
 /** Office hours in the company timezone: Monday–Friday, start ≤ time < end, not a public holiday. */
 export function inOfficeHours(now: Date, start: string, end: string, isHoliday: (ymd: string) => boolean) {
   const { ymd, minutes, weekday } = nowParts(now);
-  if (weekday === "Sat" || weekday === "Sun" || isHoliday(ymd)) return false;
+  const isWeekendOrHoliday = weekday === "Sat" || weekday === "Sun" || isHoliday(ymd);
+  if (isWeekendOrHoliday && !e2eIgnoreWorkingDayGate) return false;
   return minutes >= hmToMinutes(start) && minutes < hmToMinutes(end);
 }
 
