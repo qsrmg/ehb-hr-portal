@@ -11,11 +11,12 @@ import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from ".
 import { assetClearance } from "../services/assets.js";
 import { exitLetterPdf, EXIT_LETTERS, type ExitLetterKind } from "../services/pdf.js";
 import {
-  afterParallelCleared, AREA_LABELS, canClear, createExitCase, deactivateForExit, EXIT_TYPE_LABELS, exitCaseOpened, handoverFor,
-  handoverWarning, noticeFor, openExitCase, PARALLEL_AREAS, settlementDraft, SETTLEMENT_KIND_LABELS,
+  afterParallelCleared, AREA_LABELS, canClear, canToggleChecklistItem, createExitCase, deactivateForExit, EXIT_TYPE_LABELS,
+  exitCaseOpened, exitHistory, exitSendEmail, handoverFor, handoverWarning, noticeFor, openExitCase, PARALLEL_AREAS,
+  setChecklistItemStatus, settlementDraft, SETTLEMENT_KIND_LABELS,
 } from "../services/exits.js";
 import { round2 } from "../services/expenses.js";
-import type { ClearanceArea, Prisma } from "../generated/prisma/client.js";
+import type { ClearanceArea, ExitChecklistItemStatus, Prisma } from "../generated/prisma/client.js";
 
 // Exit clearance: IT/Admin, Line Manager and HR clear in parallel, then Finance records the final settlement.
 export const exitsRouter = Router();
@@ -44,6 +45,7 @@ const caseInclude = {
   clearances: { include: { approver: { select: { fullName: true } }, clearedBy: { select: { fullName: true } } } },
   settlementItems: { orderBy: { order: "asc" } },
   interview: { include: { recordedBy: { select: { fullName: true } } } },
+  checklistItems: { include: { doneBy: { select: { fullName: true } } }, orderBy: { id: "asc" } },
 } satisfies Prisma.ExitCaseInclude;
 
 type CaseFull = Prisma.ExitCaseGetPayload<{ include: typeof caseInclude }>;
@@ -126,6 +128,37 @@ exitsRouter.get("/handover/:employeeId", requireRole("HR"), async (req, res) => 
   res.json(await handoverFor(Number(req.params.employeeId)));
 });
 
+// Offboarding checklist templates (HR-configurable; snapshotted into a case's items when it opens)
+exitsRouter.get("/checklist-templates", requireRole("HR"), async (_req, res) => {
+  res.json(await prisma.exitChecklistTemplate.findMany({ orderBy: [{ area: "asc" }, { sortOrder: "asc" }] }));
+});
+
+const ROLE_VALUES = ["LINE_MANAGER", "HOD", "HR", "FINANCE", "ADMIN", "MANAGEMENT", "EMPLOYEE"] as const;
+const templateSchema = z.object({
+  area: z.enum(["IT_ADMIN", "LINE_MANAGER", "HR", "FINANCE"]),
+  label: z.string().trim().min(2, "Describe the checklist item"),
+  ownerRole: z.enum(ROLE_VALUES).nullable().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+
+exitsRouter.post("/checklist-templates", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const input = parse(templateSchema, req.body);
+  const row = await prisma.exitChecklistTemplate.create({ data: { area: input.area, label: input.label, ownerRole: input.ownerRole ?? null, sortOrder: input.sortOrder ?? 0 } });
+  await audit(user.id, "CREATE", "ExitChecklistTemplate", row.id, { area: input.area, label: input.label });
+  res.status(201).json(row);
+});
+
+const templateUpdateSchema = templateSchema.partial().extend({ active: z.boolean().optional() });
+
+exitsRouter.put("/checklist-templates/:templateId", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const input = parse(templateUpdateSchema, req.body);
+  const row = await prisma.exitChecklistTemplate.update({ where: { id: Number(req.params.templateId) }, data: input });
+  await audit(user.id, "UPDATE", "ExitChecklistTemplate", row.id, { ...input });
+  res.json(row);
+});
+
 const startSchema = z.object({
   employeeId: z.coerce.number().int({ message: "Choose the employee" }),
   type: z.enum(["RESIGNATION", "TERMINATION", "END_OF_CONTRACT", "OTHER"]),
@@ -158,6 +191,7 @@ exitsRouter.post("/", requireRole("HR"), async (req, res) => {
 exitsRouter.get("/:id", async (req, res) => {
   const user = currentUser(req);
   const { c, v } = await loadForUser(Number(req.params.id), user);
+  if (v.hr && c.interview) await audit(user.id, "VIEW_SENSITIVE", "ExitInterview", c.id);
   const open = c.status === "OPEN";
   const money = v.hr || v.management || v.finance;
   const assets = v.hr || v.management || v.admin || v.finance || v.self ? await assetClearance(c.employeeId) : null;
@@ -232,7 +266,37 @@ exitsRouter.get("/:id", async (req, res) => {
     completeBlockers,
     canCancel: v.hr && open,
     replacements,
+    checklistItems: c.checklistItems.map((i) => ({
+      id: i.id, area: i.area, label: i.label, ownerRole: i.ownerRole, status: i.status,
+      doneBy: i.doneBy?.fullName ?? null, doneAt: i.doneAt, note: v.self ? null : i.note,
+      canToggle: open && canToggleChecklistItem(user, c, i),
+    })),
   });
+});
+
+// Every audited action on this case, its cards, its checklist and its interview — HR, Finance and Admin only
+// (not the employee, not the Line Manager, not Management), never the exit interview's answers themselves.
+exitsRouter.get("/:id/history", async (req, res) => {
+  const user = currentUser(req);
+  const { v } = await loadForUser(Number(req.params.id), user);
+  if (!(v.hr || v.finance || v.admin)) throw new HttpError(403, "Only HR, Finance or Admin can view the history");
+  res.json(await exitHistory(Number(req.params.id)));
+});
+
+const checklistToggleSchema = z.object({ status: z.enum(["PENDING", "DONE", "NOT_APPLICABLE"]), note: z.string().trim().max(500).optional() });
+
+// Toggle one checklist item; who may act is area-owner-or-HR (an item with no owner role is HR-only)
+exitsRouter.post("/:id/checklist/:itemId", async (req, res) => {
+  const user = currentUser(req);
+  const input = parse(checklistToggleSchema, req.body);
+  const { c } = await loadForUser(Number(req.params.id), user);
+  if (c.status !== "OPEN") throw new HttpError(400, `This exit is ${c.status.toLowerCase()}`);
+  const item = c.checklistItems.find((i) => i.id === Number(req.params.itemId));
+  if (!item) throw new HttpError(404, "Checklist item not found");
+  if (!canToggleChecklistItem(user, c, item)) throw new HttpError(403, "You do not have access to change this item");
+  const updated = await setChecklistItemStatus(item.id, input.status as ExitChecklistItemStatus, user.id, input.note ?? null);
+  await audit(user.id, "UPDATE", "ExitChecklistItem", item.id, { area: item.area, label: item.label, status: input.status });
+  res.json({ ok: true, status: updated.status, doneAt: updated.doneAt });
 });
 
 const clearSchema = z.object({ comment: z.string().trim().max(1000).optional() });
@@ -304,13 +368,15 @@ exitsRouter.post("/:id/settlement", async (req, res) => {
     prisma.exitClearance.update({ where: { id: card.id }, data: { status: "CLEARED", clearedById: user.id, clearedAt: new Date() } }),
   ]);
   await audit(user.id, "SETTLE", "ExitCase", c.id, { net, items: input.items.length });
+  const sendEmail = await exitSendEmail();
   await notify(
     (await employeeIdsWithRole("HR")).filter((id) => id !== c.employeeId),
     `Exit cleared: ${c.employee.fullName}`,
     `Finance recorded the final settlement for ${c.employee.fullName}. Every clearance is done: issue the experience and relieving letters, then complete the exit.`,
     `/exits/${c.id}`,
+    { sendEmail },
   );
-  if (c.employee.status === "ACTIVE") await notify([c.employeeId], "Final settlement recorded", `Finance has recorded your final settlement (settled on ${input.settledOn}).`, `/exits/${c.id}`);
+  if (c.employee.status === "ACTIVE") await notify([c.employeeId], "Final settlement recorded", `Finance has recorded your final settlement (settled on ${input.settledOn}).`, `/exits/${c.id}`, { sendEmail });
   res.json({ ok: true, net });
 });
 
@@ -329,7 +395,7 @@ exitsRouter.patch("/:id", requireRole("HR"), async (req, res) => {
   await prisma.exitCase.update({ where: { id: c.id }, data: { lastWorkingDay: lwd, shortfallDays, shortfallWaived: input.shortfallWaived ?? c.shortfallWaived } });
   await audit(user.id, "UPDATE", "ExitCase", c.id, { lastWorkingDay: { from: ymd(c.lastWorkingDay), to: input.lastWorkingDay }, shortfallDays, shortfallWaived: input.shortfallWaived ?? c.shortfallWaived });
   if (input.lastWorkingDay !== ymd(c.lastWorkingDay)) {
-    await notify([c.employeeId], "Last working day changed", `HR changed your last working day to ${input.lastWorkingDay}.`, `/exits/${c.id}`);
+    await notify([c.employeeId], "Last working day changed", `HR changed your last working day to ${input.lastWorkingDay}.`, `/exits/${c.id}`, { sendEmail: await exitSendEmail() });
   }
   res.json({ ok: true, shortfallDays });
 });
@@ -360,7 +426,7 @@ exitsRouter.post("/:id/handover", requireRole("HR"), async (req, res) => {
   const skipped = h.pendingApprovals.length - moved;
   await audit(user.id, "HANDOVER", "ExitCase", c.id, { to: to.id, reports: h.reports.length, departments: h.departments.length, approvals: moved, clearanceCards: h.clearanceCards.length });
   if (moved || h.reports.length || h.departments.length) {
-    await notify([to.id], `Handover from ${c.employee.fullName}`, `You now take over from ${c.employee.fullName}: ${h.reports.length} team member(s), ${h.departments.length} department(s) as HOD and ${moved} pending approval(s).`, "/approvals");
+    await notify([to.id], `Handover from ${c.employee.fullName}`, `You now take over from ${c.employee.fullName}: ${h.reports.length} team member(s), ${h.departments.length} department(s) as HOD and ${moved} pending approval(s).`, "/approvals", { sendEmail: await exitSendEmail() });
   }
   res.json({ ok: true, moved: { reports: h.reports.length, departments: h.departments.length, approvals: moved, clearanceCards: h.clearanceCards.length }, skipped });
 });
@@ -475,7 +541,8 @@ exitsRouter.post("/:id/cancel", requireRole("HR"), async (req, res) => {
     ...(c.clearances.find((x) => x.area === "LINE_MANAGER")?.approverId ? [c.clearances.find((x) => x.area === "LINE_MANAGER")!.approverId!] : []),
     ...(c.clearances.find((x) => x.area === "FINANCE")?.status === "PENDING" ? await employeeIdsWithRole("FINANCE") : []),
   ].filter((id) => id !== c.employeeId);
-  await notify(owners, `Exit cancelled: ${c.employee.fullName}`, `HR cancelled ${c.employee.fullName}'s exit. No further clearance is needed.`, `/exits/${c.id}`);
-  await notify([c.employeeId], "Exit cancelled", `HR cancelled your exit: ${reason}${c.deactivatedAt ? " Your login has been switched back on." : ""}`, `/exits/${c.id}`);
+  const sendEmail = await exitSendEmail();
+  await notify(owners, `Exit cancelled: ${c.employee.fullName}`, `HR cancelled ${c.employee.fullName}'s exit. No further clearance is needed.`, `/exits/${c.id}`, { sendEmail });
+  await notify([c.employeeId], "Exit cancelled", `HR cancelled your exit: ${reason}${c.deactivatedAt ? " Your login has been switched back on." : ""}`, `/exits/${c.id}`, { sendEmail });
   res.json({ ok: true, reactivated: !!c.deactivatedAt });
 });

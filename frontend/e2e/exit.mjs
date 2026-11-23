@@ -336,6 +336,60 @@ await step(9, "Ayesha starts a termination for Sara (last day yesterday); after 
   check("Sara's login is refused");
 });
 
+// ---------- 10. Offboarding checklist and history ----------
+await step(10, "The offboarding checklist is toggled by the item's owner or HR; HR/Finance see the case history, the Line Manager does not; Ali's dashboard shows 'Your exit'", async ({ check, shot: s }) => {
+  const itemRow = (card, label) => card.locator("li", { hasText: label });
+
+  await as("admin@ehb.local", async (page) => {
+    await page.goto(`${BASE}/exits/${ctx.exit}`);
+    const card = clearanceCard(page, "IT_ADMIN");
+    await itemRow(card, "Laptop and accessories returned").getByRole("button", { name: "Done" }).click();
+    await itemRow(card, "Laptop and accessories returned").getByRole("button", { name: "Reopen" }).waitFor();
+    check("Usman (Admin, the IT / Admin owner) marks a checklist item done, even though the card itself already cleared");
+    s(await snap(page, "step10-checklist-done"));
+  });
+
+  await as("manager@ehb.local", async (page) => {
+    await page.goto(`${BASE}/exits/${ctx.exit}`);
+    const hrCard = clearanceCard(page, "HR");
+    if (await itemRow(hrCard, "Exit interview offered").getByRole("button").count()) throw new Error("Hamza (Line Manager) should not be able to toggle an HR-only checklist item");
+    check("Hamza cannot toggle the HR-only checklist item (no owner role)");
+    const lmCard = clearanceCard(page, "LINE_MANAGER");
+    await itemRow(lmCard, "Work handed over to the team").getByRole("button", { name: "Done" }).click();
+    await itemRow(lmCard, "Work handed over to the team").getByRole("button", { name: "Reopen" }).waitFor();
+    check("Hamza (the Line Manager owner) can toggle his own area's item");
+    if (await page.getByRole("heading", { name: "History" }).count()) throw new Error("The Line Manager should not see the History section");
+    check("No History section for the Line Manager");
+  });
+
+  await as("hr@ehb.local", async (page) => {
+    await page.goto(`${BASE}/exits/${ctx.exit}`);
+    await itemRow(clearanceCard(page, "HR"), "Exit interview offered").getByRole("button", { name: "N/A" }).click();
+    await itemRow(clearanceCard(page, "HR"), "Exit interview offered").getByRole("button", { name: "Reopen" }).waitFor();
+    check("Ayesha (HR) sets the HR-only item to N/A");
+    await visible(page, "History");
+    const history = page.locator("section", { has: page.getByRole("heading", { name: "History" }) });
+    await history.getByText(/settle/i).waitFor();
+    if (!(await history.innerText()).includes("net")) throw new Error("The whitelist should include net for HR/Finance/Admin");
+    check("History section (HR): includes the settlement action, whitelist includes net");
+    s(await snap(page, "step10-history"));
+  });
+
+  await as("finance@ehb.local", async (page) => {
+    await page.goto(`${BASE}/exits/${ctx.exit}`);
+    await visible(page, "History");
+    check("Finance also sees the History section");
+  });
+
+  await as("employee@ehb.local", async (page) => {
+    await page.goto(`${BASE}/dashboard`);
+    await visible(page, "Your exit");
+    await page.getByText("exit clearance is in progress").waitFor();
+    check("Ali's dashboard shows 'Your exit' while his case is open");
+    s(await snap(page, "step10-dashboard-your-exit"));
+  });
+});
+
 await browser.close();
 fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify({ ranAt: new Date().toISOString(), ...ctx, results }, null, 2));
 console.log(`\n${results.filter((r) => r.status === "PASS").length} of ${results.length} steps passed. Screenshots: ${OUT}`);

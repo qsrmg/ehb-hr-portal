@@ -33,6 +33,7 @@ export const SETTING_DEFAULTS = {
   "exit.noticeDays": { value: "30", label: "Resignation notice period for confirmed employees (days)" },
   "exit.probationNoticeDays": { value: "7", label: "Resignation notice period during probation (days)" },
   "exit.leaveEncashment": { value: "1", label: "Pay out unused Annual Leave in the final settlement", boolean: true },
+  "exit.sendEmails": { value: "1", label: "Also email exit clearance notifications, not just the in-app notification", boolean: true },
   // Performance (BSC)
   "performance.rating1": { value: "Unsatisfactory", label: "Performance rating 1 (name)", text: true },
   "performance.rating2": { value: "Needs Improvement", label: "Performance rating 2 (name)", text: true },

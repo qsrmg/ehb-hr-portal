@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, StatusBadge, Table, Tabs, Td, Textarea } from "@/components/ui";
 import { hasRole, useAuth } from "@/lib/auth";
-import { post } from "@/lib/api";
+import { post, put } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, todayYmd } from "@/lib/format";
 
@@ -17,8 +17,85 @@ type ExitSummary = {
 };
 
 type Option = { id: number; fullName: string; code: string };
+type ChecklistTemplate = { id: number; area: string; label: string; ownerRole: string | null; sortOrder: number; active: boolean };
 
 const EXIT_TYPES: Record<string, string> = { RESIGNATION: "Resignation", TERMINATION: "Termination", END_OF_CONTRACT: "End of contract", OTHER: "Other" };
+const AREAS = ["IT_ADMIN", "LINE_MANAGER", "HR", "FINANCE"] as const;
+const AREA_LABELS: Record<string, string> = { IT_ADMIN: "IT / Admin", LINE_MANAGER: "Line Manager", HR: "HR", FINANCE: "Finance" };
+const OWNER_ROLES = ["", "LINE_MANAGER", "HOD", "HR", "FINANCE", "ADMIN", "MANAGEMENT"] as const;
+
+/** Configurable offboarding checklist (per DECISIONS.md: informational only, does not change clearance gating). */
+function ChecklistTemplates() {
+  const { data, loading, error, reload } = useApi<ChecklistTemplate[]>("/exits/checklist-templates");
+  const [form, setForm] = useState({ area: "IT_ADMIN", label: "", ownerRole: "" });
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setFormError(null);
+    try {
+      await post("/exits/checklist-templates", { area: form.area, label: form.label, ownerRole: form.ownerRole || null, sortOrder: (data?.length ?? 0) + 1 });
+      setForm({ ...form, label: "" });
+      await reload();
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleActive = async (t: ChecklistTemplate) => {
+    await put(`/exits/checklist-templates/${t.id}`, { active: !t.active });
+    await reload();
+  };
+
+  if (loading && !data) return <Spinner />;
+  if (error) return <Alert>{error}</Alert>;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">
+        Placeholder wording — HR/Admin to confirm (see DECISIONS.md). New items apply to exits opened from now on; existing open exits keep the items they started with.
+      </p>
+      {AREAS.map((area) => {
+        const items = (data ?? []).filter((t) => t.area === area);
+        if (!items.length) return null;
+        return (
+          <div key={area}>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{AREA_LABELS[area]}</h3>
+            <ul className="mt-1 divide-y divide-slate-100">
+              {items.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+                  <span className={t.active ? "text-slate-700" : "text-slate-400 line-through"}>
+                    {t.label}{t.ownerRole ? ` · ${t.ownerRole}` : " · HR only"}
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => toggleActive(t)}>{t.active ? "Deactivate" : "Reactivate"}</Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+      <form onSubmit={add} className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(10rem,1fr)_minmax(14rem,2fr)_minmax(10rem,1fr)_auto] lg:items-end">
+        {formError && <div className="sm:col-span-2 lg:col-span-4"><Alert>{formError}</Alert></div>}
+        <Field label="Area">
+          <Select value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })}>
+            {AREAS.map((a) => <option key={a} value={a}>{AREA_LABELS[a]}</option>)}
+          </Select>
+        </Field>
+        <Field label="New item"><Input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} /></Field>
+        <Field label="Owner (blank: HR only)">
+          <Select value={form.ownerRole} onChange={(e) => setForm({ ...form, ownerRole: e.target.value })}>
+            {OWNER_ROLES.map((r) => <option key={r} value={r}>{r || "HR only"}</option>)}
+          </Select>
+        </Field>
+        <div><Button type="submit" loading={busy}>Add item</Button></div>
+      </form>
+    </div>
+  );
+}
 
 function StartExit({ onStarted }: { onStarted: (id: number) => void }) {
   const people = useApi<Option[]>("/employees");
@@ -116,6 +193,7 @@ export default function ExitsPage() {
           </Table>
         )}
       </Card>
+      {hr && <Card title="Checklist templates"><ChecklistTemplates /></Card>}
     </div>
   );
 }

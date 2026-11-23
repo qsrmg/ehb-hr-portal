@@ -1,7 +1,7 @@
 import { PgBoss } from "pg-boss";
 import { env } from "../config/env.js";
 import { deliverEmail, type EmailMessage } from "../lib/mailer.js";
-import { sendDueReminders } from "./reminders.js";
+import { sendDueExitClearanceReminders, sendDueReminders } from "./reminders.js";
 import { yearEndCarryForward } from "../services/leave.js";
 import { deactivateDueExits } from "../services/exits.js";
 import { notifyProbationDue } from "../services/probation.js";
@@ -51,6 +51,8 @@ export async function startQueue(opts: QueueOptions = {}) {
     await instance.work(REMINDER_QUEUE, async () => {
       const sent = await sendDueReminders();
       if (sent) console.log(`[reminders] queued ${sent} reminder(s)`);
+      const exitSent = await sendDueExitClearanceReminders();
+      if (exitSent) console.log(`[exits] queued ${exitSent} clearance reminder(s)`);
     });
 
     // If the server was down at midnight on 1 January, "once" runs the missed carry forward when it is back.

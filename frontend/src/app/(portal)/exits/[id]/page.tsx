@@ -22,6 +22,11 @@ type Handover = {
   done: boolean;
 };
 type SettlementItem = { kind: string; kindLabel?: string; direction: "DEDUCT" | "PAY"; description: string; days: number | null; amount: number };
+type ChecklistItem = {
+  id: number; area: string; label: string; ownerRole: string | null; status: "PENDING" | "DONE" | "NOT_APPLICABLE";
+  doneBy: string | null; doneAt: string | null; note: string | null; canToggle: boolean;
+};
+type HistoryRow = { id: number; action: string; entity: string; at: string; actor: { id: number; fullName: string; code: string } | null; changes: Record<string, unknown> };
 type ExitCase = {
   id: number; type: string; typeLabel: string; status: string; lastWorkingDay: string; deactivated: boolean; deactivatedAt: string | null;
   reason: string | null; requestId: number | null; startedBy: string;
@@ -45,6 +50,7 @@ type ExitCase = {
   interviewSubmitted: boolean; canSubmitInterview: boolean;
   replacements?: { id: number; title: string; status: string }[];
   canEdit: boolean; canReassign: boolean; canComplete: boolean; completeBlockers: string[]; canCancel: boolean;
+  checklistItems: ChecklistItem[];
 };
 type Option = { id: number; fullName: string; code: string };
 
@@ -89,7 +95,33 @@ function RetainAction({ assignmentId, onDone }: { assignmentId: number; onDone: 
   );
 }
 
-function ClearanceCard({ caseId, card, assets, onChanged }: { caseId: number; card: CardData; assets: ExitCase["assets"]; onChanged: () => Promise<void> }) {
+/** One offboarding checklist item: informational only — it never blocks clearing the card (see DECISIONS.md). */
+function ChecklistRow({ caseId, item, onChanged }: { caseId: number; item: ChecklistItem; onChanged: () => Promise<void> }) {
+  const { busy, run } = useAction(onChanged);
+  const set = (status: ChecklistItem["status"]) => run(`checklist-${item.id}`, () => post(`/exits/${caseId}/checklist/${item.id}`, { status }));
+  return (
+    <li className="flex items-start justify-between gap-2 py-1 text-xs">
+      <div>
+        <span className={item.status === "PENDING" ? "text-slate-700" : item.status === "DONE" ? "text-emerald-700 line-through" : "text-slate-400 line-through"}>{item.label}</span>
+        {item.status !== "PENDING" && item.doneBy && <span className="ml-1 text-slate-400">· {item.doneBy}</span>}
+      </div>
+      {item.canToggle && (
+        <div className="flex shrink-0 gap-1">
+          {item.status === "PENDING" ? (
+            <>
+              <button type="button" disabled={busy === `checklist-${item.id}`} className="text-emerald-700 hover:underline" onClick={() => set("DONE")}>Done</button>
+              <button type="button" disabled={busy === `checklist-${item.id}`} className="text-slate-400 hover:underline" onClick={() => set("NOT_APPLICABLE")}>N/A</button>
+            </>
+          ) : (
+            <button type="button" disabled={busy === `checklist-${item.id}`} className="text-slate-400 hover:underline" onClick={() => set("PENDING")}>Reopen</button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function ClearanceCard({ caseId, card, assets, items, onChanged }: { caseId: number; card: CardData; assets: ExitCase["assets"]; items: ChecklistItem[]; onChanged: () => Promise<void> }) {
   const { user } = useAuth();
   const [comment, setComment] = useState("");
   const { busy, error, run } = useAction(onChanged);
@@ -120,6 +152,11 @@ function ClearanceCard({ caseId, card, assets, onChanged }: { caseId: number; ca
           {assets.retained.length > 0 && <p className="mt-1 text-slate-600">Retained with Management&apos;s authorisation: {assets.retained.map((r) => `${r.name} (${r.tag})`).join(", ")}.</p>}
           {assets.pendingDecisions.length > 0 && <p className="mt-1 text-amber-800">{assets.pendingDecisions.length} incident(s) still wait for an HR or Management decision.</p>}
         </div>
+      )}
+      {items.length > 0 && (
+        <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100 pt-1">
+          {items.map((i) => <ChecklistRow key={i.id} caseId={caseId} item={i} onChanged={onChanged} />)}
+        </ul>
       )}
       {card.canClear && (
         <div className="mt-3 space-y-2">
@@ -288,8 +325,31 @@ function EditDates({ c, onChanged }: { c: ExitCase; onChanged: () => Promise<voi
   );
 }
 
+/** HR/Finance/Admin only (enforced server-side); hidden for everyone else, including the employee and the Line Manager. */
+function HistoryPanel({ caseId }: { caseId: number }) {
+  const { data, loading, error } = useApi<HistoryRow[]>(`/exits/${caseId}/history`);
+  if (loading && !data) return <Spinner />;
+  if (error) return null;
+  if (!data?.length) return <p className="text-sm text-slate-500">No audited actions yet.</p>;
+  return (
+    <ul className="space-y-3 text-sm">
+      {data.map((r) => (
+        <li key={r.id} className="border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-slate-800">{r.action.replace(/_/g, " ").toLowerCase()}{r.entity !== "ExitCase" ? ` · ${r.entity}` : ""}</span>
+            <span className="text-xs text-slate-500">{fmtDateTime(r.at)}</span>
+          </div>
+          <div className="text-xs text-slate-500">{r.actor?.fullName ?? "System"}</div>
+          {Object.keys(r.changes).length > 0 && <p className="mt-1 text-xs text-slate-600">{JSON.stringify(r.changes)}</p>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function ExitCasePage() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const { data: c, loading, error, reload } = useApi<ExitCase>(`/exits/${id}`);
   const [notice, setNotice] = useState<string | null>(null);
   const actions = useAction(reload);
@@ -297,6 +357,8 @@ export default function ExitCasePage() {
   if (error || !c) return <Alert>{error}</Alert>;
 
   const open = c.status === "OPEN";
+  // Matches the server's own restriction on GET /exits/:id/history (HR, Finance, Admin only, never the employee).
+  const canSeeHistory = hasRole(user, "HR", "FINANCE", "ADMIN") && user?.id !== c.employee.id;
   const say = (msg: string) => async (ok: boolean) => { if (ok) setNotice(msg); };
 
   return (
@@ -354,7 +416,9 @@ export default function ExitCasePage() {
       {c.completed && <Alert kind="success">Completed by {c.completed.by} on {fmtDateTime(c.completed.at)}.</Alert>}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {c.clearanceCards.map((card) => <ClearanceCard key={card.area} caseId={c.id} card={card} assets={c.assets} onChanged={reload} />)}
+        {c.clearanceCards.map((card) => (
+          <ClearanceCard key={card.area} caseId={c.id} card={card} assets={c.assets} items={c.checklistItems.filter((i) => i.area === card.area)} onChanged={reload} />
+        ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -443,6 +507,7 @@ export default function ExitCasePage() {
               {c.letters.emailedTo !== undefined && <p className="mt-1 text-sm text-slate-600">{c.letters.emailedTo ? `Emailed to ${c.letters.emailedTo}` : "Not emailed (no personal email on file)"}</p>}
             </Card>
           )}
+          {canSeeHistory && <Card title="History"><HistoryPanel caseId={c.id} /></Card>}
         </div>
       </div>
     </div>

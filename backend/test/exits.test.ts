@@ -59,6 +59,14 @@ describe("Resignation & exit clearance", () => {
     await prisma.department.update({ where: { id: eng.id }, data: { hodId: id.nadia } });
     laptopCategory = (await prisma.assetCategory.create({ data: { name: "Laptop", sortOrder: 1 } })).id;
     annualLeave = (await prisma.leaveType.create({ data: { code: "AL", name: "Annual Leave", annualQuota: 14, proRata: false } })).id;
+    await prisma.exitChecklistTemplate.createMany({
+      data: [
+        { area: "IT_ADMIN", label: "Laptop returned", ownerRole: "ADMIN", sortOrder: 1 },
+        { area: "LINE_MANAGER", label: "Handover done", ownerRole: "LINE_MANAGER", sortOrder: 1 },
+        { area: "HR", label: "Exit interview offered", ownerRole: null, sortOrder: 1 },
+        { area: "FINANCE", label: "Settlement filed", ownerRole: "FINANCE", sortOrder: 1 },
+      ],
+    });
     api = await startServer();
     for (const key of Object.keys(id)) token[key] = await api.login(`${key}@test.local`);
   });
@@ -231,6 +239,93 @@ describe("Resignation & exit clearance", () => {
     assert.equal(hr.interview.improve, "More training");
   });
 
+  test("VIEW_SENSITIVE is audited when HR reads someone else's interview, never for the employee's own read, and answers never reach AuditLog", async () => {
+    const before = await prisma.auditLog.count({ where: { action: "VIEW_SENSITIVE", entity: "ExitInterview", entityId: String(exit.sara) } });
+    ok(await as("sara").get(`/exits/${exit.sara}`)); // Sara reading her own case/interview
+    assert.equal(await prisma.auditLog.count({ where: { action: "VIEW_SENSITIVE", entity: "ExitInterview", entityId: String(exit.sara) } }), before, "no audit row for the employee's own read");
+    ok(await as("hr").get(`/exits/${exit.sara}`)); // HR reading Sara's interview
+    assert.equal(await prisma.auditLog.count({ where: { action: "VIEW_SENSITIVE", entity: "ExitInterview", entityId: String(exit.sara) } }), before + 1, "exactly one audit row for HR's read");
+    const rows = await prisma.auditLog.findMany({ where: { entity: "ExitInterview" } });
+    for (const r of rows) {
+      const text = JSON.stringify(r.details ?? {});
+      assert.ok(!text.includes("Relocation") && !text.includes("More training"), "interview answers must never be written into AuditLog details");
+    }
+  });
+
+  test("checklist items with no owner role are HR-only; an owner role may also be cleared by HR", async () => {
+    const items = (await as("hr").get(`/exits/${exit.sara}`)).data.checklistItems as { id: number; area: string; ownerRole: string | null; status: string }[];
+    assert.equal(items.length, 4, "one snapshotted item per area");
+    const hrItem = items.find((i) => i.ownerRole === null)!;
+    const itemByArea = (area: string) => items.find((i) => i.area === area)!;
+
+    // No owner role: HR only.
+    assert.equal((await as("usman").post(`/exits/${exit.sara}/checklist/${hrItem.id}`, { status: "DONE" })).status, 403);
+    assert.equal((await as("hamza").post(`/exits/${exit.sara}/checklist/${hrItem.id}`, { status: "DONE" })).status, 403);
+    const hrDone = await as("hr").post(`/exits/${exit.sara}/checklist/${hrItem.id}`, { status: "DONE" });
+    ok(hrDone);
+    assert.equal(hrDone.data.status, "DONE");
+
+    // An owner role (IT_ADMIN area, ownerRole ADMIN): that role, or HR, may clear it; others cannot.
+    const itAdminItem = itemByArea("IT_ADMIN");
+    assert.equal((await as("hamza").post(`/exits/${exit.sara}/checklist/${itAdminItem.id}`, { status: "DONE" })).status, 403);
+    ok(await as("usman").post(`/exits/${exit.sara}/checklist/${itAdminItem.id}`, { status: "DONE" }));
+    const financeItem = itemByArea("FINANCE");
+    ok(await as("hr").post(`/exits/${exit.sara}/checklist/${financeItem.id}`, { status: "NOT_APPLICABLE" }));
+
+    const after = (await as("hr").get(`/exits/${exit.sara}`)).data.checklistItems as { id: number; status: string; doneBy: string | null }[];
+    assert.equal(after.find((i) => i.id === hrItem.id)!.status, "DONE");
+    assert.equal(after.find((i) => i.id === itAdminItem.id)!.doneBy, "Usman Tariq");
+    assert.equal(after.find((i) => i.id === financeItem.id)!.status, "NOT_APPLICABLE");
+  });
+
+  test("checklist toggle: a Line Manager item follows the card's approver or the employee's current manager, never a bare role check", async () => {
+    const items = (await as("hr").get(`/exits/${exit.sara}`)).data.checklistItems as { id: number; area: string }[];
+    const lmItem = items.find((i) => i.area === "LINE_MANAGER")!;
+
+    // (f) An unrelated employee gets 403 from loadForUser itself (cannot see the case at all).
+    assert.equal((await as("zara").post(`/exits/${exit.sara}/checklist/${lmItem.id}`, { status: "DONE" })).status, 403, "unrelated employee");
+
+    // (d) HR can toggle the Line Manager item too, bypassing the per-case approver rule entirely.
+    ok(await as("hr").post(`/exits/${exit.sara}/checklist/${lmItem.id}`, { status: "DONE" }));
+    ok(await as("hr").post(`/exits/${exit.sara}/checklist/${lmItem.id}`, { status: "PENDING" })); // reopen for the rest of this test
+
+    // (c) Usman (Admin, sees every case) also temporarily holds LINE_MANAGER, but is neither the card's
+    // approver nor Sara's manager: a matching global role alone must not be enough.
+    await prisma.employee.update({ where: { id: id.usman }, data: { roles: ["EMPLOYEE", "ADMIN", "LINE_MANAGER"] } });
+    try {
+      assert.equal((await as("usman").post(`/exits/${exit.sara}/checklist/${lmItem.id}`, { status: "DONE" })).status, 403, "an unrelated extra LINE_MANAGER role is not enough");
+    } finally {
+      await prisma.employee.update({ where: { id: id.usman }, data: { roles: ["EMPLOYEE", "ADMIN"] } });
+    }
+
+    // (b) Sara's manager is reassigned to Nadia without a handover (the card's stored approver stays Hamza).
+    // Nadia, as the *current* manager, can still toggle it — and so can Hamza, the originally-snapshotted approver.
+    await prisma.employee.update({ where: { id: id.sara }, data: { managerId: id.nadia } });
+    try {
+      // Nadia, Sara's current manager, even though the card's stored approver is still Hamza.
+      ok(await as("nadia").post(`/exits/${exit.sara}/checklist/${lmItem.id}`, { status: "DONE" }));
+      // The card's originally-snapshotted approver (Hamza) still works too.
+      ok(await as("hamza").post(`/exits/${exit.sara}/checklist/${lmItem.id}`, { status: "PENDING" }));
+    } finally {
+      await prisma.employee.update({ where: { id: id.sara }, data: { managerId: id.hamza } });
+    }
+  });
+
+  test("GET /exits/:id/history is HR/Finance/Admin only; 403 for the employee and the Line Manager, 404 if they cannot see the case at all", async () => {
+    const hr = await as("hr").get(`/exits/${exit.sara}/history`);
+    ok(hr);
+    assert.ok(hr.data.length > 0, "the audited actions on this case");
+    assert.ok(hr.data.some((r: { changes: Record<string, unknown> }) => "net" in r.changes), "the whitelist includes net, because the audience is already restricted");
+    ok(await as("fin").get(`/exits/${exit.sara}/history`));
+    ok(await as("usman").get(`/exits/${exit.sara}/history`));
+    assert.equal((await as("sara").get(`/exits/${exit.sara}/history`)).status, 403, "the employee");
+    assert.equal((await as("hamza").get(`/exits/${exit.sara}/history`)).status, 403, "the Line Manager");
+    // Same as the main endpoint: an unrelated employee also gets 403 (loadForUser itself never shows that an exit
+    // case exists to someone with no visibility at all); 404 is reserved for an id that does not exist at all.
+    assert.equal((await as("zara").get(`/exits/${exit.sara}/history`)).status, 403, "an unrelated employee, same as GET /exits/:id");
+    assert.equal((await as("hr").get("/exits/999999/history")).status, 404, "an id that does not exist at all");
+  });
+
   test("HR issues the experience and relieving letters, emailed as PDFs to the personal email", async () => {
     outbox.length = 0;
     ok(await as("hr").post(`/exits/${exit.sara}/letters`));
@@ -291,6 +386,12 @@ describe("Resignation & exit clearance", () => {
     exit.hamza = await caseOf(hamza);
     const hrNote = (await notes("hr", "Exit clearance: Hamza"))[0];
     assert.match(hrNote!.body, /Reassign them before the exit can be completed/);
+
+    // Self-clearance: Hamza holds LINE_MANAGER globally, but this is his own exit (Nadia is the card's
+    // approver, not him) — he must never be able to toggle his own Line Manager checklist item.
+    const hamzaItems = (await as("hr").get(`/exits/${exit.hamza}`)).data.checklistItems as { id: number; area: string }[];
+    const hamzaLmItem = hamzaItems.find((i) => i.area === "LINE_MANAGER")!;
+    assert.equal((await as("hamza").post(`/exits/${exit.hamza}/checklist/${hamzaLmItem.id}`, { status: "DONE" })).status, 403, "a resigning Line Manager cannot toggle their own item");
 
     for (const area of ["it_admin", "line_manager", "hr"]) {
       ok(await as(area === "it_admin" ? "usman" : area === "hr" ? "hr" : "nadia").post(`/exits/${exit.hamza}/clearances/${area}/clear`));

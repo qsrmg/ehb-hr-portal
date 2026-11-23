@@ -132,6 +132,18 @@ Employees create tasks for themselves only (`tasks.employeesCanCreateOwnTasks`, 
 | Sub-tasks, labels, attachments, recurring tasks, an extra "Review" column | Out of scope v1; not built | Not built | Management |
 | Viewing another person's tasks as HR or Line Manager | **Recommended: not audited** — ordinary work items, not the sensitive-data class that gets `VIEW_SENSITIVE` elsewhere (payslips, CNIC, activity detail) | Not audited | HR |
 
+**Exit and offboarding**
+
+Clearance stays the existing four area-level cards (IT/Admin, Line Manager, HR, Finance; `backend/src/services/exits.ts`); an offboarding checklist sits underneath them as a separate, informational layer — `ExitChecklistTemplate` (HR-configurable, *Exit clearance → Checklist templates*) is snapshotted into `ExitChecklistItem` rows when a case opens, so later template edits never change an already-open case. An item with no owner role may only be toggled by HR; an item with an owner role may be toggled by that role or HR. Checklist toggle follows the clearance-card rule; the employee never toggles their own items — the one deliberate exception is a LINE_MANAGER-owned item, where toggle (not clearing) also accepts the employee's *current* manager, not only the card's originally-snapshotted approver. `GET /exits/:id/history` reads `AuditLog` filtered to this case (and its cards/checklist items/interview), field-whitelisted as in Tasks, and is restricted to HR, Finance and Admin — not the employee, the Line Manager or Management. A new `reminders`-style job (`sendDueExitClearanceReminders`, reusing the existing office-hours gate and `reminders.intervalHours`) nudges whoever owns a clearance card that has sat PENDING past the interval.
+
+| Setting | Controls | Default | Decide |
+|---|---|---|---|
+| Starter checklist content | Placeholder wording seeded by migration `20261123060154_exit_checklist_and_reminders` (2 items per area: IT/Admin, Line Manager, HR, Finance) | Placeholder, not reviewed | HR/Admin |
+| Checklist completion gating area clearance | Whether an incomplete checklist blocks clearing its area | Off — informational only, does not change `canClear` | HR |
+| Withdrawing an approved resignation / open exit case | Whether an employee can self-service-withdraw once HR has approved it (today: HR-only, via Cancel) | Off — stays HR-only | HR/Management |
+| Last working day vs. the employee's own approved leave | Whether to block a last working day that falls inside their own already-approved leave | Off — not checked | HR |
+| `exit.sendEmails` | Also emails exit clearance notifications (card cleared, settlement recorded, cancelled, …), not just the in-app notification | On | HR |
+
 **Shared policy acknowledgement**
 
 Every "I have read / I agree" acknowledgement in the portal (a document that requires acknowledgement, and the activity-monitoring policy) is now recorded in one table, `PolicyAcknowledgement` (`backend/prisma/schema.prisma`), keyed by `policyKey` + `version` + `employeeId` and never rewritten once recorded. The two tables this replaced — `DocumentAcknowledgement` and `ActivityPolicyAcknowledgement` — are left in the schema, frozen, read-only history; migration `20261121061300_policy_acknowledgement` copies every row that existed in them into the new table and touches neither old table otherwise. HR's "who has not acknowledged" report is now a single generic endpoint, `GET /policies/:policyKey/acknowledgements` (`backend/src/services/policyAcknowledgement.ts`), used by both the Documents page and the new "Policy acknowledgement" card on the Activity admin page.

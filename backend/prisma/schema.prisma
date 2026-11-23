@@ -143,6 +143,7 @@ model Employee {
   clearancesToApprove            ExitClearance[]                 @relation("ClearanceApprover")
   clearancesCleared              ExitClearance[]                 @relation("ClearanceClearedBy")
   exitInterviewsRecorded         ExitInterview[]
+  exitChecklistItemsDone         ExitChecklistItem[]             @relation("ChecklistItemDoneBy")
   scorecards                     Scorecard[]                     @relation("ScorecardEmployee")
   cyclesCreated                  PerformanceCycle[]
   scorecardGoalsSet              Scorecard[]                     @relation("ScorecardGoalsSetBy")
@@ -1167,6 +1168,7 @@ model ExitCase {
   clearances      ExitClearance[]
   settlementItems ExitSettlementItem[]
   interview       ExitInterview?
+  checklistItems  ExitChecklistItem[]
   replacements    Requisition[]
 
   @@index([employeeId, status])
@@ -1184,8 +1186,49 @@ model ExitClearance {
   clearedBy   Employee?       @relation("ClearanceClearedBy", fields: [clearedById], references: [id])
   clearedAt   DateTime?
   comment     String?
+  // Set when the card becomes PENDING (case open for the three parallel areas; when Finance's card
+  // opens for Finance). Drives the reminder job in backend/src/jobs/reminders.ts; both null until then.
+  pendingSince   DateTime?
+  lastReminderAt DateTime?
 
   @@unique([caseId, area])
+}
+
+enum ExitChecklistItemStatus {
+  PENDING
+  DONE
+  NOT_APPLICABLE
+}
+
+/**
+ * HR-configurable checklist item types (IT assets, access removal, finance clearance, documents,
+ * knowledge handover, ...). Snapshotted into ExitChecklistItem when a case opens, so editing or
+ * deactivating a template here never changes an already-open case's items.
+ */
+model ExitChecklistTemplate {
+  id        Int                  @id @default(autoincrement())
+  area      ClearanceArea
+  label     String
+  ownerRole Role? // null: HR only may toggle this item
+  sortOrder Int                  @default(0)
+  active    Boolean              @default(true)
+  items     ExitChecklistItem[]
+}
+
+model ExitChecklistItem {
+  id          Int                      @id @default(autoincrement())
+  caseId      Int
+  case        ExitCase                 @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  templateId  Int?
+  template    ExitChecklistTemplate?   @relation(fields: [templateId], references: [id])
+  area        ClearanceArea
+  label       String
+  ownerRole   Role?
+  status      ExitChecklistItemStatus  @default(PENDING)
+  doneById    Int?
+  doneBy      Employee?                @relation("ChecklistItemDoneBy", fields: [doneById], references: [id])
+  doneAt      DateTime?
+  note        String?
 }
 
 model ExitSettlementItem {

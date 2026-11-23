@@ -10,7 +10,7 @@ import { balancesFor } from "./leave.js";
 import { advanceDue, approvedTotal } from "./travel.js";
 import { round2 } from "./expenses.js";
 import type { StepSpec } from "./approvals.js";
-import type { ClearanceArea, ExitType, Prisma } from "../generated/prisma/client.js";
+import type { ClearanceArea, ExitChecklistItemStatus, ExitType, Role, Prisma } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | typeof prisma;
@@ -111,23 +111,29 @@ export function handoverWarning(name: string, h: Handover) {
   return `${name} still has ${parts.join(", ")}. Reassign them before the exit can be completed.`;
 }
 
-/** Creates the case and its four clearance cards. */
+/** Creates the case, its four clearance cards, and a snapshot of the active offboarding checklist. */
 export async function createExitCase(tx: Tx, input: {
   employeeId: number; type: ExitType; reason: string; requestId?: number; startedById: number;
   noticeGivenOn: Date; noticeDays: number; noticeEndDate: Date | null; lastWorkingDay: Date; shortfallDays: number; shortfallWaived: boolean;
 }) {
   if (await openExitCase(input.employeeId, tx)) throw new HttpError(400, "This employee already has an open exit case");
   const emp = await tx.employee.findUniqueOrThrow({ where: { id: input.employeeId }, select: { managerId: true } });
+  const now = new Date();
+  // Snapshotted so editing or deactivating a template later never changes an already-open case's items.
+  const templates = await tx.exitChecklistTemplate.findMany({ where: { active: true }, orderBy: [{ area: "asc" }, { sortOrder: "asc" }] });
   return tx.exitCase.create({
     data: {
       ...input,
       clearances: {
         create: [
-          { area: "IT_ADMIN", status: "PENDING" },
-          { area: "LINE_MANAGER", status: "PENDING", approverId: emp.managerId },
-          { area: "HR", status: "PENDING" },
+          { area: "IT_ADMIN", status: "PENDING", pendingSince: now },
+          { area: "LINE_MANAGER", status: "PENDING", approverId: emp.managerId, pendingSince: now },
+          { area: "HR", status: "PENDING", pendingSince: now },
           { area: "FINANCE", status: "WAITING" },
         ],
+      },
+      checklistItems: {
+        create: templates.map((t) => ({ templateId: t.id, area: t.area, label: t.label, ownerRole: t.ownerRole })),
       },
     },
   });
@@ -136,29 +142,114 @@ export async function createExitCase(tx: Tx, input: {
 /** Everyone who must clear something is told; HR also gets the handover warning. */
 export async function exitCaseOpened(caseId: number) {
   const c = await prisma.exitCase.findUniqueOrThrow({ where: { id: caseId }, include: { employee: { select: { fullName: true, code: true } }, clearances: true } });
+  const sendEmail = await exitSendEmail();
   const who = `${c.employee.fullName} (${c.employee.code})`;
   const lwd = ymd(c.lastWorkingDay);
   const link = `/exits/${c.id}`;
   const lm = c.clearances.find((x) => x.area === "LINE_MANAGER")?.approverId;
-  await notify(await employeeIdsWithRole("ADMIN"), `Exit clearance: ${c.employee.fullName}`, `${who} leaves on ${lwd}. Collect their company items and revoke their accounts, then clear IT / Admin.`, link);
-  if (lm) await notify([lm], `Exit clearance: ${c.employee.fullName}`, `${who} leaves on ${lwd}. Confirm the handover of their work, then clear Line Manager.`, link);
+  await notify(await employeeIdsWithRole("ADMIN"), `Exit clearance: ${c.employee.fullName}`, `${who} leaves on ${lwd}. Collect their company items and revoke their accounts, then clear IT / Admin.`, link, { sendEmail });
+  if (lm) await notify([lm], `Exit clearance: ${c.employee.fullName}`, `${who} leaves on ${lwd}. Confirm the handover of their work, then clear Line Manager.`, link, { sendEmail });
   const warning = handoverWarning(c.employee.fullName, await handoverFor(c.employeeId));
   await notify(
     (await employeeIdsWithRole("HR")).filter((id) => id !== c.employeeId),
     `Exit clearance: ${c.employee.fullName}`,
     `${who} leaves on ${lwd}. Clear HR when your checks are done.${lm ? "" : " They have no line manager, so HR also clears the Line Manager card."}${warning ? ` ${warning}` : ""}`,
     link,
+    { sendEmail },
   );
-  await notify([c.employeeId], `Exit clearance started`, `Your last working day is ${lwd}. Return your company items to Admin and complete your handover. You can also fill in an optional exit interview.`, link);
+  await notify([c.employeeId], `Exit clearance started`, `Your last working day is ${lwd}. Return your company items to Admin and complete your handover. You can also fill in an optional exit interview.`, link, { sendEmail });
 }
 
-/** Who may clear a card. */
-export function canClear(user: AuthUser, c: { employeeId: number }, card: { area: ClearanceArea; status: string; approverId: number | null }) {
-  if (card.status !== "PENDING" || user.id === c.employeeId) return false;
+/** Whether exit-clearance notify() calls also send an email, per the `exit.sendEmails` setting (the in-app row always lands). */
+export async function exitSendEmail() {
+  return (await getSettings())["exit.sendEmails"] === "1";
+}
+
+/** The leaver never acts on their own card; IT/Admin, HR and Finance are global-role areas; Line Manager is
+ * whoever the card names as approver (or HR, if none was set). Shared by canClear and canToggleChecklistItem
+ * so the two cannot silently drift apart on *who* may act — canClear alone adds *when* (status === PENDING). */
+function canActOnArea(user: AuthUser, c: { employeeId: number }, card: { area: ClearanceArea; approverId: number | null }) {
+  if (user.id === c.employeeId) return false;
   if (card.area === "IT_ADMIN") return hasRole(user, "ADMIN");
   if (card.area === "HR") return hasRole(user, "HR");
   if (card.area === "FINANCE") return hasRole(user, "FINANCE");
   return card.approverId ? card.approverId === user.id : hasRole(user, "HR");
+}
+
+/** Who may clear a card. */
+export function canClear(user: AuthUser, c: { employeeId: number }, card: { area: ClearanceArea; status: string; approverId: number | null }) {
+  return card.status === "PENDING" && canActOnArea(user, c, card);
+}
+
+/** Everyone who owns a card today (for reminders): the role that clears it, or the Line Manager card's specific approver. */
+export async function clearanceOwnerIds(card: { area: ClearanceArea; approverId: number | null }) {
+  if (card.area === "IT_ADMIN") return employeeIdsWithRole("ADMIN");
+  if (card.area === "HR") return employeeIdsWithRole("HR");
+  if (card.area === "FINANCE") return employeeIdsWithRole("FINANCE");
+  return card.approverId ? [card.approverId] : employeeIdsWithRole("HR");
+}
+
+/**
+ * The leaver never toggles their own items, even when they hold the matching role (self-clearance). HR may
+ * toggle any item. No owner role: HR only. A global-role owner (ADMIN/FINANCE/HR): that role, non-self, same
+ * as canActOnArea. A LINE_MANAGER-owned item: the case's own Line Manager card's approver — same rule
+ * canActOnArea uses for clearing — OR, toggle only (deliberately wider than canClear, per DECISIONS.md, since
+ * approverId is a one-time snapshot that can drift from the employee's current manager), the employee's
+ * current manager. This intentional divergence from canClear is the only one; everything else is shared.
+ */
+export function canToggleChecklistItem(
+  user: AuthUser,
+  c: { employeeId: number; employee: { managerId: number | null }; clearances: { area: ClearanceArea; approverId: number | null }[] },
+  item: { ownerRole: Role | null },
+) {
+  if (user.id === c.employeeId) return false;
+  if (!item.ownerRole) return hasRole(user, "HR");
+  if (hasRole(user, "HR")) return true;
+  if (item.ownerRole !== "LINE_MANAGER") return hasRole(user, item.ownerRole);
+  const lineManagerCard = c.clearances.find((x) => x.area === "LINE_MANAGER");
+  return lineManagerCard?.approverId === user.id || c.employee.managerId === user.id;
+}
+
+export async function setChecklistItemStatus(itemId: number, status: ExitChecklistItemStatus, userId: number, note?: string | null) {
+  return prisma.exitChecklistItem.update({
+    where: { id: itemId },
+    data: status === "PENDING"
+      ? { status, doneById: null, doneAt: null, note: note ?? undefined }
+      : { status, doneById: userId, doneAt: new Date(), note: note ?? undefined },
+  });
+}
+
+/** History for HR/Finance/Admin only (enforced by the caller): every audited action touching this case,
+ * its clearance cards, its checklist items or its exit interview, filtered to a field whitelist so nothing
+ * unexpected (in particular, exit interview answers, which are never written to audit details) leaks through. */
+const EXIT_HISTORY_FIELDS = new Set([
+  "type", "lastWorkingDay", "area", "net", "items", "shortfallDays", "shortfallWaived",
+  "to", "reports", "departments", "approvals", "clearanceCards", "emailedTo", "reason", "reactivated", "status", "label",
+]);
+
+export async function exitHistory(caseId: number) {
+  const [clearances, items] = await Promise.all([
+    prisma.exitClearance.findMany({ where: { caseId }, select: { id: true } }),
+    prisma.exitChecklistItem.findMany({ where: { caseId }, select: { id: true } }),
+  ]);
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      OR: [
+        { entity: "ExitCase", entityId: String(caseId) },
+        { entity: "ExitInterview", entityId: String(caseId) },
+        ...(clearances.length ? [{ entity: "ExitClearance", entityId: { in: clearances.map((c) => String(c.id)) } }] : []),
+        ...(items.length ? [{ entity: "ExitChecklistItem", entityId: { in: items.map((i) => String(i.id)) } }] : []),
+      ],
+    },
+    include: { actor: { select: { id: true, fullName: true, code: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map((r) => {
+    const details = (r.details ?? {}) as Record<string, unknown>;
+    const changes: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(details)) if (EXIT_HISTORY_FIELDS.has(k)) changes[k] = v;
+    return { id: r.id, action: r.action, entity: r.entity, at: r.createdAt, actor: r.actor, changes };
+  });
 }
 
 /** Called after a parallel card is cleared: once all three are done, Finance's card opens. */
@@ -167,13 +258,14 @@ export async function afterParallelCleared(caseId: number) {
   if (!PARALLEL_AREAS.every((a) => cards.find((c) => c.area === a)?.status === "CLEARED")) return;
   const finance = cards.find((c) => c.area === "FINANCE");
   if (finance?.status !== "WAITING") return;
-  await prisma.exitClearance.update({ where: { id: finance.id }, data: { status: "PENDING" } });
+  await prisma.exitClearance.update({ where: { id: finance.id }, data: { status: "PENDING", pendingSince: new Date() } });
   const c = await prisma.exitCase.findUniqueOrThrow({ where: { id: caseId }, include: { employee: { select: { fullName: true, id: true } } } });
   await notify(
     (await employeeIdsWithRole("FINANCE")).filter((id) => id !== c.employee.id),
     `Final settlement: ${c.employee.fullName}`,
     `IT / Admin, Line Manager and HR have cleared ${c.employee.fullName}'s exit. Prepare the final settlement (recoveries, advances, notice and leave) and clear Finance.`,
     `/exits/${caseId}`,
+    { sendEmail: await exitSendEmail() },
   );
 }
 
@@ -275,6 +367,7 @@ export async function deactivateForExit(caseId: number, actorId: number | null) 
     `Account deactivated: ${c.employee.fullName}`,
     `${c.employee.fullName}'s last working day (${ymd(c.lastWorkingDay)}) has ended and their login is now off.${open ? ` ${open} clearance card(s) are still open.` : ""} Complete the exit when everything is done.`,
     `/exits/${c.id}`,
+    { sendEmail: await exitSendEmail() },
   );
 }
 
