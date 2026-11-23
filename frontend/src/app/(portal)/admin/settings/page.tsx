@@ -17,11 +17,9 @@ const GROUPS: { title: string; prefixes: string[] }[] = [
   { title: "Attendance", prefixes: ["attendance.", "attendanceUpdate."] },
   { title: "Approvals and reminders", prefixes: ["reminders.", "office."] },
   { title: "Pay slips", prefixes: ["payroll."] },
-  { title: "Travel", prefixes: ["travel."] },
   { title: "Exit and resignation", prefixes: ["exit."] },
   { title: "Performance", prefixes: ["performance."] },
   { title: "Hiring", prefixes: ["hiring."] },
-  { title: "Training", prefixes: ["training."] },
   { title: "Assets", prefixes: ["assets."] },
   { title: "Activity monitoring", prefixes: ["activity."] },
   { title: "Tasks", prefixes: ["tasks."] },
@@ -81,8 +79,8 @@ export default function SettingsPage() {
   const { data: all, loading, error, reload } = useApi<Setting[]>("/settings");
   if (loading) return <Spinner />;
   if (error || !all) return <Alert>{error}</Alert>;
-  // Expense limits live on their own page, shared with Finance.
-  const data = all.filter((s) => !s.key.startsWith("expense."));
+  // Expense, travel and training limits live on their own page (Expense & travel settings), shared with Finance.
+  const data = all.filter((s) => !s.key.startsWith("expense.") && !s.key.startsWith("travel.") && !s.key.startsWith("training."));
   return (
     <div className="space-y-6">
       <PageHeader title="Rules and settings" subtitle="HR can change these rules without new development. Changes are recorded in the audit log." />
