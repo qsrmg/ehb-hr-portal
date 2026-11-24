@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { MoreRequests } from "@/components/MoreRequests";
-import { HeaderOrbit3D } from "./HeaderOrbit3D";
+import { HeaderOrbit3D, type TodaySummary } from "./HeaderOrbit3D";
 import type { User } from "@/lib/auth";
 
 function greeting() {
@@ -32,8 +32,9 @@ export function DashboardHeader(props: {
   onDownloadPayslip: () => void;
   // Unused while the header illustration is HeaderOrbit3D.
   activeEmployees?: number | null;
+  summary: TodaySummary;
 }) {
-  const { user, today, unreadNotifications, latestPayslipId, onDownloadPayslip } = props;
+  const { user, today, unreadNotifications, latestPayslipId, onDownloadPayslip, summary } = props;
   return (
     <div className="relative flex min-h-[170px] flex-col gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-[#f3f7ff] p-6 shadow-[0_1px_2px_rgba(16,31,58,.04),0_8px_24px_-14px_rgba(16,31,58,.1)] xl:min-h-[280px]">
       <div className="relative z-10 min-w-0 pr-12 xl:w-1/2 xl:pr-0">
@@ -54,7 +55,7 @@ export function DashboardHeader(props: {
           <MoreRequests className={outline} />
         </div>
       </div>
-      <HeaderOrbit3D />
+      <HeaderOrbit3D summary={summary} />
       <Link
         href="/notifications"
         className="absolute right-6 top-6 z-20 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition duration-200 hover:border-slate-300 hover:text-charcoal"

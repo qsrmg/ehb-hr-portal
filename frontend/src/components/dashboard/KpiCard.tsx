@@ -21,7 +21,7 @@ const TONE: Record<string, string> = {
  * small time series behind it.
  */
 export function KpiCard({
-  label, value, icon: Icon, tone = "primary", hint, href, unavailable,
+  label, value, icon: Icon, tone = "primary", hint, href, unavailable, unavailableMuted,
 }: {
   label: string;
   value: number | null;
@@ -30,6 +30,8 @@ export function KpiCard({
   hint?: string;
   href?: string;
   unavailable?: string;
+  /** For a known-stale state (e.g. "No data since …") rather than a plain not-applicable/no-data message. */
+  unavailableMuted?: boolean;
 }) {
   const body = (
     <div className="group flex min-h-[110px] items-center gap-4 rounded-[20px] border border-[#e5e7eb] bg-white/80 p-4 shadow-[0_10px_30px_rgba(37,99,235,0.08)] ring-1 ring-inset ring-white/60 backdrop-blur-sm transition duration-200 motion-safe:hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(37,99,235,0.12)] hover:border-slate-300">
@@ -39,7 +41,7 @@ export function KpiCard({
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] text-slate-500">{label}</div>
         <div data-testid="kpi-value" className="mt-0.5 truncate text-[30px] font-extrabold leading-tight tabular-nums text-charcoal">
-          {value == null ? <span className="text-sm font-semibold text-slate-500">{unavailable ?? "Not shown for your role"}</span> : <CountUp value={value} />}
+          {value == null ? <span className={unavailableMuted ? "text-sm font-normal italic text-slate-400" : "text-sm font-semibold text-slate-500"}>{unavailable ?? "Not shown for your role"}</span> : <CountUp value={value} />}
         </div>
         {hint && <div className="mt-0.5 truncate text-[12px] text-slate-500">{hint}</div>}
       </div>

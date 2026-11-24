@@ -7,7 +7,7 @@ import { Alert, Empty, Spinner } from "@/components/ui";
 import { GlassCard } from "@/components/dashboard/GlassCard";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AttendanceAnalytics, type AttendanceDay, type AttendanceSummary } from "@/components/dashboard/AttendanceAnalytics";
-import { AttendanceStatusRings } from "@/components/dashboard/AttendanceStatusRings";
+import { ComingUp, type Holiday } from "@/components/dashboard/ComingUp";
 import { LeaveDoughnut, type LeaveBalance } from "@/components/dashboard/LeaveDoughnut";
 import { RequestsPanel, type RequestRow } from "@/components/dashboard/RequestsPanel";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -55,6 +55,17 @@ function clock(hm: string | null) {
   return `${String(h % 12 || 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
+/** Walks back from `from` (inclusive) to the most recent day that is neither a weekend nor a holiday. */
+function mostRecentWorkingDay(from: string, holidays: Set<string>): string {
+  const d = new Date(`${from}T00:00:00Z`);
+  for (;;) {
+    const day = d.getUTCDay();
+    const s = d.toISOString().slice(0, 10);
+    if (day !== 0 && day !== 6 && !holidays.has(s)) return s;
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+}
+
 const outline = "inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-charcoal transition duration-200 motion-safe:hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50";
 const primaryBtn = "inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-[0_10px_24px_-12px_rgba(37,99,235,.55)] transition duration-200 motion-safe:hover:-translate-y-0.5 hover:bg-primary-hover";
 
@@ -64,11 +75,22 @@ export default function DashboardPage() {
   const [month, setMonth] = useState(currentMonth());
   const monthData = useApi<MonthAttendance>(`/attendance/me?month=${month}`);
   const myExit = useApi<{ id: number; status: string } | null>("/exits/mine");
+  const thisYear = new Date().getFullYear();
+  const holidaysThis = useApi<Holiday[]>(`/holidays?year=${thisYear}`);
+  const holidaysNext = useApi<Holiday[]>(`/holidays?year=${thisYear + 1}`);
   const [acting, setActing] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (loading && !data) return <Spinner />;
   if (error || !data || !user) return <Alert>{error}</Alert>;
+
+  const holidays = [...(holidaysThis.data ?? []), ...(holidaysNext.data ?? [])];
+  const nextHoliday = holidays.filter((h) => h.date >= data.today).sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+  const lastImported = data.month.lastImported;
+  const checkInLabel = clock(data.todayAttendance?.checkIn ?? null);
+  const dataStale = !checkInLabel && (!lastImported || lastImported < mostRecentWorkingDay(data.today, new Set(holidays.map((h) => h.date))));
+  const inTimeUnavailable = checkInLabel
+    ?? (dataStale ? (lastImported ? `No data since ${fmtDate(lastImported)}` : "No data imported yet") : "No check-in yet");
 
   const approver = isApprover(user);
   const quota = data.balances.filter((b) => b.hasQuota);
@@ -120,6 +142,7 @@ export default function DashboardPage() {
         latestPayslipId={data.latestPayslip?.id ?? null}
         onDownloadPayslip={() => download(`/payroll/payslips/${data.latestPayslip!.id}/pdf`, `payslip-${data.latestPayslip!.year}-${data.latestPayslip!.month}.pdf`)}
         activeEmployees={data.hr?.activeEmployees}
+        summary={{ pendingRequests: data.myPending.length, tasksDue: data.myTasks.toDo + data.myTasks.inProgress, nextHoliday }}
       />
 
       {/* KPI cards: only ever real, role-appropriate data — see KpiCard for the "not shown for your role" rule. */}
@@ -127,10 +150,11 @@ export default function DashboardPage() {
         <KpiCard
           label="Today's in-time"
           value={null}
-          unavailable={clock(data.todayAttendance?.checkIn ?? null) ?? "No check-in yet"}
+          unavailable={inTimeUnavailable}
+          unavailableMuted={dataStale}
           icon={CheckSquare}
           tone="primary"
-          hint={data.todayAttendance ? `Arriving after ${clock(data.rules.lateAfter)?.replace(/^0/, "")} counts as Late` : data.month.lastImported ? `Imported up to ${data.month.lastImported}` : "No attendance imported yet"}
+          hint={data.todayAttendance ? `Arriving after ${clock(data.rules.lateAfter)?.replace(/^0/, "")} counts as Late` : lastImported ? `Imported up to ${lastImported}` : "No attendance imported yet"}
         />
         <KpiCard label="My pending requests" value={data.myPending.length} icon={ClipboardList} tone="violet" href="/requests" hint={data.myPending[0]?.currentStepLabel ? `Waiting with ${data.myPending[0].currentStepLabel}` : undefined} />
         <KpiCard
@@ -158,7 +182,7 @@ export default function DashboardPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <AttendanceStatusRings summary={monthData.data?.summary ?? { onTime: 0, late: 0, halfDay: 0, absent: 0 }} />
+        <ComingUp nextHoliday={nextHoliday} today={data.today} />
         <LeaveDoughnut balances={quota} />
       </div>
 

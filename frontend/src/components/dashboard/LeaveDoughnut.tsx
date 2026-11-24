@@ -21,6 +21,9 @@ const colorFor = (code: string, i: number) => PALETTE[code] ?? FALLBACK[i % FALL
 export function LeaveDoughnut({ balances }: { balances: LeaveBalance[] }) {
   const rows = balances.filter((b) => b.available != null);
   const total = rows.reduce((s, b) => s + (b.available ?? 0), 0);
+  // The centre shows only the Annual Leave balance, never a sum across different leave types (misleading,
+  // since a day of Sick Leave and a day of Annual Leave are not interchangeable).
+  const annual = rows.find((b) => b.code === "AL") ?? null;
   const size = 168;
   const strokeWidth = 22;
   const r = (size - strokeWidth) / 2;
@@ -69,8 +72,12 @@ export function LeaveDoughnut({ balances }: { balances: LeaveBalance[] }) {
               ))}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-extrabold tabular-nums text-charcoal">{total}</span>
-              <span className="text-xs font-medium text-slate-500">day{total === 1 ? "" : "s"} left</span>
+              {annual && (
+                <>
+                  <span className="text-2xl font-extrabold tabular-nums text-charcoal">{annual.available}</span>
+                  <span className="text-xs font-medium text-slate-500">Annual leave</span>
+                </>
+              )}
             </div>
           </div>
           <div className="w-full min-w-0 space-y-3">
