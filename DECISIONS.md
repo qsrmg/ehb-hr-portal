@@ -2,6 +2,17 @@
 
 Tick each line and write the agreed value. Every item can be changed later in the portal without new development: **Rules & settings** (HR), **Expense & travel settings** (HR or Finance), **Leave types & quotas**, **Holiday calendar**, **Jobs and hiring → Headcount**, **Performance → Department templates**, **Assets** and **Employees**. "—" means no limit, or switched off.
 
+## Before go-live (needs a real decision, not a tick)
+
+- **Maternity / Paternity days (180 / 30)** — must be checked against the current federal Act by HR/legal before go-live; the figure in the Leave table below is unconfirmed.
+- **Email service for notifications** — still the Mailpit test mailbox; must be switched to a production SMTP service before real employees are added.
+- **First password for new employees ("Welcome@123")** — a placeholder; HR to set the real initial-password policy.
+- **Who holds each role (HR, Finance, Admin, Management, HODs)** — still demo people; HR to assign the real role holders.
+- **Policies and HR forms uploaded** — still samples; HR to upload the real policy documents.
+- **HR contact email (hr@ehb.local)** — a placeholder address; needs the real one.
+- **Exit offboarding starter checklist content** — placeholder wording seeded by migration, not yet reviewed by HR/Admin.
+- **Moon-sighted holiday dates (Eid, Muharram, Rabi-ul-Awal)** — not entered; these vary each year, so HR must enter the dates once announced.
+
 **Attendance and office hours**
 
 | ✓ | Setting | Now | Agreed |
