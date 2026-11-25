@@ -74,6 +74,7 @@ export function HeaderOrbit3D({ summary }: { summary: TodaySummary }) {
         hubSubtitle="HR WORKSPACE"
         compact
         glowRing
+        spinSeconds={40}
         fallback={<TodayFallback {...summary} className="h-full w-full xl:absolute xl:inset-0" />}
         className="h-full w-full xl:absolute xl:inset-0"
       />

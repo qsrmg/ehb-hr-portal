@@ -347,17 +347,18 @@ function Parallax({ leftRef, children }: { leftRef: React.RefObject<boolean>; ch
  * theme keeps its two faint blue guide rings with a dot per connector; the dark theme instead shows one
  * glowing yellow ring with a single bright travelling dot. */
 function OrbitRing({
-  tilt, radius, runtimeNodes, dark, glowRing,
+  tilt, radius, runtimeNodes, dark, glowRing, spinSeconds,
 }: {
   tilt: number;
   radius: number;
   runtimeNodes: RuntimeNode[];
   dark?: boolean;
   glowRing?: boolean;
+  spinSeconds: number;
 }) {
   const spin = useRef<THREE.Group>(null);
   useFrame((_, delta) => {
-    if (spin.current) spin.current.rotation.y += delta * ((2 * Math.PI) / 60);
+    if (spin.current) spin.current.rotation.y += delta * ((2 * Math.PI) / spinSeconds);
   });
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
@@ -400,6 +401,8 @@ export type OrbitSceneContentProps = {
    * its own (without `dark`) for a light-background header that still wants the brighter ring look.
    * Defaults to whatever `dark` is set to. */
   glowRing?: boolean;
+  /** Seconds for one full revolution of the orbit ring. Defaults to 60. */
+  spinSeconds?: number;
   active: boolean;
   onContextLost: () => void;
 };
@@ -411,7 +414,7 @@ export type OrbitSceneContentProps = {
  * sphere behind the group and a glowing pedestal beneath it, swaps the guide rings for one glowing yellow
  * ring with a single travelling dot, and turns the cards into frosted glass with white labels.
  */
-export function OrbitSceneContent({ nodes, hubTitle, hubSubtitle, compact, dark, glowRing = dark, active, onContextLost }: OrbitSceneContentProps) {
+export function OrbitSceneContent({ nodes, hubTitle, hubSubtitle, compact, dark, glowRing = dark, spinSeconds = 60, active, onContextLost }: OrbitSceneContentProps) {
   const pointerLeft = useRef(true);
   // Generous radius: comfortably clears the hub and keeps a wide gap between neighbouring cards (5 nodes,
   // 72° apart) at the card sizes NodeCard actually renders.
@@ -461,7 +464,7 @@ export function OrbitSceneContent({ nodes, hubTitle, hubSubtitle, compact, dark,
       <Parallax leftRef={pointerLeft}>
         {dark && <GlassSphere radius={radius * 1.35} />}
         <Hub title={hubTitle} subtitle={hubSubtitle} compact={compact} />
-        <OrbitRing tilt={tilt} radius={radius} runtimeNodes={runtimeNodes} dark={dark} glowRing={glowRing} />
+        <OrbitRing tilt={tilt} radius={radius} runtimeNodes={runtimeNodes} dark={dark} glowRing={glowRing} spinSeconds={spinSeconds} />
       </Parallax>
     </Canvas>
   );
