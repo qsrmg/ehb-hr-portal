@@ -113,7 +113,9 @@ await step(2, "Line Manager: creates and assigns within the team; cannot assign 
   await signIn(page, MANAGER);
   await page.goto(`${BASE}/tasks/team`);
   await page.getByRole("heading", { name: "Team tasks" }).waitFor();
-  await page.getByText("Who has what").waitFor();
+  // getByText is a case-insensitive substring match, so the bare phrase also matches the page's own
+  // subtitle ("...with who has what."); the card title is a heading, so target that role instead.
+  await page.getByRole("heading", { name: "Who has what" }).waitFor();
   check("Team tasks board and summary strip both load for the Line Manager");
   await snap(page, "manager-team-tasks");
 
