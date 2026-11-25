@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Calendar as CalendarIcon, CalendarClock, CheckSquare, ClipboardList, ListTodo, LogOut, ShieldAlert, TrendingUp, UserCheck, Users } from "lucide-react";
+import { Calendar as CalendarIcon, CheckSquare, ClipboardList, LogOut, ShieldAlert, TrendingUp, UserCheck, Users } from "lucide-react";
 import { Alert, Empty, Spinner } from "@/components/ui";
 import { GlassCard } from "@/components/dashboard/GlassCard";
 import { KpiCard } from "@/components/dashboard/KpiCard";
@@ -66,6 +66,16 @@ function mostRecentWorkingDay(from: string, holidays: Set<string>): string {
   }
 }
 
+// Every possible count of KPI cards (2 for an employee; +1 for an approver; +1 for a Line Manager/HOD's
+// team card; +3 for HR's three cards — HR and team are mutually exclusive, see dashboard.ts), each mapped
+// to column counts that divide it evenly at every breakpoint, so no row is ever left with an orphan card.
+const KPI_GRID_COLS: Record<number, string> = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "sm:grid-cols-2 lg:grid-cols-4",
+  6: "sm:grid-cols-2 lg:grid-cols-3",
+};
+
 const outline = "inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-charcoal transition duration-200 motion-safe:hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50";
 const primaryBtn = "inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-[0_10px_24px_-12px_rgba(37,99,235,.55)] transition duration-200 motion-safe:hover:-translate-y-0.5 hover:bg-primary-hover";
 
@@ -93,6 +103,7 @@ export default function DashboardPage() {
     ?? (dataStale ? (lastImported ? `No data since ${fmtDate(lastImported)}` : "No data imported yet") : "No check-in yet");
 
   const approver = isApprover(user);
+  const kpiCount = 2 + (approver ? 1 : 0) + (data.team ? 1 : 0) + (data.hr ? 3 : 0);
   const quota = data.balances.filter((b) => b.hasQuota);
   const monthSummary = monthData.data?.summary;
   const monthTotal = monthSummary ? monthSummary.onTime + monthSummary.late + monthSummary.halfDay + monthSummary.absent : 0;
@@ -146,7 +157,7 @@ export default function DashboardPage() {
       />
 
       {/* KPI cards: only ever real, role-appropriate data — see KpiCard for the "not shown for your role" rule. */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid gap-4 ${KPI_GRID_COLS[kpiCount] ?? "sm:grid-cols-2"}`}>
         <KpiCard
           label="Today's in-time"
           value={null}
@@ -157,14 +168,6 @@ export default function DashboardPage() {
           hint={data.todayAttendance ? `Arriving after ${clock(data.rules.lateAfter)?.replace(/^0/, "")} counts as Late` : lastImported ? `Imported up to ${lastImported}` : "No attendance imported yet"}
         />
         <KpiCard label="My pending requests" value={data.myPending.length} icon={ClipboardList} tone="violet" href="/requests" hint={data.myPending[0]?.currentStepLabel ? `Waiting with ${data.myPending[0].currentStepLabel}` : undefined} />
-        <KpiCard
-          label="My tasks"
-          value={data.myTasks.toDo + data.myTasks.inProgress}
-          icon={ListTodo}
-          tone={data.myTasks.overdueCount ? "red" : "primary"}
-          href="/tasks"
-          hint={`${data.myTasks.toDo} To Do · ${data.myTasks.inProgress} In Progress${data.myTasks.overdueCount ? ` · ${data.myTasks.overdueCount} overdue` : ""}`}
-        />
         {approver && <KpiCard label="Waiting for your approval" value={data.tasks.length} icon={UserCheck} tone="sun" href="/approvals" hint={data.tasks.length ? "Needs your decision" : "Nothing waiting"} />}
         {data.team && <KpiCard label="Team on leave today" value={data.team.onLeaveToday} icon={CalendarIcon} tone="primary" href="/team" />}
         {data.hr && <KpiCard label="Active employees" value={data.hr.activeEmployees} icon={Users} tone="emerald" href="/admin/employees" />}
@@ -241,24 +244,6 @@ export default function DashboardPage() {
               </div>
             </GlassCard>
           )}
-
-          <GlassCard title="Upcoming leave" actions={<Link href="/leave" className="text-sm font-semibold text-accent hover:underline">View leave</Link>}>
-            {data.nextLeave ? (
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <CalendarClock className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <div className="font-bold text-charcoal">
-                    {fmtDate(data.nextLeave.startDate)}{data.nextLeave.startDate !== data.nextLeave.endDate ? ` – ${fmtDate(data.nextLeave.endDate)}` : ""} ({data.nextLeave.days} day{data.nextLeave.days === 1 ? "" : "s"})
-                  </div>
-                  <div className="text-xs text-slate-500">{data.nextLeave.leaveType} · Approved</div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">No upcoming approved leave.</p>
-            )}
-          </GlassCard>
 
           <GlassCard title="Pay slips" actions={<Link href="/payslips" className="text-sm font-semibold text-accent hover:underline">All pay slips</Link>}>
             {data.latestPayslip ? (
