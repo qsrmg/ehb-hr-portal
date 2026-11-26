@@ -95,7 +95,7 @@ await step("1.2", "Ali: dashboard, attendance, leave, pay slips, policies, inven
     await snap(page, "ali-apply-leave");
     await go(page, "/payslips", /Pay slips/);
     await snap(page, "ali-payslips");
-    await go(page, "/documents", /Policies/);
+    await go(page, "/policies", /Policies/);
     await visible(page, "Leave Policy");
     await go(page, "/inventory", /inventory/i);
     await visible(page, "Dell Latitude 5440");

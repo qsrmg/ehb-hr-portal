@@ -9,7 +9,7 @@ import { SettlementForm } from "@/components/SettlementForm";
 import { AssetRequestForm } from "@/components/AssetRequestForm";
 
 const TITLES: Record<string, { title: string; subtitle: string }> = {
-  leave: { title: "Apply for leave", subtitle: "Goes to your Line Manager (and HR for leave without pay, maternity and paternity)." },
+  leave: { title: "Apply for leave", subtitle: "Goes to your Line Manager (and HR for some leave types)." },
   "attendance-update": { title: "Attendance update", subtitle: "Fix a missed punch or record a field visit. Up to 3 a month, within 7 days. The machine record is kept; the correction is stored alongside it." },
   letter: { title: "Letter request", subtitle: "Experience letter, salary certificate, employment verification or NOC. Approved by HR." },
   travel: { title: "Travel request", subtitle: "Business trips within Pakistan. Goes to your Line Manager and Head of Department; Admin books tickets and hotel once approved." },

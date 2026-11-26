@@ -8,7 +8,7 @@ type Acknowledgements = { acknowledged: { id: number; fullName: string; code: st
 
 /**
  * HR sees who still has not acknowledged a policy — a document that requires acknowledgement
- * ("document:<id>") or the activity-monitoring policy ("activity-monitoring"). Shared by the Documents
+ * ("document:<id>") or the activity-monitoring policy ("activity-monitoring"). Shared by the Policies
  * page and the Activity admin page, both backed by the same GET /policies/:policyKey/acknowledgements.
  */
 export function PolicyAcknowledgementsPanel({ policyKey, everyoneLabel = "Everyone has acknowledged this." }: { policyKey: string; everyoneLabel?: string }) {

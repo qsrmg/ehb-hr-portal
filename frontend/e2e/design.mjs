@@ -331,7 +331,7 @@ await step("pages", "10 most-used signed-in pages in the dark theme: screenshots
     ["employee@ehb.local", "/requests", "my-requests"],
     ["employee@ehb.local", "/requests/new/leave", "leave-form-with-error"],
     ["employee@ehb.local", "/payslips", "payslips"],
-    ["employee@ehb.local", "/documents", "policies"],
+    ["employee@ehb.local", "/policies", "policies"],
     ["employee@ehb.local", "/profile", "profile"],
     ["manager@ehb.local", "/approvals", "approvals"],
     ["manager@ehb.local", `/requests/${created.id}`, "request-decision"],
