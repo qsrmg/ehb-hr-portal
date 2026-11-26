@@ -52,28 +52,62 @@ async function pendingDays(employeeId: number, leaveTypeId: number, year: number
   return rows.reduce((sum, r) => sum + Number(r.days), 0);
 }
 
+/** One balance row. For an active type the balance is created on first use; for a deactivated type an
+ * existing row is read as-is and never created, so a type with no history simply has none. */
+async function balanceRow(type: LeaveType, employeeId: number, year: number) {
+  const pending = await pendingDays(employeeId, type.id, year);
+  const b = type.active
+    ? await ensureBalance(prisma, employeeId, type, year)
+    : await prisma.leaveBalance.findUnique({ where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId: type.id, year } } });
+  const entitled = Number(b?.entitled ?? 0);
+  const carriedForward = Number(b?.carriedForward ?? 0);
+  const used = Number(b?.used ?? 0);
+  return {
+    balanceId: b?.id ?? null,
+    leaveTypeId: type.id,
+    code: type.code,
+    name: type.name,
+    hasQuota: type.annualQuota != null,
+    entitled,
+    entitledManual: b?.entitledManual ?? false,
+    carriedForward,
+    used,
+    pending,
+    available: type.annualQuota == null ? null : entitled + carriedForward - used - pending,
+  };
+}
+
+/**
+ * Balances for the types the employee can currently apply for, plus any deactivated type they already have
+ * real history with this year (used days, or a pending/returned request) — so a type HR has since switched
+ * off still shows correctly for someone who already holds it, without ever creating a fresh row for one
+ * that was always inactive for them.
+ */
 export async function balancesFor(employeeId: number, year: number) {
-  const types = await applicableTypes(employeeId);
-  return Promise.all(
-    types.map(async (type) => {
-      const b = await ensureBalance(prisma, employeeId, type, year);
-      const pending = await pendingDays(employeeId, type.id, year);
-      const total = Number(b.entitled) + Number(b.carriedForward);
-      return {
-        balanceId: b.id,
-        leaveTypeId: type.id,
-        code: type.code,
-        name: type.name,
-        hasQuota: type.annualQuota != null,
-        entitled: Number(b.entitled),
-        entitledManual: b.entitledManual,
-        carriedForward: Number(b.carriedForward),
-        used: Number(b.used),
-        pending,
-        available: type.annualQuota == null ? null : total - Number(b.used) - pending,
-      };
+  const applicable = await applicableTypes(employeeId);
+  const applicableIds = applicable.map((t) => t.id);
+  const yearStart = toDate(`${year}-01-01`);
+  const yearEnd = toDate(`${year}-12-31`);
+  const [usedBalances, inFlight] = await Promise.all([
+    prisma.leaveBalance.findMany({
+      where: { employeeId, year, used: { gt: 0 }, leaveTypeId: { notIn: applicableIds } },
+      include: { leaveType: true },
     }),
-  );
+    prisma.leaveRequest.findMany({
+      where: {
+        startDate: { gte: yearStart, lte: yearEnd },
+        leaveTypeId: { notIn: applicableIds },
+        request: { employeeId, status: { in: ["PENDING", "RETURNED"] } },
+      },
+      include: { leaveType: true },
+    }),
+  ]);
+  const extra = new Map<number, LeaveType>();
+  for (const b of usedBalances) extra.set(b.leaveType.id, b.leaveType);
+  for (const r of inFlight) extra.set(r.leaveType.id, r.leaveType);
+
+  const types = [...applicable, ...extra.values()].sort((a, b) => a.id - b.id);
+  return Promise.all(types.map((type) => balanceRow(type, employeeId, year)));
 }
 
 export type LeaveInput = { leaveTypeId: number; startDate: string; endDate: string; reason?: string };

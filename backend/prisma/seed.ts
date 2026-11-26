@@ -59,14 +59,16 @@ async function main() {
   await prisma.department.update({ where: { id: mgmt.id }, data: { hodId: ceo.id } });
 
   // Placeholder quotas until "HR Portal — Final Rules v1" is signed off; HR can edit them in the portal.
+  // LWP, ML and PL are inactive: the uploaded Leave Policy only covers Annual, Casual and Sick leave, so
+  // they are kept (not deleted) for their history but cannot be newly applied for until HR re-enables them.
   await prisma.leaveType.createMany({
     data: [
       { code: "AL", name: "Annual Leave", annualQuota: 14, noticeDays: 3, carryForwardMax: 14 },
       { code: "CL", name: "Casual Leave", annualQuota: 10 },
       { code: "SL", name: "Sick Leave", annualQuota: 8, documentAfterDays: 2 },
-      { code: "LWP", name: "Leave Without Pay", annualQuota: null, paid: false, needsHrApproval: true, noticeDays: 3, proRata: false },
-      { code: "ML", name: "Maternity Leave", annualQuota: 180, needsHrApproval: true, noticeDays: 14, proRata: false, gender: "FEMALE" },
-      { code: "PL", name: "Paternity Leave", annualQuota: 30, needsHrApproval: true, noticeDays: 7, proRata: false, gender: "MALE" },
+      { code: "LWP", name: "Leave Without Pay", annualQuota: null, paid: false, needsHrApproval: true, noticeDays: 3, proRata: false, active: false },
+      { code: "ML", name: "Maternity Leave", annualQuota: 180, needsHrApproval: true, noticeDays: 14, proRata: false, gender: "FEMALE", active: false },
+      { code: "PL", name: "Paternity Leave", annualQuota: 30, needsHrApproval: true, noticeDays: 7, proRata: false, gender: "MALE", active: false },
     ],
   });
 

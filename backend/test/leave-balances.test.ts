@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { prisma } from "../src/lib/prisma.js";
 import { toDate, todayYmd } from "../src/lib/dates.js";
 import { CARRY_FORWARD_CRON, startQueue, stopQueue } from "../src/jobs/queue.js";
-import { carryForward, ensureBalance, entitlementFor, yearEndCarryForward } from "../src/services/leave.js";
-import { resetDatabase, seedPeople, startServer, useMemoryTransport } from "./helpers.js";
+import { balancesFor, carryForward, ensureBalance, entitlementFor, evaluateLeave, yearEndCarryForward } from "../src/services/leave.js";
+import { futureWorkday, resetDatabase, seedPeople, startServer, useMemoryTransport } from "./helpers.js";
 import type { LeaveType } from "../src/generated/prisma/client.js";
 
 const YEAR = Number(todayYmd().slice(0, 4));
@@ -212,5 +212,58 @@ describe("balances recalculate when HR changes a joining date or a quota", () =>
     assert.equal((await api.call(hrToken, "POST", "/leave/carry-forward", { fromYear: String(YEAR - 1) })).status, 200);
     const empToken = await api.login("employee@test.local");
     assert.equal((await api.call(empToken, "POST", "/leave/carry-forward", { fromYear: String(YEAR - 1) })).status, 403);
+  });
+});
+
+describe("a deactivated leave type (e.g. Maternity/Paternity Leave switched off)", () => {
+  let people: Awaited<ReturnType<typeof seedPeople>>;
+  let used: LeaveType; // has used days this year
+  let pending: LeaveType; // has a pending request this year
+  let untouched: LeaveType; // no history at all
+
+  before(async () => {
+    await resetDatabase();
+    people = await seedPeople();
+    used = await prisma.leaveType.create({ data: { code: "ML", name: "Maternity Leave", annualQuota: 180, proRata: false, active: false } });
+    pending = await prisma.leaveType.create({ data: { code: "PL", name: "Paternity Leave", annualQuota: 30, proRata: false, active: false } });
+    untouched = await prisma.leaveType.create({ data: { code: "LWP2", name: "Leave Without Pay (old)", annualQuota: null, active: false } });
+  });
+
+  test("still shows a balance once it has used days this year", async () => {
+    const b = await ensureBalance(prisma, people.employee.id, used, YEAR);
+    await prisma.leaveBalance.update({ where: { id: b.id }, data: { used: 10 } });
+    const row = (await balancesFor(people.employee.id, YEAR)).find((r) => r.leaveTypeId === used.id);
+    assert.ok(row, "a used, deactivated type must still appear");
+    assert.equal(row!.used, 10);
+  });
+
+  test("still shows a balance while a request against it is pending", async () => {
+    const day = futureWorkday(10);
+    await prisma.request.create({
+      data: {
+        type: "LEAVE", employeeId: people.employee.id, status: "PENDING", title: "Paternity Leave · 1 day",
+        leaveRequest: { create: { leaveTypeId: pending.id, startDate: toDate(day), endDate: toDate(day), days: 1, reason: "Birth of a child" } },
+      },
+    });
+    const row = (await balancesFor(people.employee.id, YEAR)).find((r) => r.leaveTypeId === pending.id);
+    assert.ok(row, "a pending request against a deactivated type must still appear");
+    assert.equal(row!.pending, 1);
+  });
+
+  test("never creates a balance, or appears at all, for one with no real history", async () => {
+    const row = (await balancesFor(people.employee.id, YEAR)).find((r) => r.leaveTypeId === untouched.id);
+    assert.equal(row, undefined, "an untouched, deactivated type must not appear");
+    const balance = await prisma.leaveBalance.findUnique({
+      where: { employeeId_leaveTypeId_year: { employeeId: people.employee.id, leaveTypeId: untouched.id, year: YEAR } },
+    });
+    assert.equal(balance, null, "balancesFor must never create a row for an inactive type");
+  });
+
+  test("cannot be newly applied for", async () => {
+    const day = futureWorkday(10);
+    await assert.rejects(
+      () => evaluateLeave(people.employee.id, { leaveTypeId: untouched.id, startDate: day, endDate: day }),
+      /Unknown leave type/,
+    );
   });
 });

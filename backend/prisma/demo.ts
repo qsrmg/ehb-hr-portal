@@ -141,19 +141,21 @@ async function seed() {
   for (const [name, head] of heads) await prisma.department.update({ where: { id: dept[name] }, data: { hodId: id[head], approvedHeadcount: headcount[name] } });
 
   // --- Leave types (placeholders until the Final Rules are signed off) ---
+  // LWP, ML and PL are inactive: the Leave Policy sample only covers Annual, Casual and Sick leave, so they
+  // are kept (not deleted) for their history but cannot be newly applied for until HR re-enables them.
   await prisma.leaveType.createMany({
     data: [
       { code: "AL", name: "Annual Leave", annualQuota: 14, noticeDays: 3, carryForwardMax: 14 },
       { code: "CL", name: "Casual Leave", annualQuota: 10 },
       { code: "SL", name: "Sick Leave", annualQuota: 8, documentAfterDays: 2 },
-      { code: "LWP", name: "Leave Without Pay", annualQuota: null, paid: false, needsHrApproval: true, noticeDays: 3, proRata: false },
-      { code: "ML", name: "Maternity Leave", annualQuota: 180, needsHrApproval: true, noticeDays: 14, proRata: false, gender: "FEMALE" },
-      { code: "PL", name: "Paternity Leave", annualQuota: 30, needsHrApproval: true, noticeDays: 7, proRata: false, gender: "MALE" },
+      { code: "LWP", name: "Leave Without Pay", annualQuota: null, paid: false, needsHrApproval: true, noticeDays: 3, proRata: false, active: false },
+      { code: "ML", name: "Maternity Leave", annualQuota: 180, needsHrApproval: true, noticeDays: 14, proRata: false, gender: "FEMALE", active: false },
+      { code: "PL", name: "Paternity Leave", annualQuota: 30, needsHrApproval: true, noticeDays: 7, proRata: false, gender: "MALE", active: false },
     ],
   });
   const types = await prisma.leaveType.findMany();
   const leaveType = (code: string) => types.find((t) => t.code === code)!;
-  for (const p of people) for (const t of types) if (!t.gender || t.gender === p.gender) await ensureBalance(prisma, id[p.key]!, t, year);
+  for (const p of people) for (const t of types) if (t.active && (!t.gender || t.gender === p.gender)) await ensureBalance(prisma, id[p.key]!, t, year);
 
   // --- A month of attendance (from the 1st of last month to yesterday), as if imported ---
   const thisMonth = toDate(`${today.slice(0, 8)}01`);
