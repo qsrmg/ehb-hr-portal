@@ -54,7 +54,7 @@ export default function CycleOverviewPage() {
         title={c.name}
         subtitle={<>{fmtDate(c.startDate)} to {fmtDate(c.endDate)} · {c.scorecards.length} scorecards</>}
         actions={c.canManage ? (
-          <Button variant="secondary" loading={busy === "close"} onClick={() => confirm("Close this cycle? Scorecards become read-only.") && run("close", () => post(`/performance/cycles/${c.id}/close`), "Cycle closed.")}>Close cycle</Button>
+          <Button variant="secondary" loading={busy === "close"} onClick={() => confirm("Close this cycle? No new goal-setting, self-review or sign-off can start on it. A result still awaiting the employee's acknowledgement or appeal stays open until they act, even after the cycle is closed.") && run("close", () => post(`/performance/cycles/${c.id}/close`), "Cycle closed.")}>Close cycle</Button>
         ) : null}
       />
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
