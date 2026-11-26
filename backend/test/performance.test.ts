@@ -177,6 +177,8 @@ describe("Performance (BSC)", () => {
     assert.equal((await as("sara").get(`/performance/scorecards/${sc.ali}`)).status, 403);
     for (const who of ["ali", "hamza", "nadia", "hr", "ceo"]) ok(await as(who).get(`/performance/scorecards/${sc.ali}`));
     assert.equal((await as("fin").get("/performance/cycles")).status, 403);
+    const viewers = (await prisma.auditLog.findMany({ where: { action: "VIEW_SENSITIVE", entity: "Scorecard", entityId: String(sc.ali) } })).map((v) => v.actorId);
+    assert.deepEqual(viewers.sort((a, b) => a! - b!), [id.ceo, id.hamza, id.hr, id.nadia].sort((a, b) => a! - b!), "everyone but Ali himself is audited for viewing his scorecard");
   });
 
   test("check-ins are comments only, and the self-review opens on the review date", async () => {
@@ -248,9 +250,19 @@ describe("Performance (BSC)", () => {
     assert.equal((await as("ali").post(`/performance/scorecards/${sc.ali}/appeal`, { reason: "Trying a second appeal here." })).status, 403);
     ok(await as("ali").post(`/performance/scorecards/${sc.ali}/acknowledge`, { comment: "Thank you" }));
     assert.equal(await stage("ali"), "ACKNOWLEDGED");
+    assert.equal(
+      (await prisma.auditLog.findFirst({ where: { action: "ACKNOWLEDGE", entity: "Scorecard", entityId: String(sc.ali) } }))?.actorId,
+      id.ali,
+      "the employee's own acknowledgement of their result is audited",
+    );
+
     const pdf = await fetch(`${api.base}/performance/scorecards/${sc.ali}/pdf`, { headers: { Authorization: `Bearer ${token.ali}` } });
     assert.equal(pdf.status, 200);
     assert.equal(pdf.headers.get("content-type"), "application/pdf");
+    const hrPdf = await fetch(`${api.base}/performance/scorecards/${sc.ali}/pdf`, { headers: { Authorization: `Bearer ${token.hr}` } });
+    assert.equal(hrPdf.status, 200);
+    const pdfViews = await prisma.auditLog.count({ where: { action: "VIEW_SENSITIVE", entity: "Scorecard", entityId: String(sc.ali), actorId: id.hr } });
+    assert.ok(pdfViews >= 1, "HR downloading Ali's PDF is audited; Ali downloading his own is not");
   });
 
   test("HR sees the cycle overview with stages and the rating distribution, and closes the cycle when nothing is waiting", async () => {

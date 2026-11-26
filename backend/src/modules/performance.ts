@@ -365,6 +365,7 @@ performanceRouter.get("/team", async (req, res) => {
 performanceRouter.get("/scorecards/:id", async (req, res) => {
   const user = currentUser(req);
   const { sc } = await loadFor(Number(req.params.id), user);
+  if (sc.employeeId !== user.id) await audit(user.id, "VIEW_SENSITIVE", "Scorecard", sc.id);
   const scale = await ratingScale();
   const p = present(sc, user, scale);
   const attendance = await attendanceReference(sc.employeeId, sc.cycle.startDate, sc.cycle.endDate);
@@ -556,9 +557,10 @@ performanceRouter.patch("/scorecards/:id/kpis/:kpiId/final-rating", requireRole(
 
 performanceRouter.post("/scorecards/:id/acknowledge", async (req, res) => {
   const { comment } = parse(optionalComment, req.body);
-  const { sc, p } = await forAction(req);
+  const { user, sc, p } = await forAction(req);
   if (!p.can.acknowledge) throw new HttpError(403, "Only the employee can acknowledge their released result");
   await prisma.scorecard.update({ where: { id: sc.id }, data: { stage: "ACKNOWLEDGED", employeeAckAt: new Date(), employeeAckComment: comment || null } });
+  await audit(user.id, "ACKNOWLEDGE", "Scorecard", sc.id);
   await notify(await managerIdsFor(sc.employeeId), `Result acknowledged: ${sc.employee.fullName}`, `${sc.employee.fullName} acknowledged their result for ${sc.cycle.name}${comment ? ` with a comment: ${comment}` : "."}`, `/performance/${sc.id}`);
   res.json({ ok: true });
 });
@@ -592,8 +594,9 @@ performanceRouter.post("/scorecards/:id/appeal/decide", requireRole("HR"), async
 });
 
 performanceRouter.get("/scorecards/:id/pdf", async (req, res) => {
-  const { sc, p } = await forAction(req);
+  const { user, sc, p } = await forAction(req);
   if (!p.can.pdf) throw new HttpError(400, "The PDF is available once the result is released");
+  if (sc.employeeId !== user.id) await audit(user.id, "VIEW_SENSITIVE", "Scorecard", sc.id);
   const pdf = await scorecardPdf({
     cycle: `${sc.cycle.name} (${ymd(sc.cycle.startDate)} to ${ymd(sc.cycle.endDate)})`,
     employee: { fullName: sc.employee.fullName, code: sc.employee.code, designation: sc.employee.designation, department: sc.employee.department?.name ?? null, manager: sc.employee.manager?.fullName ?? null },
