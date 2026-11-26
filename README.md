@@ -97,7 +97,7 @@ The tests use a separate `hr_ms_test` database (created automatically), so your 
 - pro-rata entitlement and Annual Leave carry forward, including the automatic run on 1 January;
 - recalculation of balances when HR changes a joining date or a quota;
 - resignation and exit clearance: notice periods, early release, the four clearances, the final settlement, letters, deactivation and handover;
-- performance (BSC): settings, templates, cycle eligibility, goals with and without the HOD step, confidentiality, self and manager review, calibration, appeal, the cycle overview;
+- performance (BSC) — these backend tests: settings, templates, cycle eligibility, goals with and without the HOD step, confidentiality, self and manager review, calibration, appeal, the cycle overview. The browser test below (e2e) separately walks through one scorecard once end to end, including the live score calculation, calibration and an appeal, but not every branch above (e.g. it never exercises the separate-HOD approval step, only the HOD-is-also-Line-Manager case);
 - hiring: who can raise requisitions, the three approval routes, Finance's budget confirmation, headcount, returned/rejected/withdrawn requisitions, posting windows, eligibility, confidentiality until shortlisting, external candidates, internal and external hires, the draft replacement.
 
 ### Browser tests (e2e)
@@ -124,7 +124,7 @@ One command runs every browser test (design screenshots, Travel, My Inventory, R
 
 ## Performance (BSC)
 
-Six-monthly Balanced Scorecard cycles (sidebar: *Performance*).
+Balanced Scorecard cycles (sidebar: *Performance*). HR sets each cycle's own dates; six-monthly is the expected cadence, but nothing in the system enforces it.
 
 - **Cycles:** HR starts a cycle. Everyone active at the start is included, plus people who join in its first 3 months (a setting); later joiners wait for the next cycle. HR can add or remove someone by hand.
 - **Goals:**

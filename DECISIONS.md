@@ -12,6 +12,11 @@ Tick each line and write the agreed value. Every item can be changed later in th
 - **HR contact email (hr@ehb.local)** — a placeholder address; needs the real one.
 - **Exit offboarding starter checklist content** — placeholder wording seeded by migration, not yet reviewed by HR/Admin.
 - **Moon-sighted holiday dates (Eid, Muharram, Rabi-ul-Awal)** — not entered; these vary each year, so HR must enter the dates once announced.
+- **Performance appeal time limit, and what Close cycle does to a pending one** — there is no deadline today; an employee can appeal any time after a result is released, even after the cycle is closed, and Close cycle does not stop a still-open acknowledgement or appeal; HR/Management to decide whether a deadline is needed and what closing a cycle should do about either.
+- **Probation employees in Performance cycles** — included exactly like confirmed staff today; HR/Management to decide whether probationary employees should take part, be excluded, or be flagged differently.
+- **An employee's open scorecard on exit mid-cycle** — left exactly where it was today, with no automatic action; HR/Management to decide what should happen to it.
+- **A pending performance approval step when the manager changes mid-cycle** — keeps its original approver today unless HR separately runs the exit handover; HR/Management to decide whether an ordinary manager change should reassign it too.
+- **Performance ratings linked to increments or promotions** — no such link exists anywhere in the system today; Management to decide whether one should be built.
 
 **Attendance and office hours**
 
@@ -93,7 +98,7 @@ Also HR/Admin-editable per category (*Assets → Categories*), not global settin
 
 | ✓ | Setting | Now | Agreed |
 |---|---|---|---|
-| ☐ | Rating names 1 to 5 | Unsatisfactory, Needs Improvement, Meets, Exceeds, Outstanding | |
+| ☐ | Rating names 1 to 5 | Unsatisfactory, Needs Improvement, Meets Expectations, Exceeds Expectations, Outstanding | |
 | ☐ | Score from which the result is rating 5 / 4 / 3 / 2 | 4.5 / 3.5 / 2.5 / 1.5 | |
 | ☐ | Minimum weight per perspective | 0% | |
 | ☐ | Joiners included if they join in the first … months | 3 | |
