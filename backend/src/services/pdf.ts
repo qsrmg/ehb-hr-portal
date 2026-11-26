@@ -81,6 +81,7 @@ type PayslipData = {
   year: number; month: number;
   basic: unknown; houseRent: unknown; medical: unknown; conveyance: unknown; fuel: unknown; mobile: unknown; gross: unknown;
   incomeTax: unknown; eobi: unknown; providentFund: unknown; totalDeductions: unknown; netPay: unknown;
+  correctedAt?: Date | null;
 };
 
 const m = (v: unknown) => money(v as number);
@@ -110,6 +111,10 @@ export function payslipPdf(emp: Employee, p: PayslipData) {
     doc.text(m(p.netPay), 300, y + 11, { width: 233, align: "right" });
     doc.font("Helvetica").fillColor(MUTED).fontSize(8)
       .text("This is a system-generated pay slip from the EHB HR Portal and does not require a signature.", 50, y + 60);
+    if (p.correctedAt) {
+      const corrected = p.correctedAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+      doc.text(`Corrected by HR on ${corrected}.`, 50, y + 72);
+    }
   });
 }
 

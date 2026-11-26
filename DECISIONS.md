@@ -17,6 +17,7 @@ Tick each line and write the agreed value. Every item can be changed later in th
 - **An employee's open scorecard on exit mid-cycle** — left exactly where it was today, with no automatic action; HR/Management to decide what should happen to it.
 - **A pending performance approval step when the manager changes mid-cycle** — keeps its original approver today unless HR separately runs the exit handover; HR/Management to decide whether an ordinary manager change should reassign it too.
 - **Performance ratings linked to increments or promotions** — no such link exists anywhere in the system today; Management to decide whether one should be built.
+- **Who corrects an HR user's own pay slip** — HR cannot edit their own pay slip; HR/Management to decide whether a second HR user or Management makes that correction instead.
 
 **Attendance and office hours**
 

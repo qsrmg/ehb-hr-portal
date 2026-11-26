@@ -9,6 +9,7 @@
 | `performance.mjs` | Performance (BSC) steps 1–9: HR's department template, a cycle, goals adjusted and sent, acknowledged (no duplicate HOD step), check-in, self-review, manager ratings, Admin and Finance refused, HR calibration and release, appeal decided, acknowledgement and PDF, cycle overview | `test-screenshots/performance/` |
 | `hiring.mjs` | Manpower Requisition and internal jobs steps 1–10: headcount, a new position, Finance confirms the budget, approvals, posting, a confidential application (and an ineligible employee), shortlisting with the managers told, interview feedback, external candidates, Create employee from the requisition, internal move, position filled with a polite email and a draft replacement | `test-screenshots/hiring/` |
 | `leave.mjs` | Apply for leave: submitting overlapping dates shows "These dates overlap with leave request #N"; switching to non-overlapping dates — without resubmitting — clears the message and the form then submits cleanly. Attendance Update: the date input's min/max match the request window | `test-screenshots/leave/` |
+| `payroll.mjs` | Pay slip correction: HR corrects one of Ali's uploaded pay slips with a reason from his employee record, the total recalculates and a "Corrected by HR" banner appears; Finance and Admin are refused the edit and the correction history by the API directly; Ali sees the reason (no Edit button, no old-vs-new breakdown) and is emailed with no amount or reason in it | `test-screenshots/payroll/` |
 | `probation.mjs` | Probation confirmation: the Employees list due-count, HR sees Confirm/Extend on a due record, the Line Manager leaves a note from the Team page, HR extends with a reason (and the due cycle moves on) or confirms, and the employee sees their own status, read-only, on their profile | `test-screenshots/probation/` |
 | `training.mjs` | Training requests: validation, the Line Manager → HOD → Finance approval chain (with the Management threshold), return/resubmit, rejection, withdrawal and access control | `test-screenshots/training/` |
 | `activity.mjs` | Activity monitoring: off by default, HR turns it on, the non-blocking acknowledgement prompt, the badge once acknowledged, multi-tab activity (OR-merged, leader tab sends the heartbeat), the heartbeat payload has only `{minuteStart, active}`, the Line Manager's team view is aggregate-only, and HR's individual view / CSV export are both audited | `test-screenshots/activity/` |
@@ -49,7 +50,7 @@ The server logs go to `test-screenshots/e2e-logs/` (ignored by git, like the scr
 
 | Variable | Default |
 |---|---|
-| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring,leave,probation,training,activity,tasks,demo` (e.g. `E2E_SPECS=demo` to run one) |
+| `E2E_SPECS` | `design,travel,inventory,exit,performance,hiring,leave,payroll,probation,training,activity,tasks,demo` (e.g. `E2E_SPECS=demo` to run one) |
 | `E2E_DB_NAME` | `hr_ms_e2e` (must end in `_e2e`) |
 | `E2E_API_PORT` / `E2E_WEB_PORT` | `5100` / `3100` |
 | `E2E_MAIL_PORT` / `E2E_SMTP_PORT` | `8125` / `1125` |

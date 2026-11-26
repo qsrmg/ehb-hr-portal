@@ -162,6 +162,7 @@ export default function EmployeeDetailPage() {
         actions={
           <>
             <Link href="/admin/employees" className="text-sm text-accent hover:underline">← All employees</Link>
+            {hasRole(user, "HR", "FINANCE", "MANAGEMENT") && <Link href={`/payslips?employeeId=${emp.id}`} className="text-sm text-accent hover:underline">Pay slips</Link>}
             {isHr && <Button variant="secondary" onClick={resetPassword}>Reset password</Button>}
           </>
         }

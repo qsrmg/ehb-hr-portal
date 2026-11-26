@@ -9,7 +9,8 @@ import { MONTHS, todayYmd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
 import { payslipPdf, taxStatementPdf } from "../services/pdf.js";
-import type { Payslip } from "../generated/prisma/client.js";
+import { round2 } from "../services/expenses.js";
+import type { Payslip, Prisma } from "../generated/prisma/client.js";
 
 export const payrollRouter = Router();
 payrollRouter.use(requireAuth);
@@ -66,11 +67,23 @@ payrollRouter.post("/upload", requireRole("FINANCE"), sheetUpload.single("file")
   }
   if (!slips.length) throw new HttpError(400, `No rows matched an employee code or email. Unmatched: ${unmatched.slice(0, 10).join(", ")}`);
 
+  // A pay slip HR has corrected by hand is never silently overwritten by a re-upload: it is skipped and
+  // reported back, so Finance and HR can agree what to do with it instead.
+  const corrected = await prisma.payslip.findMany({
+    where: { year, month, employeeId: { in: slips.map((s) => s.employeeId) }, correctedAt: { not: null } },
+    select: { employeeId: true, correctionReason: true },
+  });
+  const correctedByEmployee = new Map(corrected.map((p) => [p.employeeId, p.correctionReason]));
+  const toImport = slips.filter((s) => !correctedByEmployee.has(s.employeeId));
+  const correctedSkipped = slips
+    .filter((s) => correctedByEmployee.has(s.employeeId))
+    .map((s) => ({ employee: employees.find((e) => e.id === s.employeeId)!.code, reason: correctedByEmployee.get(s.employeeId) ?? null }));
+
   const upload = await prisma.$transaction(async (tx) => {
     const created = await tx.payrollUpload.create({
-      data: { year, month, fileName: req.file!.originalname, uploadedById: user.id, rowsImported: slips.length, unmatched },
+      data: { year, month, fileName: req.file!.originalname, uploadedById: user.id, rowsImported: toImport.length, unmatched },
     });
-    for (const s of slips) {
+    for (const s of toImport) {
       await tx.payslip.upsert({
         where: { employeeId_year_month: { employeeId: s.employeeId, year, month } },
         create: { ...s, uploadId: created.id },
@@ -79,9 +92,9 @@ payrollRouter.post("/upload", requireRole("FINANCE"), sheetUpload.single("file")
     }
     return created;
   });
-  await notify(slips.map((s) => s.employeeId), `Pay slip for ${MONTHS[month - 1]} ${year}`, `Your pay slip for ${MONTHS[month - 1]} ${year} is ready to download.`, "/payslips");
-  await audit(user.id, "IMPORT", "Payroll", upload.id, { year, month, rows: slips.length, unmatched });
-  res.json({ uploadId: upload.id, payslipsCreated: slips.length, unmatched });
+  await notify(toImport.map((s) => s.employeeId), `Pay slip for ${MONTHS[month - 1]} ${year}`, `Your pay slip for ${MONTHS[month - 1]} ${year} is ready to download.`, "/payslips");
+  await audit(user.id, "IMPORT", "Payroll", upload.id, { year, month, rows: toImport.length, unmatched, correctedSkipped: correctedSkipped.length });
+  res.json({ uploadId: upload.id, payslipsCreated: toImport.length, unmatched, correctedSkipped });
 });
 
 payrollRouter.get("/uploads", requireRole("FINANCE", "HR"), async (_req, res) => {
@@ -95,6 +108,7 @@ const toNumbers = (p: Payslip) => ({
   basic: Number(p.basic), houseRent: Number(p.houseRent), medical: Number(p.medical), conveyance: Number(p.conveyance),
   fuel: Number(p.fuel), mobile: Number(p.mobile), gross: Number(p.gross), incomeTax: Number(p.incomeTax), eobi: Number(p.eobi),
   providentFund: Number(p.providentFund), totalDeductions: Number(p.totalDeductions), netPay: Number(p.netPay),
+  correctedAt: p.correctedAt, correctionReason: p.correctionReason,
 });
 
 // Own pay slips, or another employee's for HR / Finance / Management (?employeeId=)
@@ -122,6 +136,104 @@ payrollRouter.get("/payslips/:id/pdf", async (req, res) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="payslip-${emp.code}-${slip.year}-${String(slip.month).padStart(2, "0")}.pdf"`);
   res.send(pdf);
+});
+
+const EDITABLE_FIELDS = ["basic", "houseRent", "medical", "conveyance", "fuel", "mobile", "incomeTax", "eobi", "providentFund"] as const;
+type EditableField = (typeof EDITABLE_FIELDS)[number];
+
+const amount = z.number().min(0, "Amounts cannot be negative").max(10_000_000, "That amount looks too large");
+const payslipEditSchema = z.object({
+  basic: amount.optional(), houseRent: amount.optional(), medical: amount.optional(), conveyance: amount.optional(),
+  fuel: amount.optional(), mobile: amount.optional(), incomeTax: amount.optional(), eobi: amount.optional(), providentFund: amount.optional(),
+  reason: z.string({ error: "Give the reason for the correction" }).trim().min(5, "Give the reason for the correction (at least 5 characters)"),
+});
+
+const totalsFor = (values: Record<EditableField, number>) => {
+  const gross = round2(values.basic + values.houseRent + values.medical + values.conveyance + values.fuel + values.mobile);
+  const totalDeductions = round2(values.incomeTax + values.eobi + values.providentFund);
+  return { gross, totalDeductions, netPay: round2(gross - totalDeductions) };
+};
+
+// HR corrects one pay slip after upload. Gross, total deductions and net pay are always recalculated here,
+// never taken from the request. The employee is told that a correction happened, never the reason or any
+// amount by notification — those are only shown on the pay slip page itself, after they sign in.
+payrollRouter.patch("/payslips/:id", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const parsed = payslipEditSchema.safeParse(req.body);
+  if (!parsed.success) throw new HttpError(400, parsed.error.issues.map((i) => i.message).join("; "));
+  const id = Number(req.params.id);
+  const slip = await prisma.payslip.findUnique({ where: { id } });
+  if (!slip) throw new HttpError(404, "Pay slip not found");
+  if (slip.employeeId === user.id) throw new HttpError(403, "HR cannot edit their own pay slip; ask another HR user to make this correction");
+
+  const { reason, ...edits } = parsed.data;
+  const before = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, Number(slip[f])])) as Record<EditableField, number>;
+  const after = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, round2(edits[f] ?? before[f])])) as Record<EditableField, number>;
+  const changed = EDITABLE_FIELDS.some((f) => after[f] !== before[f]);
+  if (!changed) throw new HttpError(400, "Change at least one amount before saving a correction");
+
+  const beforeTotals = { gross: Number(slip.gross), totalDeductions: Number(slip.totalDeductions), netPay: Number(slip.netPay) };
+  const afterTotals = totalsFor(after);
+  if (afterTotals.netPay < 0) throw new HttpError(400, "This correction would make net pay negative");
+
+  await prisma.$transaction([
+    prisma.payslip.update({
+      where: { id },
+      data: { ...after, ...afterTotals, correctedAt: new Date(), correctionReason: reason },
+    }),
+    prisma.payslipRevision.create({
+      data: {
+        payslipId: id,
+        basicBefore: before.basic, basicAfter: after.basic,
+        houseRentBefore: before.houseRent, houseRentAfter: after.houseRent,
+        medicalBefore: before.medical, medicalAfter: after.medical,
+        conveyanceBefore: before.conveyance, conveyanceAfter: after.conveyance,
+        fuelBefore: before.fuel, fuelAfter: after.fuel,
+        mobileBefore: before.mobile, mobileAfter: after.mobile,
+        grossBefore: beforeTotals.gross, grossAfter: afterTotals.gross,
+        incomeTaxBefore: before.incomeTax, incomeTaxAfter: after.incomeTax,
+        eobiBefore: before.eobi, eobiAfter: after.eobi,
+        providentFundBefore: before.providentFund, providentFundAfter: after.providentFund,
+        totalDeductionsBefore: beforeTotals.totalDeductions, totalDeductionsAfter: afterTotals.totalDeductions,
+        netPayBefore: beforeTotals.netPay, netPayAfter: afterTotals.netPay,
+        reason, correctedById: user.id,
+      },
+    }),
+  ]);
+  await audit(user.id, "UPDATE", "Payslip", id, {
+    employeeId: slip.employeeId, reason,
+    before: { ...before, ...beforeTotals }, after: { ...after, ...afterTotals },
+  } as Prisma.InputJsonValue);
+
+  const employee = await prisma.employee.findUniqueOrThrow({ where: { id: slip.employeeId }, select: { status: true } });
+  if (employee.status === "ACTIVE") {
+    await notify([slip.employeeId], "Pay slip corrected", `Your pay slip for ${MONTHS[slip.month - 1]} ${slip.year} was corrected by HR. Open Pay slips to see the details.`, "/payslips");
+  }
+  res.json(toNumbers(await prisma.payslip.findUniqueOrThrow({ where: { id } })));
+});
+
+// HR sees every past correction for one pay slip: the full before/after values, who, when and why.
+payrollRouter.get("/payslips/:id/revisions", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const id = Number(req.params.id);
+  const slip = await prisma.payslip.findUnique({ where: { id } });
+  if (!slip) throw new HttpError(404, "Pay slip not found");
+  if (slip.employeeId !== user.id) await audit(user.id, "VIEW_SENSITIVE", "Payslip", slip.id);
+  const rows = await prisma.payslipRevision.findMany({
+    where: { payslipId: id },
+    include: { correctedBy: { select: { fullName: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const pair = (before: Prisma.Decimal, after: Prisma.Decimal) => ({ from: Number(before), to: Number(after) });
+  res.json(rows.map((r) => ({
+    id: r.id, reason: r.reason, correctedBy: r.correctedBy.fullName, at: r.createdAt,
+    basic: pair(r.basicBefore, r.basicAfter), houseRent: pair(r.houseRentBefore, r.houseRentAfter),
+    medical: pair(r.medicalBefore, r.medicalAfter), conveyance: pair(r.conveyanceBefore, r.conveyanceAfter),
+    fuel: pair(r.fuelBefore, r.fuelAfter), mobile: pair(r.mobileBefore, r.mobileAfter),
+    gross: pair(r.grossBefore, r.grossAfter), incomeTax: pair(r.incomeTaxBefore, r.incomeTaxAfter),
+    eobi: pair(r.eobiBefore, r.eobiAfter), providentFund: pair(r.providentFundBefore, r.providentFundAfter),
+    totalDeductions: pair(r.totalDeductionsBefore, r.totalDeductionsAfter), netPay: pair(r.netPayBefore, r.netPayAfter),
+  })));
 });
 
 /** Tax year runs July to June; "2026" means July 2026 to June 2027. */

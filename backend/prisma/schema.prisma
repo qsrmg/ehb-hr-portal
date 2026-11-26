@@ -112,6 +112,7 @@ model Employee {
   stepsActed                     RequestStep[]                   @relation("StepActor")
   actions                        RequestAction[]
   payslips                       Payslip[]
+  payslipRevisionsMade           PayslipRevision[]
   lateWarnings                   LateWarning[]
   notifications                  Notification[]
   auditLogs                      AuditLog[]
@@ -497,9 +498,55 @@ model Payslip {
   totalDeductions Decimal @default(0) @db.Decimal(12, 2)
   netPay          Decimal @default(0) @db.Decimal(12, 2)
 
-  createdAt DateTime @default(now())
+  // Set when HR corrects a figure after upload; the full before/after values are kept in `revisions`.
+  correctedAt      DateTime?
+  correctionReason String?
+
+  createdAt DateTime          @default(now())
+  revisions PayslipRevision[]
 
   @@unique([employeeId, year, month])
+}
+
+/**
+ * HR's correction of a pay slip after upload: every edit, with the full before and after values and the
+ * reason. Never overwritten or deleted; the live figures on Payslip always reflect the latest revision.
+ */
+model PayslipRevision {
+  id        Int     @id @default(autoincrement())
+  payslipId Int
+  payslip   Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  basicBefore      Decimal @db.Decimal(12, 2)
+  basicAfter       Decimal @db.Decimal(12, 2)
+  houseRentBefore  Decimal @db.Decimal(12, 2)
+  houseRentAfter   Decimal @db.Decimal(12, 2)
+  medicalBefore    Decimal @db.Decimal(12, 2)
+  medicalAfter     Decimal @db.Decimal(12, 2)
+  conveyanceBefore Decimal @db.Decimal(12, 2)
+  conveyanceAfter  Decimal @db.Decimal(12, 2)
+  fuelBefore       Decimal @db.Decimal(12, 2)
+  fuelAfter        Decimal @db.Decimal(12, 2)
+  mobileBefore     Decimal @db.Decimal(12, 2)
+  mobileAfter      Decimal @db.Decimal(12, 2)
+  grossBefore      Decimal @db.Decimal(12, 2)
+  grossAfter       Decimal @db.Decimal(12, 2)
+
+  incomeTaxBefore       Decimal @db.Decimal(12, 2)
+  incomeTaxAfter        Decimal @db.Decimal(12, 2)
+  eobiBefore            Decimal @db.Decimal(12, 2)
+  eobiAfter             Decimal @db.Decimal(12, 2)
+  providentFundBefore   Decimal @db.Decimal(12, 2)
+  providentFundAfter    Decimal @db.Decimal(12, 2)
+  totalDeductionsBefore Decimal @db.Decimal(12, 2)
+  totalDeductionsAfter  Decimal @db.Decimal(12, 2)
+  netPayBefore          Decimal @db.Decimal(12, 2)
+  netPayAfter           Decimal @db.Decimal(12, 2)
+
+  reason        String
+  correctedById Int
+  correctedBy   Employee @relation(fields: [correctedById], references: [id])
+  createdAt     DateTime @default(now())
 }
 
 // ---------- Policies and HR documents ----------
@@ -1175,17 +1222,17 @@ model ExitCase {
 }
 
 model ExitClearance {
-  id          Int             @id @default(autoincrement())
-  caseId      Int
-  case        ExitCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  area        ClearanceArea
-  status      ClearanceStatus
-  approverId  Int? // Line Manager card: the manager when the case opened
-  approver    Employee?       @relation("ClearanceApprover", fields: [approverId], references: [id])
-  clearedById Int?
-  clearedBy   Employee?       @relation("ClearanceClearedBy", fields: [clearedById], references: [id])
-  clearedAt   DateTime?
-  comment     String?
+  id             Int             @id @default(autoincrement())
+  caseId         Int
+  case           ExitCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  area           ClearanceArea
+  status         ClearanceStatus
+  approverId     Int? // Line Manager card: the manager when the case opened
+  approver       Employee?       @relation("ClearanceApprover", fields: [approverId], references: [id])
+  clearedById    Int?
+  clearedBy      Employee?       @relation("ClearanceClearedBy", fields: [clearedById], references: [id])
+  clearedAt      DateTime?
+  comment        String?
   // Set when the card becomes PENDING (case open for the three parallel areas; when Finance's card
   // opens for Finance). Drives the reminder job in backend/src/jobs/reminders.ts; both null until then.
   pendingSince   DateTime?
@@ -1206,29 +1253,29 @@ enum ExitChecklistItemStatus {
  * deactivating a template here never changes an already-open case's items.
  */
 model ExitChecklistTemplate {
-  id        Int                  @id @default(autoincrement())
+  id        Int                 @id @default(autoincrement())
   area      ClearanceArea
   label     String
   ownerRole Role? // null: HR only may toggle this item
-  sortOrder Int                  @default(0)
-  active    Boolean              @default(true)
+  sortOrder Int                 @default(0)
+  active    Boolean             @default(true)
   items     ExitChecklistItem[]
 }
 
 model ExitChecklistItem {
-  id          Int                      @id @default(autoincrement())
-  caseId      Int
-  case        ExitCase                 @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  templateId  Int?
-  template    ExitChecklistTemplate?   @relation(fields: [templateId], references: [id])
-  area        ClearanceArea
-  label       String
-  ownerRole   Role?
-  status      ExitChecklistItemStatus  @default(PENDING)
-  doneById    Int?
-  doneBy      Employee?                @relation("ChecklistItemDoneBy", fields: [doneById], references: [id])
-  doneAt      DateTime?
-  note        String?
+  id         Int                     @id @default(autoincrement())
+  caseId     Int
+  case       ExitCase                @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  templateId Int?
+  template   ExitChecklistTemplate?  @relation(fields: [templateId], references: [id])
+  area       ClearanceArea
+  label      String
+  ownerRole  Role?
+  status     ExitChecklistItemStatus @default(PENDING)
+  doneById   Int?
+  doneBy     Employee?               @relation("ChecklistItemDoneBy", fields: [doneById], references: [id])
+  doneAt     DateTime?
+  note       String?
 }
 
 model ExitSettlementItem {
