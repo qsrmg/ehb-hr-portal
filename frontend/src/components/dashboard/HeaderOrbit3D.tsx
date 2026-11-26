@@ -75,6 +75,7 @@ export function HeaderOrbit3D({ summary }: { summary: TodaySummary }) {
         compact
         glowRing
         spinSeconds={40}
+        minimal
         fallback={<TodayFallback {...summary} className="h-full w-full xl:absolute xl:inset-0" />}
         className="h-full w-full xl:absolute xl:inset-0"
       />

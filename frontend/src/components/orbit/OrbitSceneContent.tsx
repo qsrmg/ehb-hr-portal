@@ -165,11 +165,16 @@ function Pedestal({ y, scale }: { y: number; scale: number }) {
  * gloss highlight, the real EHB logo on a small white plate (falling back to plain "EHB" text with zero
  * console errors if the image hasn't loaded or fails), the "HR WORKSPACE" subtitle always fully clear of
  * every card, a soft shadow underneath, a slow float and a gentle ±6° yaw sway (not a full spin). High
- * RoundedBox smoothness throughout so corners read as smooth, not faceted. */
-function Hub({ title, subtitle, compact }: { title: string; subtitle?: string; compact?: boolean }) {
+ * RoundedBox smoothness throughout so corners read as smooth, not faceted. In `minimal` mode (the dashboard
+ * header only) all of that box chrome — face, gloss, glow backdrop, plate and subtitle — is dropped, and
+ * only the logo image itself floats in its place, sized so its larger dimension matches the old box's edge
+ * length; the float/sway animation and the soft shadow underneath stay. */
+function Hub({ title, subtitle, compact, minimal }: { title: string; subtitle?: string; compact?: boolean; minimal?: boolean }) {
   const group = useRef<THREE.Group>(null);
   const size = compact ? 0.64 : 0.82;
-  const logo = useLogoTexture("/ehb-logo.png");
+  // The header's logo is an SVG wordmark with thin text strokes — rasterised at 512px (vs. the sign-in hub's
+  // 256px) so it stays sharp at the size it's actually displayed at.
+  const logo = useLogoTexture(minimal ? "/ehb-hub-logo.svg" : "/ehb-logo.png", minimal ? 512 : 256);
   const faceTex = useMemo(() => gradientTexture("hub-face", [["#3b82f6", 0], ["#2563eb", 0.55], ["#1e40af", 1]]), []);
   const glossTex = useMemo(() => gradientTexture("hub-gloss", [["rgba(255,255,255,0.45)", 0], ["rgba(255,255,255,0)", 1]], false), []);
   const titleMap = useMemo(() => textTexture(title, "#ffffff", { widthPx: 240, heightPx: 96, fontPx: 58, weight: 800 }), [title]);
@@ -181,6 +186,28 @@ function Hub({ title, subtitle, compact }: { title: string; subtitle?: string; c
     g.position.y = Math.sin(clock.elapsedTime * 0.5) * 0.05;
     g.rotation.y = Math.sin(clock.elapsedTime * 0.3) * THREE.MathUtils.degToRad(6);
   });
+
+  if (minimal) {
+    // Fit the image within a size x size box without stretching it: whichever side is longer becomes `size`.
+    const logoW = logo && logo.aspect < 1 ? size * logo.aspect : size;
+    const logoH = logo && logo.aspect < 1 ? size : size / (logo?.aspect ?? 1);
+    return (
+      <group ref={group}>
+        <SoftShadow y={-size * 0.62} scale={size * 0.55} opacity={0.2} />
+        {logo ? (
+          <mesh renderOrder={ORDER.hub}>
+            <planeGeometry args={[logoW, logoH]} />
+            <meshBasicMaterial map={logo.texture} transparent toneMapped={false} />
+          </mesh>
+        ) : (
+          <mesh renderOrder={ORDER.hub}>
+            <planeGeometry args={[size * 0.78, size * 0.312]} />
+            <meshBasicMaterial map={titleMap} transparent toneMapped={false} />
+          </mesh>
+        )}
+      </group>
+    );
+  }
 
   const plateW = size * 0.62;
   const plateH = logo ? plateW / logo.aspect : size * 0.32;
@@ -231,8 +258,11 @@ function Hub({ title, subtitle, compact }: { title: string; subtitle?: string; c
  * the face stays clean rather than "muddy" lit grey. In the dark theme the face becomes a frosted (semi-
  * transparent white) glass card with a white label, instead of the light theme's solid white card with a
  * dark label. Bobs gently in place (the shared orbit rotation, not this component, provides the actual
- * revolving motion). Hovering scales it up ~1.06. */
-function NodeCard({ node, hovered, onHover, compact, dark }: { node: RuntimeNode; hovered: boolean; onHover: (v: boolean) => void; compact?: boolean; dark?: boolean }) {
+ * revolving motion). Hovering scales it up ~1.06. In `minimal` mode (the dashboard header only) the card
+ * chrome — border, face and icon tile — is dropped entirely: just the icon (coloured with its accent,
+ * instead of white-on-blue) floating with a small label underneath, with an invisible hit-area standing in
+ * for the border mesh's hover handlers. */
+function NodeCard({ node, hovered, onHover, compact, dark, minimal }: { node: RuntimeNode; hovered: boolean; onHover: (v: boolean) => void; compact?: boolean; dark?: boolean; minimal?: boolean }) {
   const pos = useRef<THREE.Group>(null);
   const hoverT = useRef(0);
   // Dark theme cards are scaled up well beyond the light theme's: at this size, with the matching
@@ -240,7 +270,8 @@ function NodeCard({ node, hovered, onHover, compact, dark }: { node: RuntimeNode
   // size at 1440px viewport width — the ring radius and hub leave generous clearance for it (see
   // OrbitSceneContent's radius/hub comments), so cards still clear the hub and each other with margin.
   const size = (compact ? 0.62 : 0.74) * (dark ? 2 : 1);
-  const iconMap = useMemo(() => iconTexture(node.icon, "#ffffff"), [node.icon]);
+  const iconColor = minimal ? (node.accent === "sun" ? SUN : BLUE) : "#ffffff";
+  const iconMap = useMemo(() => iconTexture(node.icon, iconColor), [node.icon, iconColor]);
   const labelColor = dark ? "#ffffff" : INK;
   const labelMap = useMemo(
     () => textTexture(node.label, labelColor, dark ? { widthPx: 420, heightPx: 108, fontPx: 56, weight: 700 } : { widthPx: 256, heightPx: 72, fontPx: 34, weight: 600 }),
@@ -258,6 +289,35 @@ function NodeCard({ node, hovered, onHover, compact, dark }: { node: RuntimeNode
     hoverT.current = THREE.MathUtils.lerp(hoverT.current, hovered ? 1 : 0, 0.15);
     g.scale.setScalar(1 + hoverT.current * 0.06);
   });
+
+  if (minimal) {
+    const iconSize = size * 0.46;
+    return (
+      <group ref={pos} position={[x, 0, z]}>
+        <SoftShadow y={-size * 0.4} scale={size * 0.3} opacity={0.12} />
+        <Billboard>
+          {/* Invisible (opacity 0, not `visible={false}`, so it stays raycastable) hit-area standing in for
+           * the border mesh's hover handlers, now that there is no border. */}
+          <mesh
+            renderOrder={ORDER.cards}
+            onPointerOver={(e) => { e.stopPropagation(); onHover(true); }}
+            onPointerOut={() => onHover(false)}
+          >
+            <planeGeometry args={[size * 0.7, size * 0.9]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+          <mesh position={[0, size * 0.08, 0.01]} renderOrder={ORDER.cards}>
+            <planeGeometry args={[iconSize, iconSize]} />
+            <meshBasicMaterial map={iconMap} transparent toneMapped={false} />
+          </mesh>
+          <mesh position={[0, -size * 0.23, 0.01]} renderOrder={ORDER.cards}>
+            <planeGeometry args={[size * 0.86, size * 0.22]} />
+            <meshBasicMaterial map={labelMap} transparent toneMapped={false} />
+          </mesh>
+        </Billboard>
+      </group>
+    );
+  }
 
   return (
     <group ref={pos} position={[x, 0, z]}>
@@ -347,7 +407,7 @@ function Parallax({ leftRef, children }: { leftRef: React.RefObject<boolean>; ch
  * theme keeps its two faint blue guide rings with a dot per connector; the dark theme instead shows one
  * glowing yellow ring with a single bright travelling dot. */
 function OrbitRing({
-  tilt, radius, runtimeNodes, dark, glowRing, spinSeconds,
+  tilt, radius, runtimeNodes, dark, glowRing, spinSeconds, minimal,
 }: {
   tilt: number;
   radius: number;
@@ -355,6 +415,7 @@ function OrbitRing({
   dark?: boolean;
   glowRing?: boolean;
   spinSeconds: number;
+  minimal?: boolean;
 }) {
   const spin = useRef<THREE.Group>(null);
   useFrame((_, delta) => {
@@ -382,7 +443,7 @@ function OrbitRing({
           return (
             <group key={n.label}>
               <Connector to={to} phase={i / runtimeNodes.length} dark={dark} glowRing={glowRing} />
-              <NodeCard node={n} hovered={hoveredIdx === i} onHover={(v) => setHoveredIdx(v ? i : null)} dark={dark} />
+              <NodeCard node={n} hovered={hoveredIdx === i} onHover={(v) => setHoveredIdx(v ? i : null)} dark={dark} minimal={minimal} />
             </group>
           );
         })}
@@ -403,6 +464,10 @@ export type OrbitSceneContentProps = {
   glowRing?: boolean;
   /** Seconds for one full revolution of the orbit ring. Defaults to 60. */
   spinSeconds?: number;
+  /** Strips the node cards down to a bare coloured icon + label (no border/face/icon-tile), for a lighter
+   * look on a page that already has its own card chrome around the scene. The dashboard header is the only
+   * caller that sets this; every other caller (e.g. sign-in) is unaffected. */
+  minimal?: boolean;
   active: boolean;
   onContextLost: () => void;
 };
@@ -414,7 +479,7 @@ export type OrbitSceneContentProps = {
  * sphere behind the group and a glowing pedestal beneath it, swaps the guide rings for one glowing yellow
  * ring with a single travelling dot, and turns the cards into frosted glass with white labels.
  */
-export function OrbitSceneContent({ nodes, hubTitle, hubSubtitle, compact, dark, glowRing = dark, spinSeconds = 60, active, onContextLost }: OrbitSceneContentProps) {
+export function OrbitSceneContent({ nodes, hubTitle, hubSubtitle, compact, dark, glowRing = dark, spinSeconds = 60, minimal, active, onContextLost }: OrbitSceneContentProps) {
   const pointerLeft = useRef(true);
   // Generous radius: comfortably clears the hub and keeps a wide gap between neighbouring cards (5 nodes,
   // 72° apart) at the card sizes NodeCard actually renders.
@@ -463,8 +528,8 @@ export function OrbitSceneContent({ nodes, hubTitle, hubSubtitle, compact, dark,
       {dark && <Pedestal y={pedestalY} scale={radius * 1.25} />}
       <Parallax leftRef={pointerLeft}>
         {dark && <GlassSphere radius={radius * 1.35} />}
-        <Hub title={hubTitle} subtitle={hubSubtitle} compact={compact} />
-        <OrbitRing tilt={tilt} radius={radius} runtimeNodes={runtimeNodes} dark={dark} glowRing={glowRing} spinSeconds={spinSeconds} />
+        <Hub title={hubTitle} subtitle={hubSubtitle} compact={compact} minimal={minimal} />
+        <OrbitRing tilt={tilt} radius={radius} runtimeNodes={runtimeNodes} dark={dark} glowRing={glowRing} spinSeconds={spinSeconds} minimal={minimal} />
       </Parallax>
     </Canvas>
   );

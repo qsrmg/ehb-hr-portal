@@ -7,19 +7,21 @@ type LogoEntry = { texture: THREE.CanvasTexture; aspect: number } | null;
 const cache = new Map<string, LogoEntry>();
 const listeners = new Map<string, Set<() => void>>();
 
-/** Loads a same-origin image (the EHB logo in public/), downscales it onto a canvas at no more than 256px
- * on the longer side (preserving alpha and aspect ratio), and returns it as a cached Three.js texture. A
- * same-origin <img> load, not a remote font/asset fetch — the same "no console errors either way" rule
- * iconTexture.ts/textTexture.ts already follow: on any failure this just stays null forever, so callers can
- * fall back to the existing text-based rendering with zero console noise. */
-export function useLogoTexture(src: string): LogoEntry {
+/** Loads a same-origin image (an EHB logo in public/ — a raster PNG or an SVG, either works since this is a
+ * plain <img> load, not a parser specific to one format), downscales it onto a canvas at no more than
+ * `maxSide` px on the longer side (preserving alpha and aspect ratio), and returns it as a cached Three.js
+ * texture. A same-origin <img> load, not a remote font/asset fetch — the same "no console errors either way"
+ * rule iconTexture.ts/textTexture.ts already follow: on any failure this just stays null forever, so callers
+ * can fall back to the existing text-based rendering with zero console noise. `maxSide` is part of the cache
+ * key (via `src`+`maxSide`) so the same logo can be cached at more than one resolution for different callers. */
+export function useLogoTexture(src: string, maxSide = 256): LogoEntry {
+  const key = `${src}:${maxSide}`;
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (cache.has(src)) return;
-    cache.set(src, null); // placeholder so a second mount doesn't start a second load
+    if (cache.has(key)) return;
+    cache.set(key, null); // placeholder so a second mount doesn't start a second load
     const img = new Image();
     img.onload = () => {
-      const maxSide = 256;
       const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
       const w = Math.max(1, Math.round(img.naturalWidth * scale));
       const h = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -32,21 +34,21 @@ export function useLogoTexture(src: string): LogoEntry {
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.needsUpdate = true;
-      cache.set(src, { texture, aspect: img.naturalWidth / img.naturalHeight });
-      for (const notify of listeners.get(src) ?? []) notify();
+      cache.set(key, { texture, aspect: img.naturalWidth / img.naturalHeight });
+      for (const notify of listeners.get(key) ?? []) notify();
     };
     img.onerror = () => {
-      cache.set(src, null);
+      cache.set(key, null);
     };
     img.src = src;
-  }, [src]);
+  }, [src, maxSide, key]);
 
   useEffect(() => {
     const notify = () => setTick((t) => t + 1);
-    if (!listeners.has(src)) listeners.set(src, new Set());
-    listeners.get(src)!.add(notify);
-    return () => { listeners.get(src)?.delete(notify); };
-  }, [src]);
+    if (!listeners.has(key)) listeners.set(key, new Set());
+    listeners.get(key)!.add(notify);
+    return () => { listeners.get(key)?.delete(notify); };
+  }, [key]);
 
-  return cache.get(src) ?? null;
+  return cache.get(key) ?? null;
 }

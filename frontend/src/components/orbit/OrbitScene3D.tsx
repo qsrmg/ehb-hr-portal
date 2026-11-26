@@ -24,7 +24,7 @@ export type { OrbitNodeDef };
  * default, or (`dark`) the matching dark/glass static layout (`OrbitFallbackDark`).
  */
 export function OrbitScene3D({
-  nodes, hubTitle, hubSubtitle, compact, dark, glowRing, spinSeconds, fallback: fallbackOverride, className = "",
+  nodes, hubTitle, hubSubtitle, compact, dark, glowRing, spinSeconds, minimal, fallback: fallbackOverride, className = "",
 }: {
   nodes: OrbitNodeDef[];
   hubTitle: string;
@@ -34,6 +34,9 @@ export function OrbitScene3D({
   glowRing?: boolean;
   /** Seconds for one full revolution of the orbit ring. Defaults (via OrbitSceneContent) to 60. */
   spinSeconds?: number;
+  /** Strips the node cards to bare icon + label and (once wired up) the hub to a bare logo — see
+   * OrbitSceneContent. Only the dashboard header opts into this; every other caller is unaffected. */
+  minimal?: boolean;
   /** Overrides the default fallback (SceneA, or OrbitFallbackDark when `dark`) — e.g. `null` for a small
    * decorative illustration that would rather just not appear than show a mismatched fallback card. */
   fallback?: React.ReactNode;
@@ -56,7 +59,7 @@ export function OrbitScene3D({
     // simpler illustration, not a frozen version of this one.
     <div ref={wrapRef} aria-hidden="true" className={`relative ${className}`} style={{ minHeight: 320 }}>
       <Canvas3DErrorBoundary fallback={fallback}>
-        <OrbitSceneContent nodes={nodes} hubTitle={hubTitle} hubSubtitle={hubSubtitle} compact={compact} dark={dark} glowRing={glowRing} spinSeconds={spinSeconds} active={active} onContextLost={() => setContextLost(true)} />
+        <OrbitSceneContent nodes={nodes} hubTitle={hubTitle} hubSubtitle={hubSubtitle} compact={compact} dark={dark} glowRing={glowRing} spinSeconds={spinSeconds} minimal={minimal} active={active} onContextLost={() => setContextLost(true)} />
       </Canvas3DErrorBoundary>
     </div>
   );
