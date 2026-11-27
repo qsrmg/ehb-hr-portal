@@ -129,6 +129,7 @@ async function present(r: Full, user: AuthUser) {
   return {
     id: r.id, status: r.status, statusLabel: STATUS_LABELS[r.status],
     title: r.title, grade: r.grade, headcount: r.headcount, hired, employmentType: r.employmentType,
+    minimumQualification: r.minimumQualification, minimumQualificationDetail: r.minimumQualificationDetail,
     department: r.department, reportsTo: r.reportsTo, requestedBy: r.requestedBy,
     targetStartDate: ymd(r.targetStartDate), justification: r.justification, skills: r.skills,
     jd: r.jdName ? { name: r.jdName } : null,
@@ -190,6 +191,9 @@ const requisitionSchema = z.object({
   grade: optText,
   headcount: z.coerce.number().int().min(1, "At least one position").max(20, "At most 20 positions per requisition").default(1),
   employmentType: z.enum(["PERMANENT", "CONTRACT", "INTERN"]).default("PERMANENT"),
+  // Employment Eligibility Policy §3: the qualification stated for this position, or NONE (today's behaviour).
+  minimumQualification: z.enum(["NONE", "BACHELORS", "PROFESSIONAL_CERTIFICATION", "OTHER"]).default("NONE"),
+  minimumQualificationDetail: optText,
   reportsToId: z.coerce.number({ error: "Choose the hiring manager" }).int(),
   targetStartDate: ymdString,
   justification: text("Explain why the position is needed (at least a sentence)", 10),
@@ -229,6 +233,7 @@ async function prepare(user: AuthUser, body: unknown, existing?: { id: number; r
   }
   return {
     departmentId: input.departmentId, title: input.title, grade: input.grade, headcount: input.headcount, employmentType: input.employmentType,
+    minimumQualification: input.minimumQualification, minimumQualificationDetail: input.minimumQualificationDetail,
     reportsToId: input.reportsToId, targetStartDate: toDate(input.targetStartDate), justification: input.justification, skills: input.skills,
     reason: input.reason, exitCaseId, replacesEmployeeId, suggestedSalaryMin: min, suggestedSalaryMax: max, submit: input.submit,
   };
@@ -363,8 +368,9 @@ hiringRouter.post("/requisitions/:id/cancel", requireRole("HR"), async (req, res
 // Internal jobs (employees)
 // ---------------------------------------------------------------------------
 
-const jobOf = (r: { id: number; title: string; employmentType: string; headcount: number; description: string | null; requirements: string | null; closingDate: Date | null; postedAt: Date | null; department: { name: string }; reportsTo: { fullName: string } | null }) => ({
+const jobOf = (r: { id: number; title: string; employmentType: string; minimumQualification: string; minimumQualificationDetail: string | null; headcount: number; description: string | null; requirements: string | null; closingDate: Date | null; postedAt: Date | null; department: { name: string }; reportsTo: { fullName: string } | null }) => ({
   id: r.id, title: r.title, department: r.department.name, reportsTo: r.reportsTo?.fullName ?? null, employmentType: r.employmentType, headcount: r.headcount,
+  minimumQualification: r.minimumQualification, minimumQualificationDetail: r.minimumQualificationDetail,
   description: r.description, requirements: r.requirements, closingDate: r.closingDate ? ymd(r.closingDate) : null, postedAt: r.postedAt,
 });
 

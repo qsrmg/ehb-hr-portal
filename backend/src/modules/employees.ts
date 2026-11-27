@@ -4,7 +4,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
 import { audit, diff } from "../lib/audit.js";
-import { sheetUpload } from "../lib/upload.js";
+import { sheetUpload, qualificationUpload, removeFiles } from "../lib/upload.js";
 import { readSheet, pickString, parseSheetDate, parseSheetNumber } from "../lib/sheet.js";
 import { toDate, todayYmd, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
@@ -14,6 +14,7 @@ import { employeeDeactivated } from "./assets.js";
 import { addJoinerToOpenCycles } from "../services/performance.js";
 import { closeIfFilled, externalHireContext, hiredExternally, notifyApplicant } from "../services/hiring.js";
 import { addProbationNote, confirmEmployee, extendProbation, probationDueCount, probationHistory, probationStatus } from "../services/probation.js";
+import { createQualification, listQualifications, qualificationDocument, updateQualification } from "../services/qualifications.js";
 import type { Employee, Prisma } from "../generated/prisma/client.js";
 
 export const employeesRouter = Router();
@@ -325,6 +326,60 @@ employeesRouter.post("/:id/probation-note", async (req, res) => {
   if (!parsed.success) throw new HttpError(400, parsed.error.issues.map((i) => i.message).join("; "));
   const note = await addProbationNote(Number(req.params.id), user.id, parsed.data.comment);
   res.json({ ok: true, note: { id: note.id, comment: note.comment, at: note.createdAt } });
+});
+
+// ---------------------------------------------------------------------------
+// Employment Eligibility Policy, slice 1: qualification records. HR enters and verifies them; the employee
+// (and only the employee) may read their own, read-only. Nobody else — not Line Manager, HOD, Finance,
+// Admin or Management — may see them, including the evidence file. No gate exists yet (slice 2/3).
+// ---------------------------------------------------------------------------
+
+const QUALIFICATION_TYPES = ["BACHELORS", "HIGHER_DEGREE", "PROFESSIONAL_CERTIFICATION", "OTHER"] as const;
+const QUALIFICATION_EVIDENCE_TYPES = [
+  "DEGREE_CERTIFICATE", "PROVISIONAL_CERTIFICATE", "TRANSCRIPT", "COMPLETION_CERTIFICATE",
+  "INSTITUTION_VERIFICATION", "PROFESSIONAL_CERTIFICATION", "OTHER",
+] as const;
+const qualBool = z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean());
+
+const qualificationCreateSchema = z.object({
+  type: z.enum(QUALIFICATION_TYPES),
+  evidenceType: z.enum(QUALIFICATION_EVIDENCE_TYPES),
+  institution: optionalText,
+  completed: qualBool,
+  completedAt: optionalDate,
+  note: optionalText,
+});
+const qualificationUpdateSchema = qualificationCreateSchema.partial().extend({ verified: qualBool.optional() });
+
+employeesRouter.get("/:id/qualifications", async (req, res) => {
+  res.json(await listQualifications(Number(req.params.id), currentUser(req)));
+});
+
+employeesRouter.post("/:id/qualifications", requireRole("HR"), qualificationUpload.single("file"), async (req, res) => {
+  const user = currentUser(req);
+  const parsed = qualificationCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    removeFiles(req.file ? [req.file] : []);
+    throw new HttpError(400, parsed.error.issues.map((i) => i.message).join("; "));
+  }
+  const created = await createQualification(Number(req.params.id), parsed.data, req.file, user.id);
+  res.status(201).json(created);
+});
+
+employeesRouter.patch("/:id/qualifications/:qualId", requireRole("HR"), qualificationUpload.single("file"), async (req, res) => {
+  const user = currentUser(req);
+  const parsed = qualificationUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    removeFiles(req.file ? [req.file] : []);
+    throw new HttpError(400, parsed.error.issues.map((i) => i.message).join("; "));
+  }
+  const updated = await updateQualification(Number(req.params.id), Number(req.params.qualId), parsed.data, req.file, user.id);
+  res.json(updated);
+});
+
+employeesRouter.get("/:id/qualifications/:qualId/document", async (req, res) => {
+  const { path, name } = await qualificationDocument(Number(req.params.id), Number(req.params.qualId), currentUser(req));
+  res.download(path, name);
 });
 
 const GENDERS: Record<string, "MALE" | "FEMALE" | "OTHER"> = { male: "MALE", m: "MALE", female: "FEMALE", f: "FEMALE", other: "OTHER" };

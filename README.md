@@ -161,6 +161,18 @@ Sidebar: *Jobs and hiring*.
   - The position closes when every place is filled, and the remaining applicants are told. HR can also close it with a reason.
 - **Employee record:** two new HR fields, *Grade* and *In current role since*.
 
+## Employment Eligibility Policy — qualification records (slice 1)
+
+From the approved Employment Eligibility Policy (effective 5 October 2026). This slice is data capture only — no
+gate uses it yet.
+
+- **On a requisition/posted job:** HR states a *Minimum qualification* (Not specified / Bachelor's degree / Professional certification / Other, with an optional free-text detail), shown on the requisition and on the posted job for applicants (§3).
+- **Employee qualification records:** HR only — never the employee — adds, edits and verifies an employee's qualification claims from their employee record: type (Bachelor's / Higher degree / Professional certification / Other), evidence type (degree certificate, provisional certificate, transcript, completion certificate, institution verification, professional certification or other, per §5), institution, completion date, an optional evidence file (PDF/JPG/PNG) and a note. An employee may have several records (e.g. a Bachelor's and a later professional certification).
+- **Completed vs verified:** "completed" means the qualification has actually finished — enrolled or in progress is never completed (§4). A record counts as **verified** only once it is marked completed *and* HR has verified it; HR can mark a provisional or completion certificate completed once satisfied, per §4–5.
+- **Boundary — HR only:** only HR and the employee themselves (read-only: Verified / Pending verification / No qualification on record, on *My profile*, with their own evidence downloadable) can see a qualification record or its evidence file. Line Manager, HOD, Finance, Admin and Management get a plain 403, with no exception — including on the evidence download.
+- **Audit:** every create/update is logged with before/after values. Opening another employee's qualification records as HR, and downloading an evidence file (by anyone), are both logged as `VIEW_SENSITIVE`.
+- **Not yet built:** no gate anywhere reads this data — an unverified or missing qualification does not block an internal application, a promotion or an intern's conversion to permanent. There is also no intern record yet (employment type is still discarded at hire). Both are a later, separate decision — see DECISIONS.md.
+
 ## Probation confirmation
 
 An employee no longer becomes confirmed automatically once their probation end date passes.

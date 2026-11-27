@@ -178,6 +178,9 @@ model Employee {
   tasksCreated                   Task[]                          @relation("TaskCreator")
   tasksArchived                  Task[]                          @relation("TaskArchivedBy")
   taskComments                   TaskComment[]
+  qualifications                 EmployeeQualification[]         @relation("EmployeeQualifications")
+  qualificationsVerified         EmployeeQualification[]         @relation("QualificationVerifiedBy")
+  qualificationsEntered          EmployeeQualification[]         @relation("QualificationCreatedBy")
 }
 
 /**
@@ -208,6 +211,56 @@ model ProbationNote {
   author     Employee @relation("ProbationNoteAuthor", fields: [authorId], references: [id])
   comment    String
   createdAt  DateTime @default(now())
+}
+
+enum QualificationType {
+  BACHELORS
+  HIGHER_DEGREE
+  PROFESSIONAL_CERTIFICATION
+  OTHER
+}
+
+/**
+ * Employment Eligibility Policy §5: the evidence a qualification claim is verified against.
+ */
+enum QualificationEvidenceType {
+  DEGREE_CERTIFICATE
+  PROVISIONAL_CERTIFICATE
+  TRANSCRIPT
+  COMPLETION_CERTIFICATE
+  INSTITUTION_VERIFICATION
+  PROFESSIONAL_CERTIFICATION
+  OTHER
+}
+
+/**
+ * Employment Eligibility Policy (effective 5 October 2026), slice 1: an employee's qualification claim,
+ * entered and verified by HR only — never the employee, and never self-service. One employee may have
+ * several records (e.g. a Bachelor's and a later professional certification); there is deliberately no
+ * unique constraint on employeeId. "completed" distinguishes a finished qualification from one still in
+ * progress (§4: merely being enrolled is never equivalent to completion). A record counts as verified only
+ * once completed = true AND verifiedAt is set — see backend/src/services/qualifications.ts. No gate reads
+ * this yet (that is slice 2/3, not approved); this slice is data capture only.
+ */
+model EmployeeQualification {
+  id           Int                       @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee                  @relation("EmployeeQualifications", fields: [employeeId], references: [id], onDelete: Cascade)
+  type         QualificationType
+  evidenceType QualificationEvidenceType
+  institution  String?
+  completed    Boolean                   @default(false)
+  completedAt  DateTime?                 @db.Date
+  documentPath String?
+  documentName String?
+  verifiedAt   DateTime?
+  verifiedById Int?
+  verifiedBy   Employee?                 @relation("QualificationVerifiedBy", fields: [verifiedById], references: [id])
+  note         String?
+  createdById  Int
+  createdBy    Employee                  @relation("QualificationCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
 }
 
 // HR-editable rules (late cutoff, hour thresholds, limits...). Every quota/limit is a setting.
@@ -1484,6 +1537,16 @@ enum EmploymentType {
 }
 
 /**
+ * Employment Eligibility Policy §3: the qualification stated for a position, unless the Job Description says otherwise.
+ */
+enum QualificationRequirement {
+  NONE
+  BACHELORS
+  PROFESSIONAL_CERTIFICATION
+  OTHER
+}
+
+/**
  * DRAFT -> SUBMITTED (approval) -> APPROVED -> POSTED -> FILLED; or CANCELLED
  */
 enum RequisitionStatus {
@@ -1512,25 +1575,29 @@ enum ApplicationStage {
 }
 
 model Requisition {
-  id              Int               @id @default(autoincrement())
-  status          RequisitionStatus @default(DRAFT)
-  requestedById   Int
-  requestedBy     Employee          @relation("RequisitionRequester", fields: [requestedById], references: [id])
-  requestId       Int?              @unique // the approval request once submitted
-  request         Request?          @relation(fields: [requestId], references: [id])
-  departmentId    Int
-  department      Department        @relation(fields: [departmentId], references: [id])
-  title           String
-  grade           String?
-  headcount       Int               @default(1)
-  employmentType  EmploymentType    @default(PERMANENT)
-  reportsToId     Int? // the hiring manager
-  reportsTo       Employee?         @relation("RequisitionReportsTo", fields: [reportsToId], references: [id])
-  targetStartDate DateTime          @db.Date
-  justification   String
-  skills          String?
-  jdPath          String?
-  jdName          String?
+  id                         Int                      @id @default(autoincrement())
+  status                     RequisitionStatus        @default(DRAFT)
+  requestedById              Int
+  requestedBy                Employee                 @relation("RequisitionRequester", fields: [requestedById], references: [id])
+  requestId                  Int?                     @unique // the approval request once submitted
+  request                    Request?                 @relation(fields: [requestId], references: [id])
+  departmentId               Int
+  department                 Department               @relation(fields: [departmentId], references: [id])
+  title                      String
+  grade                      String?
+  headcount                  Int                      @default(1)
+  employmentType             EmploymentType           @default(PERMANENT)
+  // Employment Eligibility Policy §3: left NONE for existing rows (today's behaviour); detail is free text
+  // (e.g. "MSc preferred") used only when the enum choice needs more precision. No gate reads this yet.
+  minimumQualification       QualificationRequirement @default(NONE)
+  minimumQualificationDetail String?
+  reportsToId                Int? // the hiring manager
+  reportsTo                  Employee?                @relation("RequisitionReportsTo", fields: [reportsToId], references: [id])
+  targetStartDate            DateTime                 @db.Date
+  justification              String
+  skills                     String?
+  jdPath                     String?
+  jdName                     String?
 
   reason             RequisitionReason
   exitCaseId         Int? // replacement for a leaver

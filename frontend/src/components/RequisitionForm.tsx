@@ -15,6 +15,7 @@ type Options = {
 
 export type RequisitionInitial = {
   id: number; departmentId: number; title: string; grade: string | null; headcount: number; employmentType: string; reportsToId: number | null;
+  minimumQualification: string; minimumQualificationDetail: string | null;
   targetStartDate: string; justification: string; skills: string | null; reason: string; exitCaseId: number | null; replaces: { fullName: string } | null;
   suggestedMin: number | null; suggestedMax: number | null;
 };
@@ -30,6 +31,8 @@ export function RequisitionForm({ initial, userId, onDone }: { initial?: Requisi
     grade: initial?.grade ?? "",
     headcount: String(initial?.headcount ?? 1),
     employmentType: initial?.employmentType ?? "PERMANENT",
+    minimumQualification: initial?.minimumQualification ?? "NONE",
+    minimumQualificationDetail: initial?.minimumQualificationDetail ?? "",
     reportsToId: initial?.reportsToId ? String(initial.reportsToId) : String(userId),
     targetStartDate: initial?.targetStartDate ?? "",
     justification: initial?.justification ?? "",
@@ -113,6 +116,19 @@ export function RequisitionForm({ initial, userId, onDone }: { initial?: Requisi
             <option value="INTERN">Intern</option>
           </Select>
         </Field>
+        <Field label="Minimum qualification" hint="Employment Eligibility Policy §3">
+          <Select value={f.minimumQualification} onChange={set("minimumQualification")}>
+            <option value="NONE">Not specified</option>
+            <option value="BACHELORS">Bachelor&apos;s degree</option>
+            <option value="PROFESSIONAL_CERTIFICATION">Professional certification</option>
+            <option value="OTHER">Other (give detail)</option>
+          </Select>
+        </Field>
+        {f.minimumQualification !== "NONE" && (
+          <Field label="Qualification detail (optional)" className="lg:col-span-2">
+            <Input value={f.minimumQualificationDetail} onChange={set("minimumQualificationDetail")} placeholder="e.g. BSc Computer Science, or equivalent professional experience" />
+          </Field>
+        )}
         <Field label="Target start date"><Input type="date" required value={f.targetStartDate} onChange={set("targetStartDate")} /></Field>
         <Field label="Hiring manager (reports to)" className="lg:col-span-2">
           <Select value={f.reportsToId} onChange={set("reportsToId")}>

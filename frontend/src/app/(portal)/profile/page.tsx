@@ -5,6 +5,7 @@ import { Alert, Button, Card, Field, Info, Input, PageHeader, Spinner, StatusBad
 import type { Profile } from "@/lib/types";
 import { patch } from "@/lib/api";
 import { ROLE_LABELS } from "@/lib/auth";
+import { QualificationCard } from "@/components/QualificationCard";
 import { useApi } from "@/lib/useApi";
 import { fmtDate, fmtMoney } from "@/lib/format";
 
@@ -90,6 +91,8 @@ export default function ProfilePage() {
       <Card title="Contact details">
         <ContactForm profile={data} onSaved={setData} />
       </Card>
+
+      <QualificationCard employeeId={data.id} canAct={false} />
 
       <Card title="Personal, bank and salary (view only)">
         <dl className="grid gap-4 sm:grid-cols-2">

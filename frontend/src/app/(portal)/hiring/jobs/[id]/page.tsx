@@ -9,10 +9,12 @@ import { fmtDate, fmtDateTime } from "@/lib/format";
 
 type Job = {
   id: number; title: string; department: string; reportsTo: string | null; employmentType: string; headcount: number;
+  minimumQualification: string; minimumQualificationDetail: string | null;
   description: string | null; requirements: string | null; closingDate: string | null; postedAt: string | null; open: boolean; eligibility: string[];
   myApplication: { id: number; stage: string; stageLabel: string; note: string | null; cv: string | null; appliedAt: string } | null;
 };
 const TYPES: Record<string, string> = { PERMANENT: "Permanent", CONTRACT: "Contract", INTERN: "Intern" };
+const QUALIFICATIONS: Record<string, string> = { NONE: "Not specified", BACHELORS: "Bachelor's degree", PROFESSIONAL_CERTIFICATION: "Professional certification", OTHER: "Other" };
 
 export default function JobPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +36,9 @@ export default function JobPage() {
           <Info label="Department" value={job.department} />
           <Info label="Reports to" value={job.reportsTo} />
           <Info label="Applications close" value={fmtDate(job.closingDate)} />
+          {job.minimumQualification !== "NONE" && (
+            <Info label="Minimum qualification" value={QUALIFICATIONS[job.minimumQualification] + (job.minimumQualificationDetail ? ` — ${job.minimumQualificationDetail}` : "")} />
+          )}
           <div className="sm:col-span-3"><Info label="Description" value={job.description} /></div>
           <div className="sm:col-span-3"><Info label="Requirements" value={job.requirements} /></div>
         </dl>

@@ -47,6 +47,8 @@ export const requestFilesUpload = multer({
 });
 /** Hiring: job descriptions and CVs (PDF or Word) */
 export const hiringUpload = diskUpload("hiring", /\.(pdf|docx?)$/, 1);
+/** Employee qualification evidence (degree certificate, transcript etc.): HR only, never shown elsewhere. */
+export const qualificationUpload = diskUpload("qualifications", /\.(pdf|jpe?g|png)$/, 1);
 /** Policies and HR forms */
 export const documentUpload = diskUpload("documents", /\.pdf$/, 1);
 /** Generated letters */

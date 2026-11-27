@@ -18,6 +18,7 @@ Tick each line and write the agreed value. Every item can be changed later in th
 - **A pending performance approval step when the manager changes mid-cycle** — keeps its original approver today unless HR separately runs the exit handover; HR/Management to decide whether an ordinary manager change should reassign it too.
 - **Performance ratings linked to increments or promotions** — no such link exists anywhere in the system today; Management to decide whether one should be built.
 - **Who corrects an HR user's own pay slip** — HR cannot edit their own pay slip; HR/Management to decide whether a second HR user or Management makes that correction instead.
+- **Whether a higher degree satisfies a stated Bachelor's requirement** — the Employment Eligibility Policy's qualification records (slice 1) do not assume a Master's or other higher degree automatically satisfies a position's stated Bachelor's requirement; HR/Management to decide, before any enforcement is built.
 
 **Attendance and office hours**
 
@@ -169,6 +170,14 @@ Every "I have read / I agree" acknowledgement in the portal (a document that req
 |---|---|---|---|
 | A document with acknowledgement rows | Cannot be deleted (409) — the rows are never cascaded away; a document with none can still be deleted | Blocked while rows exist | HR |
 | Dropping the two old (now frozen) tables | **Recommended: not yet** — keep them as a historical record for at least one full cycle, then drop in a separate, explicit change | Kept, unused | HR/Management |
+
+**Employment Eligibility Policy — qualification records (slice 1)**
+
+Employment Eligibility Policy (effective 5 October 2026), slice 1 only: `EmployeeQualification` (`backend/prisma/schema.prisma`) lets HR record and verify an employee's qualification claims (type, evidence type, institution, completion date, an optional evidence file, a note); an employee may have several records, and only HR ever writes one — never the employee. A record counts as verified only once it is marked completed *and* HR has verified it (§4: enrolled/in progress is never completed). Visibility is HR and the employee themselves only — read-only for the employee (Verified / Pending verification / No qualification on record, on *My profile*, with their own evidence downloadable). Line Manager, HOD, Finance, Admin and Management get a plain 403, with no exception, including on the evidence download. Every create/update is audited with before/after values; HR opening another employee's qualification records, and anyone downloading an evidence file, are both logged as `VIEW_SENSITIVE`. A requisition/posted job can separately state a *Minimum qualification* (§3). **No gate reads any of this yet** — an unverified or missing qualification does not block an internal application, a promotion, or an intern's conversion to permanent; that is a later, separate decision (slices 2/3 of the enforcement plan, not approved or built).
+
+| Setting | Controls | Default | Decide |
+|---|---|---|---|
+| Whether a higher degree (e.g. a Master's) is treated as satisfying a stated Bachelor's requirement | Not assumed anywhere in the code; HR must judge each case by hand until this is decided | Not assumed; no automatic equivalence | HR/Management |
 
 ---
 

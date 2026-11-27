@@ -19,6 +19,7 @@ type App = {
 };
 type Requisition = {
   id: number; status: string; statusLabel: string; title: string; grade: string | null; headcount: number; hired: number; employmentType: string;
+  minimumQualification: string; minimumQualificationDetail: string | null;
   department: { id: number; name: string }; reportsTo: { id: number; fullName: string } | null; requestedBy: { id: number; fullName: string };
   targetStartDate: string; justification: string; skills: string | null; jd: { name: string } | null;
   reason: string; gradeChanged: boolean; overHeadcount: boolean; route: string | null;
@@ -35,6 +36,7 @@ type Requisition = {
 };
 
 const TYPES: Record<string, string> = { PERMANENT: "Permanent", CONTRACT: "Contract", INTERN: "Intern" };
+const QUALIFICATIONS: Record<string, string> = { NONE: "Not specified", BACHELORS: "Bachelor's degree", PROFESSIONAL_CERTIFICATION: "Professional certification", OTHER: "Other" };
 const SCOPES: Record<string, string> = { INTERNAL: "Internal only", EXTERNAL: "External only", BOTH: "Internal first, then external" };
 const RECS: Record<string, string> = { HIRE: "Hire", MAYBE: "Maybe", NO_HIRE: "Do not hire" };
 const range = (r: { min: number | null; max: number | null } | null) => (r && (r.min != null || r.max != null) ? `PKR ${fmtMoney(r.min)} to ${fmtMoney(r.max)}` : null);
@@ -229,6 +231,7 @@ export default function RequisitionPage() {
             userId={user.id}
             initial={{
               id: r.id, departmentId: r.department.id, title: r.title, grade: r.grade, headcount: r.headcount, employmentType: r.employmentType,
+              minimumQualification: r.minimumQualification, minimumQualificationDetail: r.minimumQualificationDetail,
               reportsToId: r.reportsTo?.id ?? null, targetStartDate: r.targetStartDate, justification: r.justification, skills: r.skills, reason: r.reason,
               exitCaseId: r.replaces?.exitCaseId ?? null, replaces: r.replaces, suggestedMin: r.suggestedSalary?.min ?? null, suggestedMax: r.suggestedSalary?.max ?? null,
             }}
@@ -241,6 +244,7 @@ export default function RequisitionPage() {
             <dl className="grid gap-4 sm:grid-cols-3">
               <Info label="Grade" value={r.grade} />
               <Info label="Employment type" value={TYPES[r.employmentType]} />
+              <Info label="Minimum qualification" value={QUALIFICATIONS[r.minimumQualification] + (r.minimumQualificationDetail ? ` — ${r.minimumQualificationDetail}` : "")} />
               <Info label="Positions" value={String(r.headcount)} />
               <Info label="Hiring manager" value={r.reportsTo?.fullName} />
               <Info label="Target start" value={fmtDate(r.targetStartDate)} />

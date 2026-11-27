@@ -10,6 +10,7 @@ import { useApi } from "@/lib/useApi";
 import type { Profile } from "@/lib/types";
 import { AssetClearanceCard } from "@/components/AssetPanels";
 import { ProbationCard } from "@/components/ProbationCard";
+import { QualificationCard } from "@/components/QualificationCard";
 import { fmtDate, fmtMoney } from "@/lib/format";
 
 type Option = { id: number; name?: string; fullName?: string; code?: string };
@@ -186,6 +187,8 @@ export default function EmployeeDetailPage() {
       )}
 
       <ProbationCard emp={emp} canAct={isHr} onChanged={reload} />
+
+      <QualificationCard employeeId={emp.id} canAct={isHr} />
 
       {hasRole(user, "HR", "ADMIN", "FINANCE", "MANAGEMENT") && <AssetClearanceCard employeeId={emp.id} />}
 
