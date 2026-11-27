@@ -162,6 +162,7 @@ async function main() {
     ["seed-leave-policy.pdf", "Leave Policy (draft)", "POLICY", "Sample leave policy. Replace with the approved policy from HR Portal — Final Rules v1.", false],
     ["seed-attendance-policy.pdf", "Attendance Policy (draft)", "POLICY", "Arrival after 9:25 AM is Late. 6+ hours Present; 4 to under 6 hours Half Day; under 4 hours Absent. Three late arrivals in a month raise a warning to HR.", false],
     ["seed-cyber-security-incident-response-policy.pdf", "Cyber Security Incident Response Policy", "POLICY", "For employees, interns and contractors. Version 1.0, effective 5 October 2026.", true],
+    ["seed-employment-eligibility-policy.pdf", "Employment Eligibility Policy", "POLICY", "Educational qualification requirements for recruitment, internship conversion and career progression. Effective 5 October 2026.", true],
     ["seed-expense-form.pdf", "Expense Claim Form", "HR_FORM", "Sample HR form.", false],
   ] as const) {
     const full = path.join(docsDir, file);

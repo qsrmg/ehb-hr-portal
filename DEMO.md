@@ -42,7 +42,7 @@ The demo dates follow the day you load the data, so load it on the day.
 3. **Attendance** (sidebar). The month day by day. Point out the **Half Day**, and say: "a missed punch is fixed with an Attendance Update within 7 days; the machine record is never overwritten."
 4. **Apply for leave** (dashboard button). Choose *Annual Leave* and pick two days next month. The form counts working days, skips weekends and holidays, and checks the balance and notice period. **Don't submit.**
 5. **Pay slips & tax.** Download a pay slip PDF. Mention the yearly tax statement (July to June).
-6. **Policies** and **HR forms** (sidebar, two pages). Five sample policies, including the Employee Assets Management Policy and the Cyber Security Incident Response Policy, both requiring acknowledgement, plus one HR form; HR uploads the real ones.
+6. **Policies** and **HR forms** (sidebar, two pages). Six sample policies, including the Employee Assets Management Policy, the Cyber Security Incident Response Policy and the Employment Eligibility Policy, all three requiring acknowledgement, plus one HR form; HR uploads the real ones.
 7. **My inventory.** His laptop and email account, issued by Admin.
 
 ## Part 2: The manager (4 minutes), login `hamza@ehb.demo`

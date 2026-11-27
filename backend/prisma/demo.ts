@@ -239,6 +239,7 @@ async function seed() {
     ["travel-policy.pdf", "Travel and Expense Policy", "POLICY", "Business travel within Pakistan, advances, settlements and local expense claims. Sample text for the demo.", false],
     ["assets-policy.pdf", "Employee Assets Management Policy", "POLICY", "Issuance, use, protection, maintenance, return and management of EHB-owned assets. Effective 5 October 2026, next review December 2027. Sample text for the demo.", true],
     ["cyber-security-incident-response-policy.pdf", "Cyber Security Incident Response Policy", "POLICY", "For employees, interns and contractors. Version 1.0, effective 5 October 2026. Sample text for the demo; HR uploads the approved policy before go-live.", true],
+    ["employment-eligibility-policy.pdf", "Employment Eligibility Policy", "POLICY", "Educational qualification requirements for recruitment, internship conversion and career progression. Effective 5 October 2026, next review December 2027. Sample text for the demo; HR uploads the approved policy before go-live.", true],
     ["expense-claim-form.pdf", "Expense Claim Form (paper backup)", "HR_FORM", "Use the portal for expense claims; this form is a paper backup.", false],
   ] as const) {
     const size = await pdf(path.join(docsDir, file), title, body);
