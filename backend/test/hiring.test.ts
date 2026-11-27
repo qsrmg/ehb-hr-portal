@@ -471,4 +471,26 @@ describe("Employment Eligibility Policy: qualification gate and exception", () =
     const told = await prisma.notification.findMany({ where: { employeeId: id.kamal } });
     assert.ok(!told.some((n) => /not convinced/i.test(n.body) || /reject/i.test(n.title)), "the employee is never told about the rejection");
   });
+
+  test("the subject employee cannot approve or reject their own exception, even holding MANAGEMENT; another Management user still can", async () => {
+    const vp = await prisma.employee.create({
+      data: {
+        code: "EHB-2024-950", email: "vp@test.local", fullName: "Vera Patel", passwordHash: await bcrypt.hash(PASSWORD, 4),
+        mustChangePassword: false, joiningDate: toDate("2024-01-01"), departmentId: engId, managerId: id.manager, roles: ["EMPLOYEE", "MANAGEMENT"],
+      },
+    });
+    id.vp = vp.id;
+    token.vp = await api.login("vp@test.local");
+
+    const job = await makeJob();
+    const raised = await as("hr").post("/hiring/qualification-exceptions", { employeeId: vp.id, requisitionId: job.id, note: "Needs a decision" });
+    ok(raised, 201);
+    const requestId = raised.data.id as number;
+
+    forbidden(await as("vp").post(`/requests/${requestId}/approve`));
+    forbidden(await as("vp").post(`/requests/${requestId}/reject`, { comment: "No" }));
+
+    ok(await as("ceo").post(`/requests/${requestId}/approve`));
+    assert.deepEqual((await as("vp").get(`/hiring/jobs/${job.id}`)).data.eligibility, [], "another Management user (Imran) could still approve it");
+  });
 });
