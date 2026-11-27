@@ -49,6 +49,12 @@ export const SETTING_DEFAULTS = {
   "hiring.internalOnlyDays": { value: "7", label: "Days a job is open to internal applicants only before external candidates (when posted to both)" },
   "hiring.minMonthsInRole": { value: "12", label: "Months in the current role before an employee can apply for an internal job" },
   "hiring.minPerformanceRating": { value: "0", label: "Minimum last performance rating to apply for an internal job (1-5, 0 = off)" },
+  // Employment Eligibility Policy §10/§12: off by default (a rollout safety switch, not stated by the policy
+  // itself) until HR has verified qualification records for the workforce. See DECISIONS.md.
+  "hiring.qualificationCheckEnabled": { value: "0", label: "Block internal applications and promotions that do not meet a posting's stated minimum qualification", boolean: true },
+  // Left open by the policy (see DECISIONS.md): whether a higher degree (e.g. a Master's) satisfies a stated
+  // Bachelor's requirement. Only read when the check above is on.
+  "hiring.higherDegreeSatisfiesBachelors": { value: "0", label: "Let a Higher degree qualification satisfy a posting that requires a Bachelor's degree", boolean: true },
   "performance.joinerMonths": { value: "3", label: "Employees who join in the first months of a cycle are included (months)" },
   // Training request (Phase 3): HR or Finance can change this. Empty means "off".
   "training.managementApprovalAbove": { value: "", label: "Training programmes above this estimated cost also need Management/CEO approval (PKR)", optional: true },

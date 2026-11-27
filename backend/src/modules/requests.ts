@@ -30,7 +30,7 @@ import {
 } from "../services/exits.js";
 import type { OnStepApproved } from "../services/approvals.js";
 import { performanceActed, performanceApproved } from "../services/performance.js";
-import { BUDGET_STEP_LABELS, canSeeSalary, manpowerActed, manpowerApproved, manpowerStepApproved } from "../services/hiring.js";
+import { BUDGET_STEP_LABELS, canSeeSalary, manpowerActed, manpowerApproved, manpowerStepApproved, qualificationExceptionApproved } from "../services/hiring.js";
 
 /** Goals and results are prepared on the scorecard, not as a form the employee fills in. */
 const PERFORMANCE_TYPES = new Set<RequestType>(["PERFORMANCE_GOALS", "PERFORMANCE_REVIEW"]);
@@ -483,7 +483,7 @@ async function prepareSettlement(user: AuthUser, body: unknown, files: Express.M
 }
 
 /** What happens once the final approver signs off. */
-const onApproved: OnApproved = async (tx, requestId) => {
+const onApproved: OnApproved = async (tx, requestId, finalApproverId) => {
   const request = await tx.request.findUniqueOrThrow({
     where: { id: requestId },
     include: { leaveRequest: true, attendanceUpdateRequest: true },
@@ -516,6 +516,7 @@ const onApproved: OnApproved = async (tx, requestId) => {
   }
   if (PERFORMANCE_TYPES.has(request.type)) await performanceApproved(tx, requestId);
   if (request.type === "MANPOWER") await manpowerApproved(tx, requestId);
+  if (request.type === "QUALIFICATION_EXCEPTION") await qualificationExceptionApproved(tx, requestId, finalApproverId);
   // LETTER: the PDF is generated on download from the approved request.
   // EXPENSE: Finance marks the claim as paid afterwards.
 };
@@ -609,8 +610,16 @@ for (const action of ["approve", "reject", "return"] as const) {
     const body = parse(decisionSchema, req.body ?? {});
     const id = Number(req.params.id);
     const user = currentUser(req);
-    const kind = await prisma.request.findUnique({ where: { id }, select: { type: true } });
+    const kind = await prisma.request.findUnique({ where: { id }, select: { type: true, data: true } });
     if (action === "reject" && kind && PERFORMANCE_TYPES.has(kind.type)) throw new HttpError(400, "Performance goals and reviews cannot be rejected; return them for changes instead");
+    // Employment Eligibility Policy §12: Request.employeeId is the HR user who raised the exception, not the
+    // employee it is about, so the generic self-approval check (which compares against Request.employeeId)
+    // does not stop that employee approving or rejecting their own exception if they also hold MANAGEMENT.
+    // Narrow to this one type only; every other type keeps the generic engine's behaviour unchanged.
+    if (kind?.type === "QUALIFICATION_EXCEPTION" && (action === "approve" || action === "reject")) {
+      const subjectId = (kind.data as { employeeId?: number }).employeeId;
+      if (subjectId === user.id) throw new HttpError(403, "This request is not waiting for your approval");
+    }
     const resignation = resignationDecision(body, user.id);
     await actOnRequest(id, user, action.toUpperCase() as "APPROVE", body.comment, onApproved, async (tx, ctx) => {
       await resignation(tx, ctx);
@@ -766,6 +775,12 @@ async function loadForUser(id: number, user: AuthUser): Promise<Detail> {
   // Highly confidential (Dress Code Policy D4): the employee and HR only, never Management or the Line Manager.
   const allowed = r.type === "RELIGIOUS_ACCOMMODATION"
     ? r.employeeId === user.id || hasRole(user, "HR")
+    // Employment Eligibility Policy §12, slice 2: the request is raised by HR (r.employeeId), but visibility
+    // follows the employee the exception is ABOUT (r.data.employeeId) — them, HR and Management only, never
+    // their Line Manager or HOD, even though r.employee.managerId would otherwise grant the HR raiser's own
+    // manager access under the generic rule below.
+    : r.type === "QUALIFICATION_EXCEPTION"
+    ? hasRole(user, "HR", "MANAGEMENT") || (r.data as { employeeId?: number }).employeeId === user.id
     : r.employeeId === user.id ||
       hasRole(user, "HR", "MANAGEMENT") ||
       r.employee.managerId === user.id ||

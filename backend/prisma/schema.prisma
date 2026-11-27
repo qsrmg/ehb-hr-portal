@@ -181,6 +181,8 @@ model Employee {
   qualifications                 EmployeeQualification[]         @relation("EmployeeQualifications")
   qualificationsVerified         EmployeeQualification[]         @relation("QualificationVerifiedBy")
   qualificationsEntered          EmployeeQualification[]         @relation("QualificationCreatedBy")
+  qualificationExceptions        QualificationException[]        @relation("QualificationExceptionEmployee")
+  qualificationExceptionsGranted QualificationException[]        @relation("QualificationExceptionGrantedBy")
 }
 
 /**
@@ -383,6 +385,7 @@ enum RequestType {
   MANPOWER
   TRAINING
   RELIGIOUS_ACCOMMODATION
+  QUALIFICATION_EXCEPTION
 }
 
 enum RequestStatus {
@@ -429,6 +432,7 @@ model Request {
   scorecardReview         Scorecard?               @relation("ScorecardReview")
   requisition             Requisition?
   trainingRequest         TrainingRequest?
+  qualificationException  QualificationException?
 
   @@index([employeeId, status])
 }
@@ -1627,13 +1631,14 @@ model Requisition {
   externalFrom DateTime?     @db.Date // external candidates from this date (internal-only window first)
   closingDate  DateTime?     @db.Date
 
-  closedAt     DateTime?
-  closedById   Int?
-  closedBy     Employee?        @relation("RequisitionClosedBy", fields: [closedById], references: [id])
-  closedReason String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  applications JobApplication[]
+  closedAt                DateTime?
+  closedById              Int?
+  closedBy                Employee?                @relation("RequisitionClosedBy", fields: [closedById], references: [id])
+  closedReason            String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  applications            JobApplication[]
+  qualificationExceptions QualificationException[]
 
   @@index([status])
 }
@@ -1682,6 +1687,29 @@ model InterviewFeedback {
   recommendation String // HIRE, MAYBE or NO_HIRE
   comment        String
   createdAt      DateTime       @default(now())
+}
+
+/**
+ * Employment Eligibility Policy §12, slice 2: Management's approval (via the single-step QUALIFICATION_EXCEPTION
+ * request) that a named employee does not need to meet one specific posting's stated qualification. Clears
+ * only that one (employeeId, requisitionId) pair — "no precedent for other employees or candidates" — hence
+ * the unique constraint. Management never sees the qualification documents themselves (self + HR only); they
+ * decide from HR's note on the request.
+ */
+model QualificationException {
+  id            Int         @id @default(autoincrement())
+  employeeId    Int
+  employee      Employee    @relation("QualificationExceptionEmployee", fields: [employeeId], references: [id])
+  requisitionId Int
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  requestId     Int         @unique
+  request       Request     @relation(fields: [requestId], references: [id])
+  grantedAt     DateTime    @default(now())
+  grantedById   Int
+  grantedBy     Employee    @relation("QualificationExceptionGrantedBy", fields: [grantedById], references: [id])
+  note          String
+
+  @@unique([employeeId, requisitionId])
 }
 
 // ---------------------------------------------------------------------------

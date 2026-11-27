@@ -8,7 +8,7 @@ import { absoluteUploadPath, hiringUpload, relativeUploadPath } from "../lib/upl
 import { addDays, todayYmd, toDate, ymd } from "../lib/dates.js";
 import { HttpError } from "../middleware/error.js";
 import { currentUser, hasRole, requireAuth, requireRole, type AuthUser } from "../middleware/auth.js";
-import { createSteps, notifySubmitted, resolveSteps } from "../services/approvals.js";
+import { createSteps, notifyCurrentApprovers, resolveSteps, notifySubmitted, type StepSpec } from "../services/approvals.js";
 import {
   ACTIVE_STAGES, canSeeSalary, closeIfFilled, declineRemaining, departmentsFor, eligibilityProblems, externalOpen, headcountFor, hiredCount,
   hiringRules, internalOpen, moveInternally, notifyApplicant, requisitionChain, ROUTE_LABELS, routeFor, SHORTLIST_STAGES, STAGE_LABELS, STATUS_LABELS,
@@ -396,7 +396,7 @@ hiringRouter.get("/jobs/:id", async (req, res) => {
   });
   if (!r || !r.postedAt || r.scope === "EXTERNAL") throw new HttpError(404, "Job not found");
   const mine = r.applications[0];
-  const problems = await eligibilityProblems(user.id);
+  const problems = await eligibilityProblems(user.id, r.id);
   if (r.reportsToId === user.id) problems.push("You are the hiring manager for this position");
   res.json({
     ...jobOf(r), open: internalOpen(r), eligibility: problems,
@@ -411,7 +411,7 @@ hiringRouter.post("/jobs/:id/apply", hiringUpload.single("cv"), async (req, res)
     const r = await prisma.requisition.findUnique({ where: { id: Number(req.params.id) } });
     if (!r || !internalOpen(r)) throw new HttpError(400, "This job is not open for internal applications");
     if (r.reportsToId === user.id) throw new HttpError(400, "You are the hiring manager for this position");
-    const problems = await eligibilityProblems(user.id);
+    const problems = await eligibilityProblems(user.id, r.id);
     if (problems.length) throw new HttpError(400, problems.join("; "));
     const existing = await prisma.jobApplication.findUnique({ where: { requisitionId_employeeId: { requisitionId: r.id, employeeId: user.id } } });
     if (existing && existing.stage !== "WITHDRAWN") throw new HttpError(400, "You have already applied for this job");
@@ -432,6 +432,51 @@ hiringRouter.post("/jobs/:id/apply", hiringUpload.single("cv"), async (req, res)
     removeFile(req.file);
     throw err;
   }
+});
+
+// ---------------------------------------------------------------------------
+// Employment Eligibility Policy §12, slice 2: HR raises a one-off qualification exception for a named
+// employee and a specific position; a single Management step decides it. Management never sees the
+// qualification documents (self + HR only) — they decide from HR's note, carried on the request itself.
+// ---------------------------------------------------------------------------
+
+const qualificationExceptionSchema = z.object({
+  employeeId: z.coerce.number({ error: "Choose the employee" }).int(),
+  requisitionId: z.coerce.number({ error: "Choose the position" }).int(),
+  note: text("Explain why this exception is needed", 5),
+});
+
+hiringRouter.post("/qualification-exceptions", requireRole("HR"), async (req, res) => {
+  const user = currentUser(req);
+  const input = parse(qualificationExceptionSchema, req.body);
+  const r = await prisma.requisition.findUnique({ where: { id: input.requisitionId }, select: { id: true, title: true, minimumQualification: true } });
+  if (!r) throw new HttpError(404, "Position not found");
+  if (r.minimumQualification === "NONE" || r.minimumQualification === "OTHER") {
+    throw new HttpError(400, "This position does not need a qualification exception");
+  }
+  const employee = await prisma.employee.findUnique({ where: { id: input.employeeId }, select: { id: true, fullName: true } });
+  if (!employee) throw new HttpError(404, "Employee not found");
+  const existing = await prisma.qualificationException.findUnique({
+    where: { employeeId_requisitionId: { employeeId: input.employeeId, requisitionId: input.requisitionId } },
+  });
+  if (existing) throw new HttpError(400, "An exception already exists for this employee and position");
+
+  const chain: StepSpec[] = [{ label: "Management", approver: "MANAGEMENT" }];
+  const request = await prisma.$transaction(async (tx) => {
+    const created = await tx.request.create({
+      data: {
+        type: "QUALIFICATION_EXCEPTION", employeeId: user.id,
+        title: `Qualification exception · ${employee.fullName} · ${r.title}`,
+        data: { employeeId: input.employeeId, employeeName: employee.fullName, requisitionId: r.id, jobTitle: r.title, note: input.note },
+      },
+    });
+    await createSteps(tx, created.id, await resolveSteps(tx, user.id, chain));
+    await tx.requestAction.create({ data: { requestId: created.id, actorId: user.id, action: "SUBMITTED" } });
+    return created;
+  });
+  await notifyCurrentApprovers(request.id);
+  await audit(user.id, "CREATE", "QualificationExceptionRequest", request.id, { employeeId: input.employeeId, requisitionId: r.id });
+  res.status(201).json({ id: request.id });
 });
 
 hiringRouter.get("/applications/mine", async (req, res) => {

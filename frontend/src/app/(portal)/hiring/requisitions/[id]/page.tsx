@@ -120,6 +120,50 @@ function AddCandidate({ r, onDone }: { r: Requisition; onDone: () => Promise<voi
   );
 }
 
+/** Employment Eligibility Policy §12: HR raises a one-off exception for a named employee on this position; a
+ *  single Management step decides it. Management never sees qualification documents, only this note. */
+function QualificationExceptionForm({ requisitionId }: { requisitionId: number }) {
+  const { data: people } = useApi<{ id: number; fullName: string; code: string }[]>("/employees");
+  const [employeeId, setEmployeeId] = useState("");
+  const [note, setNote] = useState("");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  if (!open) return <Button variant="secondary" onClick={() => setOpen(true)}>Raise a qualification exception</Button>;
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await post<{ id: number }>("/hiring/qualification-exceptions", { employeeId: Number(employeeId), requisitionId, note });
+      setMsg({ kind: "success", text: "Sent to Management for a decision." });
+      setEmployeeId("");
+      setNote("");
+      void res;
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Qualification exception" actions={<Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Close</Button>}>
+      <div className="space-y-4">
+        {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+        <Field label="Employee">
+          <Select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <option value="">Choose…</option>
+            {people?.map((p) => <option key={p.id} value={p.id}>{p.fullName} ({p.code})</option>)}
+          </Select>
+        </Field>
+        <Field label="Reason" hint="Management decides from this note; it is never shown to the employee">
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <Button loading={busy} disabled={!employeeId || note.trim().length < 5} onClick={save}>Send to Management</Button>
+      </div>
+    </Card>
+  );
+}
+
 function Applicant({ r, a, isHr, onDone }: { r: Requisition; a: App; isHr: boolean; onDone: () => Promise<void> }) {
   const [note, setNote] = useState("");
   const [effective, setEffective] = useState(r.targetStartDate);
@@ -287,6 +331,8 @@ export default function RequisitionPage() {
           )}
         </Card>
       )}
+
+      {isHr && r.minimumQualification !== "NONE" && r.minimumQualification !== "OTHER" && <QualificationExceptionForm requisitionId={r.id} />}
 
       {r.can.cancel && (
         <Card title="Close the position">

@@ -56,14 +56,24 @@ const dropdown = (scope, label) => scope.locator("label", { hasText: new RegExp(
 const card = (page, title) => page.locator("section", { has: page.getByRole("heading", { name: title, exact: true }) });
 const applicant = (page, name) => page.locator(`[data-applicant="${name}"]`);
 const openRequisition = (page) => page.goto(`${BASE}/hiring/requisitions/${ctx.requisition}`).then(() => page.getByRole("heading", { name: TITLE }).waitFor());
-async function apiAs(email) {
+async function tokenFor(email) {
   const login = await (await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: PASSWORD }) })).json();
+  return login.token;
+}
+async function apiAs(email) {
+  const token = await tokenFor(email);
   return async (method, p, body) => {
-    const res = await fetch(`${API}${p}`, { method, headers: { Authorization: `Bearer ${login.token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(`${API}${p}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
     const data = await res.json();
     if (!res.ok) throw new Error(`${method} ${p}: ${data.message}`);
     return data;
   };
+}
+/** Like apiAs, but returns {status, data} instead of throwing — for checking a request is refused. */
+async function apiAsStatus(email, method, p, body) {
+  const token = await tokenFor(email);
+  const res = await fetch(`${API}${p}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  return { status: res.status, data: await res.json() };
 }
 async function mailTo(to, subjectStart) {
   for (let i = 0; i < 40; i++) {
@@ -298,6 +308,86 @@ await step(10, "Usman is appointed (internal move); the position is filled, Usam
     s(await snap(page, "step10-draft-replacement"));
     check("Imran sees the draft replacement for Usman's old role (not submitted)");
   });
+});
+
+// ---------- 11. Employment Eligibility Policy: qualification gate and Management exception ----------
+await step(11, "A second posting requiring a Bachelor's degree: the gate blocks until verified, or Management grants an exception", async ({ check, shot: s }) => {
+  const hr = await apiAs("hr@ehb.local");
+  await hr("PUT", "/settings", { "hiring.qualificationCheckEnabled": "0" });
+  const opts = await hr("GET", "/hiring/options");
+  const engDept = opts.departments.find((d) => d.name === "Engineering").id;
+  const hamza = await (await apiAs("manager@ehb.local"))("GET", "/employees/me");
+  const draft = await hr("POST", "/hiring/requisitions", {
+    departmentId: engDept, title: "QA Lead", headcount: 1, employmentType: "PERMANENT", minimumQualification: "BACHELORS",
+    reportsToId: hamza.id, targetStartDate: day(30), justification: "Coverage for the new release train.", reason: "NEW", submit: true,
+  });
+  const reqDetail = await hr("GET", `/hiring/requisitions/${draft.id}`);
+  const requestId = reqDetail.request.id;
+  await (await apiAs("manager@ehb.local"))("POST", `/requests/${requestId}/approve`);
+  await (await apiAs("finance@ehb.local"))("POST", `/requests/${requestId}/approve`, { salaryMin: 150000, salaryMax: 180000 });
+  await (await apiAs("ceo@ehb.local"))("POST", `/requests/${requestId}/approve`);
+  await hr("POST", `/hiring/requisitions/${draft.id}/post`, { scope: "INTERNAL", description: "Lead the QA function.", requirements: "Bachelor's degree in a relevant field.", closingDate: day(21) });
+  check(`A second posting (#${draft.id}, QA Lead) requiring a Bachelor's degree`);
+
+  await as("employee2@ehb.local", async (page) => {
+    await page.goto(`${BASE}/hiring/jobs/${draft.id}`);
+    await visible(page, "Bachelor's degree");
+    if (await page.getByText(/This role requires/).count()) throw new Error("The gate should be off by default");
+  });
+  check("Gate off by default (hiring.qualificationCheckEnabled): the requirement is shown, nobody is blocked");
+
+  await hr("PUT", "/settings", { "hiring.qualificationCheckEnabled": "1" });
+  await as("employee2@ehb.local", async (page) => {
+    await page.goto(`${BASE}/hiring/jobs/${draft.id}`);
+    await visible(page, "This role requires a verified Bachelor's degree, which is not on your record");
+    s(await snap(page, "step11-blocked"));
+  });
+  const refusedApply = await apiAsStatus("employee2@ehb.local", "POST", `/hiring/jobs/${draft.id}/apply`, {});
+  if (refusedApply.status !== 400) throw new Error(`Sara applying while blocked: expected 400, got ${refusedApply.status}`);
+  check("Turned on: Sara is blocked in the browser, and the apply endpoint itself refuses her (not only the UI)");
+
+  // Bilal (Finance), not Sara: Sara is also blocked by the unrelated 12-months-in-role rule (step 5), which
+  // would stay blocking regardless of her qualification, so he isolates the qualification check cleanly.
+  const bilal = await (await apiAs("finance@ehb.local"))("GET", "/employees/me");
+  const fd = new FormData();
+  fd.append("type", "BACHELORS");
+  fd.append("evidenceType", "DEGREE_CERTIFICATE");
+  fd.append("completed", "true");
+  const qual = await (await fetch(`${API}/employees/${bilal.id}/qualifications`, { method: "POST", headers: { Authorization: `Bearer ${await tokenFor("hr@ehb.local")}` }, body: fd })).json();
+  await hr("PATCH", `/employees/${bilal.id}/qualifications/${qual.id}`, { verified: true });
+  const cleared = await (await apiAs("finance@ehb.local"))("GET", `/hiring/jobs/${draft.id}`);
+  if (cleared.eligibility.length) throw new Error(`Still blocked after verifying: ${cleared.eligibility.join("; ")}`);
+  check("A verified Bachelor's degree on file clears the block");
+
+  // Ali has no qualification on record; HR raises an exception instead. Only HR may raise it, only
+  // Management may approve it, and the grant is never shown to the employee beyond "you can now apply".
+  // (Not Usman: his internal move in step 10 reset his own months-in-role clock, which would block him for an
+  // unrelated reason; Ali has not been touched by this spec and has no other eligibility problem.)
+  const ali = await (await apiAs("employee@ehb.local"))("GET", "/employees/me");
+  const refusedRaise = await apiAsStatus("manager@ehb.local", "POST", "/hiring/qualification-exceptions", { employeeId: ali.id, requisitionId: draft.id, note: "Should be refused" });
+  if (refusedRaise.status !== 403) throw new Error(`Hamza (not HR) raising an exception: expected 403, got ${refusedRaise.status}`);
+  const exception = await hr("POST", "/hiring/qualification-exceptions", { employeeId: ali.id, requisitionId: draft.id, note: "12 years of equivalent professional experience, strong interview." });
+  check("Hamza (not HR) is refused raising an exception; HR raises one for Ali");
+
+  const refusedApprove = await apiAsStatus("finance@ehb.local", "POST", `/requests/${exception.id}/approve`, {});
+  if (refusedApprove.status !== 403) throw new Error(`Bilal (Finance, not Management) approving: expected 403, got ${refusedApprove.status}`);
+  check("Bilal (Finance, not Management) is refused approving the exception");
+
+  await as("ceo@ehb.local", async (page) => {
+    await page.goto(`${BASE}/requests/${exception.id}`);
+    await visible(page, "Ali Raza");
+    await visible(page, "12 years of equivalent professional experience");
+    s(await snap(page, "step11-exception-request"));
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await visible(page, "Approved.", { exact: true });
+  });
+  check("Imran (Management) sees HR's note and approves it from the request page");
+
+  const aliCleared = await (await apiAs("employee@ehb.local"))("GET", `/hiring/jobs/${draft.id}`);
+  if (aliCleared.eligibility.length) throw new Error(`Ali still blocked after the exception: ${aliCleared.eligibility.join("; ")}`);
+  const audited = await hr("GET", "/audit?entity=QualificationException&action=GRANT");
+  if (!audited.total) throw new Error("No audit entry for the grant");
+  check("The exception clears Usman's block for this posting; the grant is audited (§13)");
 });
 
 await browser.close();

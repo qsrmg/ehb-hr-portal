@@ -225,6 +225,13 @@ export default function RequestDetailPage() {
               {r.type === "RELIGIOUS_ACCOMMODATION" && (
                 <div className="sm:col-span-2"><Info label="Description" value={r.data.description} /></div>
               )}
+              {r.type === "QUALIFICATION_EXCEPTION" && (
+                <>
+                  <Info label="Employee" value={r.data.employeeName} />
+                  <Info label="Position" value={r.data.jobTitle} />
+                  <div className="sm:col-span-2"><Info label="Reason" value={r.data.note} /></div>
+                </>
+              )}
               {r.training && (
                 <>
                   <Info label="Programme" value={`${r.training.programmeTitle} (${TRAINING_TYPES[r.training.trainingType]})`} />

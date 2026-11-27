@@ -131,8 +131,35 @@ const monthsBefore = (ymdStr: string, months: number) => {
   return d;
 };
 
-/** Why an employee may not apply for internal jobs right now (empty = eligible). */
-export async function eligibilityProblems(employeeId: number) {
+/**
+ * Employment Eligibility Policy §10/§12, slice 2: whether this employee meets a specific posting's stated
+ * minimum qualification. Off entirely unless `hiring.qualificationCheckEnabled` is on; NONE and OTHER are
+ * never auto-blocked (OTHER stays a manual HR judgement — the requirement text is shown on the job, not
+ * enforced here). A granted QualificationException clears this one posting only, no precedent for any other.
+ * The message states only that the requirement is unmet, never which records the employee does or doesn't
+ * have — safe because every caller checks the employee's own eligibility for themselves, never someone else's.
+ */
+async function qualificationProblem(employeeId: number, requisitionId: number, settings: Record<string, string>): Promise<string | null> {
+  if (settings["hiring.qualificationCheckEnabled"] !== "1") return null;
+  const r = await prisma.requisition.findUnique({ where: { id: requisitionId }, select: { minimumQualification: true } });
+  if (!r || r.minimumQualification === "NONE" || r.minimumQualification === "OTHER") return null;
+  const excepted = await prisma.qualificationException.findUnique({ where: { employeeId_requisitionId: { employeeId, requisitionId } } });
+  if (excepted) return null;
+  const acceptableTypes: ("BACHELORS" | "HIGHER_DEGREE" | "PROFESSIONAL_CERTIFICATION")[] =
+    r.minimumQualification === "BACHELORS"
+      ? settings["hiring.higherDegreeSatisfiesBachelors"] === "1" ? ["BACHELORS", "HIGHER_DEGREE"] : ["BACHELORS"]
+      : ["PROFESSIONAL_CERTIFICATION"];
+  const met = await prisma.employeeQualification.findFirst({ where: { employeeId, type: { in: acceptableTypes }, completed: true, verifiedAt: { not: null } } });
+  if (met) return null;
+  return r.minimumQualification === "BACHELORS"
+    ? "This role requires a verified Bachelor's degree, which is not on your record"
+    : "This role requires a verified professional certification, which is not on your record";
+}
+
+/** Why an employee may not apply for internal jobs right now (empty = eligible). Pass `requisitionId` to also
+ *  check that specific posting's minimum qualification (§10); omit it for a blanket, not-job-specific check. */
+export async function eligibilityProblems(employeeId: number, requisitionId?: number) {
+  const settings = await getSettings();
   const rules = await hiringRules();
   const today = todayYmd();
   const emp = await prisma.employee.findUniqueOrThrow({
@@ -160,6 +187,10 @@ export async function eligibilityProblems(employeeId: number) {
         problems.push(`Your last performance rating (${bandFor(score, scale)}) is below the minimum of ${scale.labels[rules.minPerformanceRating]}`);
       }
     }
+  }
+  if (requisitionId != null) {
+    const qualProblem = await qualificationProblem(employeeId, requisitionId, settings);
+    if (qualProblem) problems.push(qualProblem);
   }
   return problems;
 }
@@ -302,6 +333,21 @@ export async function manpowerStepApproved(
 /** Final approval (HR): ready to post. */
 export async function manpowerApproved(tx: Tx, requestId: number) {
   await tx.requisition.update({ where: { requestId }, data: { status: "APPROVED" } });
+}
+
+/**
+ * Employment Eligibility Policy §12: Management's final approval grants the exception — clearing only this
+ * one (employee, position) pair, never a precedent for anyone else. The grant itself gets its own audit entry
+ * (§13), and the employee is told only that their application can proceed — never the note or reason.
+ */
+export async function qualificationExceptionApproved(tx: Tx, requestId: number, approverId: number) {
+  const request = await tx.request.findUniqueOrThrow({ where: { id: requestId } });
+  const data = request.data as { employeeId: number; employeeName: string; requisitionId: number; jobTitle: string; note: string };
+  const created = await tx.qualificationException.create({
+    data: { employeeId: data.employeeId, requisitionId: data.requisitionId, requestId, grantedById: approverId, note: data.note },
+  });
+  await audit(approverId, "GRANT", "QualificationException", created.id, { employeeId: data.employeeId, requisitionId: data.requisitionId });
+  await notify([data.employeeId], `You can now apply: ${data.jobTitle}`, `Your application for ${data.jobTitle} can now proceed.`, "/hiring");
 }
 
 /** After an action on a requisition's approval request: returned → back to a draft; rejected or withdrawn → cancelled. */
