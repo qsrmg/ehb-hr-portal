@@ -29,6 +29,8 @@ const EDIT_FIELDS: { key: AmountField; label: string }[] = [
   { key: "incomeTax", label: "Income Tax" }, { key: "eobi", label: "EOBI" }, { key: "providentFund", label: "Provident Fund" },
 ];
 
+const Right = (label: string) => <span className="block text-right">{label}</span>;
+
 function currentTaxYear() {
   const d = new Date();
   return d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
@@ -118,7 +120,7 @@ export default function PayslipsPage() {
       <PageHeader title="Pay slips and tax statement" subtitle="Finance uploads payroll each month; pay slips are due by the 5th." />
       <Card title="Pay slips">
         {slips.loading ? <Spinner /> : slips.error ? <Alert>{slips.error}</Alert> : (
-          <Table head={["Month", "Gross", "Deductions", "Net pay", ""]} empty="No pay slips yet.">
+          <Table head={["Month", Right("Gross"), Right("Deductions"), Right("Net pay"), ""]} empty="No pay slips yet.">
             {slips.data?.map((s) => (
               <Fragment key={s.id}>
                 <tr>
@@ -203,7 +205,7 @@ export default function PayslipsPage() {
         }
       >
         {tax.loading ? <Spinner /> : tax.error ? <Alert>{tax.error}</Alert> : tax.data && (
-          <Table head={["Month", "Gross pay", "Income tax", "Net pay"]} empty="No pay slips in this tax year.">
+          <Table head={["Month", Right("Gross pay"), Right("Income tax"), Right("Net pay")]} empty="No pay slips in this tax year.">
             {tax.data.months.map((m) => (
               <tr key={m.id}>
                 <Td>{m.monthName} {m.year}</Td>
